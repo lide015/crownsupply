@@ -136,31 +136,35 @@
         </ul>
       </div>
 
-      <form class="form-card large" onsubmit="event.preventDefault();alert('感謝你！下載連結將寄到你的 Email。');">
-        <h3 style="text-align:center;">立即免費領取</h3>
-        <p class="form-note" style="margin: 4px 0 24px;">不訂閱、不轟炸、隨時可退訂</p>
-        <div class="form-group">
-          <label>暱稱</label>
-          <input type="text" required placeholder="想被怎麼稱呼">
-        </div>
-        <div class="form-group">
-          <label>Email</label>
-          <input type="email" required placeholder="領取連結會寄到這裡">
-        </div>
-        <div class="form-group">
-          <label>你目前最想做哪一種？</label>
-          <select required>
-            <option value="">請選擇方向</option>
-            <option>AI 模板包</option>
-            <option>自媒體內容</option>
-            <option>線上代工</option>
-            <option>一頁式銷售頁</option>
-            <option>還不知道，想先看方向</option>
-          </select>
-        </div>
-        <button class="btn btn-primary" type="submit" style="width:100%;margin-top:8px;">免費領取模型表 →</button>
-        <p class="form-note">送出後立即收到下載連結</p>
-      </form>
+      <form class="form-card large" action="https://formspree.io/f/xqenggkr" method="POST">
+  <h3 style="text-align:center;">立即免費領取</h3>
+  <p class="form-note" style="margin: 4px 0 24px;">不訂閱、不轟炸、隨時可退訂</p>
+
+  <input type="hidden" name="_subject" value="🎁 新名單：免費資源">
+  <input type="hidden" name="form_source" value="resources.html · Lead Magnet">
+
+  <div class="form-group">
+    <label>暱稱</label>
+    <input type="text" name="name" required placeholder="想被怎麼稱呼">
+  </div>
+  <div class="form-group">
+    <label>Email</label>
+    <input type="email" name="email" required placeholder="領取連結會寄到這裡">
+  </div>
+  <div class="form-group">
+    <label>你目前最想做哪一種？</label>
+    <select name="direction" required>
+      <option value="">請選擇方向</option>
+      <option>AI 模板包</option>
+      <option>自媒體內容</option>
+      <option>線上代工</option>
+      <option>一頁式銷售頁</option>
+      <option>還不知道，想先看方向</option>
+    </select>
+  </div>
+  <button class="btn btn-primary" type="submit" style="width:100%;margin-top:8px;">免費領取模型表 →</button>
+  <p class="form-note">送出後立即收到下載連結</p>
+</form>
     </div>
   </div>
 </section>
