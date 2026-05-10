@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>合作分潤 · CROWN SUPPLY</title>
+<meta name="description" content="CROWN SUPPLY 合作分潤計畫——給 KOL、社群主、業務主管、自媒體老師。30%～50% 分潤。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .who-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 40px; }
+  .who-pill { padding: 24px 20px; background: var(--navy-card); border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); text-align: center; }
+  .who-pill .icon { font-family: var(--serif); font-style: italic; font-size: 32px; color: var(--silver); margin-bottom: 12px; }
+  .who-pill h4 { font-size: 15px; margin-bottom: 6px; }
+  .who-pill p { font-size: 12px; color: var(--gray-mid); line-height: 1.6; }
+
+  .tier-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-top: 40px; }
+  .tier-card {
+    padding: 36px 32px; background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.05); border-radius: 4px;
+    border-top: 3px solid var(--silver);
+  }
+  .tier-card h3 { font-size: 22px; margin-bottom: 12px; }
+  .tier-rate { font-family: var(--serif); font-size: 56px; color: var(--white); font-weight: 700; line-height: 1; margin: 16px 0 4px; }
+  .tier-rate small { font-size: 16px; color: var(--silver); margin-left: 4px; font-family: var(--sans); }
+  .tier-product { font-size: 13px; color: var(--gray-mid); letter-spacing: 0.05em; margin-bottom: 20px; }
+  .tier-card ul li { padding: 6px 0; padding-left: 22px; position: relative; font-size: 14px; }
+  .tier-card ul li::before { content: '·'; position: absolute; left: 8px; color: var(--silver); font-size: 18px; line-height: 1; }
+  .commission-example {
+    margin-top: 20px; padding: 16px 18px;
+    background: var(--navy); border-radius: 3px;
+    border-left: 2px solid var(--silver);
+    font-size: 12px; color: var(--gray-light); line-height: 1.7;
+  }
+  .commission-example strong { color: var(--silver); }
+
+  .why-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 40px; }
+  .why-card { padding: 32px 28px; background: var(--navy-card); border: 1px solid rgba(255,255,255,0.05); border-radius: 4px; }
+  .why-num { font-family: var(--serif); font-style: italic; font-size: 14px; color: var(--silver); letter-spacing: 0.1em; margin-bottom: 8px; }
+  .why-card h4 { font-size: 18px; margin-bottom: 10px; }
+  .why-card p { font-size: 13px; line-height: 1.85; }
+
+  .process-line { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 40px; }
+  .process-step-p { padding: 28px 20px; background: var(--navy-card); border-right: 1px solid rgba(255,255,255,0.05); text-align: center; }
+  .process-step-p:last-child { border-right: none; }
+  .process-step-p .num { font-family: var(--serif); font-style: italic; color: var(--silver); font-size: 14px; letter-spacing: 0.1em; margin-bottom: 10px; }
+  .process-step-p h4 { font-size: 16px; margin-bottom: 8px; color: var(--white); }
+  .process-step-p p { font-size: 12px; line-height: 1.65; }
+
+  @media (max-width: 880px) {
+    .who-grid { grid-template-columns: 1fr 1fr; }
+    .tier-grid { grid-template-columns: 1fr; }
+    .why-grid { grid-template-columns: 1fr; }
+    .process-line { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWN SUPPLY</a>
+    <div class="nav-links">
+      <a href="resources.html">免費資源</a>
+      <a href="notes.html">內容筆記</a>
+      <a href="products.html">產品</a>
+      <a href="services.html">服務</a>
+      <a href="case-studies.html">案例</a>
+      <a href="about.html">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="container page-header-inner">
+    <div class="eyebrow">PARTNERS</div>
+    <h1>有流量？<br>用你的觸及換 30～50% 分潤。</h1>
+    <p class="lead muted">
+      CROWN SUPPLY 不打廣告。我們選擇把預算換成「分潤」，給真正能帶流量的合作夥伴。
+      你推薦你信任的東西、你的觀眾受益、你拿到對應收入。
+    </p>
+  </div>
+</header>
+
+<section class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:8px;">
+      <div class="eyebrow">WHO WE WANT</div>
+      <h2>我們在找的合作夥伴</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">我們不要求粉絲數量。我們要求觀眾跟你之間有「真實連結」。</p>
+    </div>
+    <div class="who-grid">
+      <div class="who-pill"><div class="icon">A</div><h4>副業 / AI 帳號</h4><p>分享副業、AI 工具、線上變現的自媒體</p></div>
+      <div class="who-pill"><div class="icon">B</div><h4>社群 / FB 社團主</h4><p>有 1,000+ 互動成員的線上社群擁有者</p></div>
+      <div class="who-pill"><div class="icon">C</div><h4>業務 / 房仲 / 保險主管</h4><p>帶領 5 人以上業務團隊的主管</p></div>
+      <div class="who-pill"><div class="icon">D</div><h4>線上課程 / KOL 老師</h4><p>有付費學員的線上講師、自媒體老師</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background: var(--navy);">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:8px;">
+      <div class="eyebrow">COMMISSION TIERS</div>
+      <h2>4 種合作方案</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">分潤比例隨產品價格反向設計：低價產品分潤更高，高價服務分潤適中。</p>
+    </div>
+    <div class="tier-grid">
+      <div class="tier-card">
+        <span class="tag">入門級</span>
+        <h3>299 啟動筆記分潤</h3>
+        <div class="tier-product">推《AI 線上產品啟動筆記》</div>
+        <div class="tier-rate">50<small>%</small></div>
+        <p class="muted" style="font-size:13px;margin-bottom:20px;">每筆訂單 NT$ 149 進你口袋。</p>
+        <ul>
+          <li>專屬推薦連結 + UTM 追蹤</li>
+          <li>月結算、達 NT$ 1,000 起匯款</li>
+          <li>提供推薦素材包</li>
+          <li>真實使用心得才推</li>
+        </ul>
+        <div class="commission-example">
+          <strong>實算範例：</strong>你一個月推 30 單，分潤 = 30 × 149 = <strong>NT$ 4,470</strong>
+        </div>
+      </div>
+      <div class="tier-card">
+        <span class="tag">中價級</span>
+        <h3>1999 完整模板包分潤</h3>
+        <div class="tier-product">推《完整模板包》系列</div>
+        <div class="tier-rate">40<small>%</small></div>
+        <p class="muted" style="font-size:13px;margin-bottom:20px;">每筆訂單約 NT$ 800 進你口袋。</p>
+        <ul>
+          <li>專屬推薦連結 + UTM 追蹤</li>
+          <li>月結算、達 NT$ 2,000 起匯款</li>
+          <li>提供深度評測素材 + Q&A 腳本</li>
+          <li>適合做評測 / 開箱類內容</li>
+        </ul>
+        <div class="commission-example">
+          <strong>實算範例：</strong>你一個月推 10 單，分潤 = 10 × 800 = <strong>NT$ 8,000</strong>
+        </div>
+      </div>
+      <div class="tier-card">
+        <span class="tag">高價級</span>
+        <h3>9800 代做服務分潤</h3>
+        <div class="tier-product">推《AI 線上產品代做包》</div>
+        <div class="tier-rate">30<small>%</small></div>
+        <p class="muted" style="font-size:13px;margin-bottom:20px;">每筆訂單 NT$ 2,940～5,940 進你口袋。</p>
+        <ul>
+          <li>需先 1 對 1 通話確認</li>
+          <li>提供專屬登陸頁</li>
+          <li>每筆成交都會通知你進度</li>
+          <li>適合有業務背景的夥伴</li>
+        </ul>
+        <div class="commission-example">
+          <strong>實算範例：</strong>你一個月推 5 單，分潤 = 5 × 2,940 = <strong>NT$ 14,700</strong>
+        </div>
+      </div>
+      <div class="tier-card">
+        <span class="tag">企業級</span>
+        <h3>團隊授權包</h3>
+        <div class="tier-product">產業授權內容包</div>
+        <div class="tier-rate">客製<small>金額</small></div>
+        <p class="muted" style="font-size:13px;margin-bottom:20px;">固定授權金 + 持續更新分潤。</p>
+        <ul>
+          <li>適合 5 人以上業務團隊主管</li>
+          <li>授權整套產業內容包</li>
+          <li>授權金 NT$ 30,000～80,000</li>
+          <li>客製內容追加另計</li>
+        </ul>
+        <div class="commission-example">
+          <strong>適合：</strong>房仲店長、保險經理、業務團隊長、企業內訓 HR
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:8px;">
+      <div class="eyebrow">WHY US</div>
+      <h2>為什麼選擇推 CROWN SUPPLY</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+    <div class="why-grid">
+      <div class="why-card"><div class="why-num">/01</div><h4>產品本身就有保證品質</h4><p>我們花在產品本身的時間 &gt; 花在行銷的時間。你推薦的東西，不會讓你的觀眾失望。</p></div>
+      <div class="why-card"><div class="why-num">/02</div><h4>分潤計算公開透明</h4><p>後台可以即時查看你的推薦點擊、轉換、累計分潤。月結準時。</p></div>
+      <div class="why-card"><div class="why-num">/03</div><h4>不要求最低銷量</h4><p>很多分潤計畫要求月銷量達標才結算。我們不要求。一單也結。</p></div>
+      <div class="why-card"><div class="why-num">/04</div><h4>提供素材但不強迫使用</h4><p>我們提供推薦素材包，但你也可以用你自己的方式表達。</p></div>
+      <div class="why-card"><div class="why-num">/05</div><h4>不限獨家 / 不限地區</h4><p>你可以同時推其他類似產品。我們相信好產品自己會證明自己。</p></div>
+      <div class="why-card"><div class="why-num">/06</div><h4>內測夥伴享更高分潤</h4><p>前 20 位簽約的合作夥伴，299 產品分潤從 50% 提升到 60%（永久）。</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background: var(--navy);">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:8px;">
+      <div class="eyebrow">PROCESS</div>
+      <h2>合作流程</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+    <div class="process-line">
+      <div class="process-step-p"><div class="num">/01</div><h4>填申請表</h4><p>下方表單，介紹你的觀眾屬性。</p></div>
+      <div class="process-step-p"><div class="num">/02</div><h4>30 分鐘通話</h4><p>確認雙方頻率對得上、適合哪個方案。</p></div>
+      <div class="process-step-p"><div class="num">/03</div><h4>簽合作協議</h4><p>拿到專屬連結與素材包。</p></div>
+      <div class="process-step-p"><div class="num">/04</div><h4>開始推廣</h4><p>每月結算 → 確認 → 匯款。</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container section-narrow">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">APPLY</div>
+      <h2>申請成為合作夥伴</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">填完表單後，我會在 5 個工作日內回覆是否合適。</p>
+    </div>
+    <form class="form-card" action="https://formspree.io/f/xrejoopa" method="POST">
+      <input type="hidden" name="_subject" value="🤝 新申請：合作分潤">
+      <input type="hidden" name="form_source" value="partners.html · Affiliate Application">
+      <div class="form-group">
+        <label>你的暱稱 / 品牌名稱</label>
+        <input type="text" name="brand" required placeholder="如何稱呼你 / 你的帳號名稱">
+      </div>
+      <div class="form-group">
+        <label>主要平台</label>
+        <select name="platform" required>
+          <option value="">請選擇</option>
+          <option>Threads</option>
+          <option>Instagram</option>
+          <option>YouTube / Shorts</option>
+          <option>TikTok / Reels</option>
+          <option>FB 社團 / 粉絲頁</option>
+          <option>LINE 社群</option>
+          <option>個人電子報</option>
+          <option>線上課程平台</option>
+          <option>其他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>主要平台連結</label>
+        <input type="text" name="platform_url" required placeholder="https://...">
+      </div>
+      <div class="form-group">
+        <label>主要觀眾 / 學員是哪一群人？</label>
+        <textarea name="audience" required rows="3" placeholder="例：30～40 歲想做副業的上班族..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>你想推哪一個方案？</label>
+        <select name="plan" required>
+          <option value="">請選擇</option>
+          <option>A. 299 啟動筆記分潤（50%）</option>
+          <option>B. 1999 模板包分潤（40%）</option>
+          <option>C. 9800 代做服務分潤（30%）</option>
+          <option>D. 團隊授權包（客製金額）</option>
+          <option>都有興趣，想先聊聊</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>你預期可以推廣的方式？</label>
+        <textarea name="promo_method" rows="3" placeholder="例：每月發 1 篇深度評測..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>聯絡方式（Email / LINE）</label>
+        <input type="text" name="contact" required placeholder="方便回覆你的方式">
+      </div>
+      <button class="btn btn-primary" type="submit" style="width:100%;">送出申請 →</button>
+      <p class="form-note">5 個工作日內回覆是否合適</p>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWN SUPPLY</a>
+        <p>一人公司的 AI 資源供應站。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+        <a href="case-studies.html">案例</a>
+      </div>
+      <div class="footer-col">
+        <h5>合作</h5>
+        <a href="partners.html">分潤合作</a>
+        <a href="industry-packs.html">產業授權包</a>
+        <a href="about.html">關於</a>
+        <a href="contact.html">聯絡</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:partners@crownsupply.com">partners@crownsupply.com</a>
+      </div>
+    </div>
+    <div class="footer-bottom">© 2026 CROWN SUPPLY. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50 ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>

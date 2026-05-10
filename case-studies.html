@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>案例 · CROWN SUPPLY</title>
+<meta name="description" content="CROWN SUPPLY 的模擬案例與真實客戶案例。Before / After / 交付內容 / 客戶回饋。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 40px; padding-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .filter {
+    padding: 8px 16px; background: transparent;
+    border: 1px solid rgba(255,255,255,0.1); color: var(--gray-light);
+    border-radius: 2px; font-size: 12px; letter-spacing: 0.05em;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .filter:hover { border-color: var(--silver); color: var(--silver); }
+  .filter.active { background: var(--silver); color: var(--navy-deep); border-color: var(--silver); }
+
+  .case-card {
+    background: var(--navy-card); border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 4px; overflow: hidden; margin-bottom: 24px; transition: all 0.3s;
+  }
+  .case-card:hover { border-color: var(--silver); }
+  .case-header { display: grid; grid-template-columns: 1.5fr 1fr; gap: 0; align-items: stretch; }
+  .case-info { padding: 36px; }
+  .case-thumb {
+    background: linear-gradient(135deg, var(--navy-light), var(--navy));
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-style: italic; font-size: 64px;
+    color: var(--silver); border-left: 1px solid rgba(197,205,217,0.1); min-height: 240px;
+  }
+  .case-tag { display: inline-block; padding: 4px 12px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; border-radius: 2px; margin-bottom: 14px; }
+  .case-tag.real { background: rgba(107,203,119,0.1); color: #6BCB77; border: 1px solid rgba(107,203,119,0.3); }
+  .case-tag.mock { background: var(--silver-soft); color: var(--silver); border: 1px solid rgba(197,205,217,0.2); }
+  .case-info h3 { font-size: 24px; margin-bottom: 12px; }
+  .case-info .industry { font-size: 12px; color: var(--gray-mid); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 16px; }
+  .case-info p { font-size: 14px; line-height: 1.85; }
+
+  .case-detail { padding: 0 36px 36px; border-top: 1px solid rgba(255,255,255,0.05); margin-top: 8px; }
+  .case-block { padding: 24px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .case-block:last-child { border-bottom: none; }
+  .case-block h4 {
+    font-family: var(--sans); font-size: 12px; color: var(--silver);
+    letter-spacing: 0.2em; text-transform: uppercase;
+    margin-bottom: 10px; font-weight: 500;
+  }
+  .case-block p { font-size: 14px; line-height: 1.8; }
+  .case-block ul li { padding: 4px 0; padding-left: 20px; position: relative; font-size: 14px; line-height: 1.7; }
+  .case-block ul li::before { content: '·'; position: absolute; left: 6px; color: var(--silver); font-size: 18px; line-height: 1; }
+
+  .ba-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+  .ba-box { padding: 18px 20px; background: var(--navy); border-radius: 3px; border-left: 2px solid var(--gray-dim); }
+  .ba-box.after { border-left-color: var(--silver); }
+  .ba-box .label { font-size: 10px; color: var(--gray-mid); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 8px; }
+  .ba-box.after .label { color: var(--silver); }
+  .ba-box p { font-size: 13px; line-height: 1.7; }
+
+  .disclaimer-box {
+    margin-top: 32px; padding: 20px 24px;
+    background: rgba(197,205,217,0.04); border-left: 2px solid var(--silver);
+    font-size: 13px; color: var(--gray-mid); line-height: 1.8;
+  }
+  .disclaimer-box strong { color: var(--white); font-weight: 600; }
+
+  @media (max-width: 880px) {
+    .case-header { grid-template-columns: 1fr; }
+    .case-info { padding: 24px; }
+    .case-thumb { min-height: 160px; font-size: 48px; }
+    .case-detail { padding: 0 24px 24px; }
+    .ba-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWN SUPPLY</a>
+    <div class="nav-links">
+      <a href="resources.html">免費資源</a>
+      <a href="notes.html">內容筆記</a>
+      <a href="products.html">產品</a>
+      <a href="services.html">服務</a>
+      <a href="case-studies.html" class="active">案例</a>
+      <a href="about.html">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="container page-header-inner">
+    <div class="eyebrow">CASE STUDIES</div>
+    <h1>真實案例 + 模擬範例。<br>每一個都告訴你「能做出什麼」。</h1>
+    <p class="lead muted">
+      初期我們會大量公開模擬範例，讓你看到「產品化」實際長什麼樣。
+      隨著真實客戶累積，這頁會逐步替換成有完整 Before / After 的真實案例。
+    </p>
+  </div>
+</header>
+
+<section class="section">
+  <div class="container">
+    <div class="filter-bar">
+      <button class="filter active" data-filter="all">全部</button>
+      <button class="filter" data-filter="real">真實客戶</button>
+      <button class="filter" data-filter="mock">模擬範例</button>
+      <button class="filter" data-filter="realestate">房仲</button>
+      <button class="filter" data-filter="insurance">保險</button>
+      <button class="filter" data-filter="retail">小店 / 實體</button>
+      <button class="filter" data-filter="creator">創作者 / 副業</button>
+      <button class="filter" data-filter="consulting">諮詢 / 命理</button>
+    </div>
+
+    <article class="case-card" data-cat="mock realestate">
+      <div class="case-header">
+        <div class="case-info">
+          <span class="case-tag mock">模擬範例</span>
+          <div class="industry">REAL ESTATE · 房地產</div>
+          <h3>房仲版 AI 內容包</h3>
+          <p>給沒時間經營社群、又想用線上開發客戶的房仲新人。一份內容包讓他直接有 30 天的可發內容。</p>
+        </div>
+        <div class="case-thumb">RE</div>
+      </div>
+      <div class="case-detail">
+        <div class="case-block">
+          <h4>原本的問題（AS IS）</h4>
+          <p>新進房仲每天忙開發，回到家累到不想經營 IG / LINE。發文的內容都很制式，客戶看了沒感覺。每個月成交來自老客戶推薦，新客來源不穩定。</p>
+        </div>
+        <div class="case-block">
+          <h4>我們做了什麼</h4>
+          <ul>
+            <li>產品定位：「給新進房仲的 30 天 LINE / IG 內容包」</li>
+            <li>30 篇社群貼文（短文版 + 長文版）</li>
+            <li>30 支 30 秒短影音腳本（不露臉、可念稿）</li>
+            <li>LINE 開發話術 20 句（首訊 / 跟進 / 看屋邀約 / 成交後維護）</li>
+          </ul>
+        </div>
+        <div class="case-block">
+          <h4>Before / After</h4>
+          <div class="ba-grid">
+            <div class="ba-box">
+              <div class="label">BEFORE</div>
+              <p>每週發 1～2 篇制式房型介紹，互動率 0.5%，月開發新客 2～3 組。</p>
+            </div>
+            <div class="ba-box after">
+              <div class="label">AFTER（預期）</div>
+              <p>每週固定 5 篇內容輸出，預期互動率提升 3～5 倍。月新客來源從「轉介紹」擴大到「線上主動詢問」。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="case-card" data-cat="mock insurance">
+      <div class="case-header">
+        <div class="case-info">
+          <span class="case-tag mock">模擬範例</span>
+          <div class="industry">INSURANCE · 保險業</div>
+          <h3>保險版 LINE 話術包</h3>
+          <p>給每天靠 LINE 私訊開發客戶的保險業務。把「發訊息不會回、回了不會買」拆成可複製的話術系統。</p>
+        </div>
+        <div class="case-thumb">IN</div>
+      </div>
+      <div class="case-detail">
+        <div class="case-block">
+          <h4>原本的問題</h4>
+          <p>保險業務每天加 5～10 個 LINE，但回覆率不到 20%。即使對方回，也常停在「我先想想」。話術太業務、推銷感太強。</p>
+        </div>
+        <div class="case-block">
+          <h4>我們做了什麼</h4>
+          <ul>
+            <li>定位：「不像業務的 LINE 開發系統」</li>
+            <li>5 種開場情境腳本</li>
+            <li>10 種反對問題回應</li>
+            <li>陪伴式跟進節奏（每月給一個價值點）</li>
+          </ul>
+        </div>
+        <div class="case-block">
+          <h4>Before / After</h4>
+          <div class="ba-grid">
+            <div class="ba-box">
+              <div class="label">BEFORE</div>
+              <p>LINE 加好友後 7 天就介紹保單，回覆率 15%，成交週期 1～3 個月。</p>
+            </div>
+            <div class="ba-box after">
+              <div class="label">AFTER（預期）</div>
+              <p>前 30 天只給價值不推銷，預期回覆率提升 3 倍，信任建立後成交週期反而縮短。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="case-card" data-cat="mock retail">
+      <div class="case-header">
+        <div class="case-info">
+          <span class="case-tag mock">模擬範例</span>
+          <div class="industry">LOCAL RETAIL · 實體小店</div>
+          <h3>小店一頁式銷售頁</h3>
+          <p>給沒架站、沒粉絲、客流量不穩的實體小店。一頁式銷售頁把品牌故事、產品賣點、優惠活動包成一個導流入口。</p>
+        </div>
+        <div class="case-thumb">RT</div>
+      </div>
+      <div class="case-detail">
+        <div class="case-block">
+          <h4>原本的問題</h4>
+          <p>10 年老店，靠口碑經營，但近兩年實體客流減少 30%。沒有官網，IG 只發產品照，客人找不到完整介紹。</p>
+        </div>
+        <div class="case-block">
+          <h4>我們做了什麼</h4>
+          <ul>
+            <li>定位：「老品牌的線上品牌窗口」</li>
+            <li>一頁式銷售頁（含品牌故事、招牌商品、優惠活動、地圖）</li>
+            <li>5 篇 IG 主視覺貼文</li>
+            <li>LINE 官方帳號自動回覆設計</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="case-card" data-cat="mock creator">
+      <div class="case-header">
+        <div class="case-info">
+          <span class="case-tag mock">模擬範例</span>
+          <div class="industry">SIDE HUSTLE · 副業新手</div>
+          <h3>副業新手線上產品包</h3>
+          <p>給「有一項可賣的技能但不會包裝」的人。從 0 把技能變成可上架的數位產品。</p>
+        </div>
+        <div class="case-thumb">SH</div>
+      </div>
+      <div class="case-detail">
+        <div class="case-block">
+          <h4>原本的問題</h4>
+          <p>5 年剪輯經驗的上班族，想做副業但每次寫貼文就卡住。覺得「我又沒粉絲，誰會買我的東西」。</p>
+        </div>
+        <div class="case-block">
+          <h4>我們做了什麼</h4>
+          <ul>
+            <li>定位：「給新手 YouTuber 的剪輯加速包」</li>
+            <li>數位產品設計：90 個可商用的轉場 + 配樂庫 + 字幕模板</li>
+            <li>銷售頁文案 + Lead Magnet</li>
+            <li>30 天上市行銷內容</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="case-card" data-cat="mock consulting">
+      <div class="case-header">
+        <div class="case-info">
+          <span class="case-tag mock">模擬範例</span>
+          <div class="industry">CONSULTING · 命理諮詢</div>
+          <h3>命理師諮詢轉化頁</h3>
+          <p>給靠口碑接案的命理師。把「有興趣但不知道怎麼問」的人，引導到正式預約。</p>
+        </div>
+        <div class="case-thumb">CO</div>
+      </div>
+      <div class="case-detail">
+        <div class="case-block">
+          <h4>我們做了什麼</h4>
+          <ul>
+            <li>定位：「不收驚、不算命、做人生診斷」</li>
+            <li>諮詢轉化頁（服務分類、預約流程、收費透明化）</li>
+            <li>3 種服務套餐</li>
+            <li>免費 Lead Magnet：「5 個你以為是命運其實是選擇的問題」</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <div class="text-center" style="margin: 64px 0 32px;">
+      <div class="eyebrow">REAL CLIENTS</div>
+      <h2 style="font-size:28px;">真實客戶案例</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+
+    <article class="case-card" data-cat="real">
+      <div class="case-header">
+        <div class="case-info">
+          <span class="case-tag real">真實客戶（占位）</span>
+          <div class="industry">PLACEHOLDER · 等待第一個真實案例</div>
+          <h3>第一位代做客戶案例（即將公開）</h3>
+          <p>當第一位客戶完成交付、且同意公開後，這個區塊會替換成完整的：原本問題、我們做了什麼、交付截圖、客戶回饋、後續結果。</p>
+        </div>
+        <div class="case-thumb" style="font-size:32px;">★</div>
+      </div>
+    </article>
+
+    <div class="disclaimer-box">
+      <strong>關於上述案例的重要聲明：</strong><br>
+      所有標註「模擬範例」的案例，是 CROWN SUPPLY 為了展示「可以被產品化的方式」所製作的示範。
+      模擬案例中的問題情境、交付內容是真實可執行的方案，但「Before / After」的數字是預期效果，不代表實際客戶成果。
+      實際成果取決於市場、執行力、內容品質與許多無法控制的因素。
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background: var(--navy);">
+  <div class="container section-narrow text-center">
+    <div class="eyebrow">START</div>
+    <h2>看完案例，<br>想為自己也做一份？</h2>
+    <p class="lead muted" style="margin: 16px auto 32px;">
+      你不需要先想清楚所有細節。先填表單，我們聊聊你的情況再決定。
+    </p>
+    <div class="btn-row" style="justify-content:center;">
+      <a href="services.html" class="btn btn-primary">了解代做服務 →</a>
+      <a href="products.html" class="btn btn-outline">先看 299 啟動筆記</a>
+    </div>
+  </div>
+</section>
+
+<section class="newsletter-band">
+  <div class="container">
+    <div class="eyebrow">CROWN SUPPLY · 實驗信</div>
+    <h2>新案例上線會通知你</h2>
+    <p class="muted" style="margin-top:12px;">每週一封信，沒有廣告。</p>
+    <form class="newsletter-form" action="https://formspree.io/f/xpqboopp" method="POST">
+      <input type="hidden" name="_subject" value="📧 新訂閱者：實驗信">
+      <input type="hidden" name="form_source" value="case-studies.html · Newsletter">
+      <input type="email" name="email" placeholder="你的 Email" required>
+      <button class="btn btn-primary" type="submit">訂閱實驗信</button>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWN SUPPLY</a>
+        <p>一人公司的 AI 資源供應站。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+        <a href="case-studies.html">案例</a>
+      </div>
+      <div class="footer-col">
+        <h5>合作</h5>
+        <a href="partners.html">分潤合作</a>
+        <a href="industry-packs.html">產業授權包</a>
+        <a href="about.html">關於</a>
+        <a href="contact.html">聯絡</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+      </div>
+    </div>
+    <div class="footer-bottom">© 2026 CROWN SUPPLY. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const f = btn.dataset.filter;
+      document.querySelectorAll('.case-card').forEach(card => {
+        const cats = (card.dataset.cat || '').split(' ');
+        card.style.display = (f === 'all' || cats.includes(f)) ? 'block' : 'none';
+      });
+    });
+  });
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50 ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>

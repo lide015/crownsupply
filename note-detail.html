@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>實驗紀錄 01：CROWN SUPPLY 如何設計第一個名單漏斗 · CROWN SUPPLY</title>
+<meta name="description" content="從 0 開始建立名單漏斗的完整設計過程：表單問題怎麼設、Lead Magnet 怎麼選、轉換動線怎麼鋪。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .article-header { padding: 100px 0 56px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .article-meta { display: flex; justify-content: center; gap: 16px; font-size: 12px; color: var(--silver); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 18px; }
+  .article-meta span { color: var(--gray-mid); }
+  .article-title { max-width: 800px; margin: 0 auto; font-size: clamp(28px, 4.4vw, 44px); }
+  .article-sub { max-width: 680px; margin: 20px auto 0; font-size: 17px; color: var(--gray-light); line-height: 1.85; }
+  .article-author {
+    display: inline-flex; align-items: center; gap: 12px;
+    margin-top: 32px; padding: 12px 20px;
+    background: var(--navy-card); border-radius: 30px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .author-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--silver); color: var(--navy-deep);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 700; font-size: 14px;
+  }
+
+  .article-body { max-width: 720px; margin: 0 auto; padding: 56px 24px; }
+  .article-body h2 { font-size: 26px; margin: 48px 0 16px; padding-top: 16px; }
+  .article-body h3 { font-size: 20px; color: var(--silver); margin: 32px 0 12px; font-style: italic; }
+  .article-body p { font-size: 16px; line-height: 1.95; margin-bottom: 18px; }
+  .article-body ul, .article-body ol { margin: 16px 0 24px; padding-left: 24px; }
+  .article-body ul li, .article-body ol li { list-style: disc; margin-bottom: 10px; font-size: 16px; line-height: 1.85; }
+  .article-body ol li { list-style: decimal; }
+  .article-body strong { color: var(--white); font-weight: 700; }
+  .article-body em { color: var(--silver); font-style: italic; }
+  .article-body blockquote {
+    margin: 28px 0; padding: 20px 28px;
+    background: var(--navy-card); border-left: 3px solid var(--silver);
+    border-radius: 4px; font-family: var(--serif); font-style: italic;
+    color: var(--white); font-size: 18px; line-height: 1.7;
+  }
+  .article-body hr { border: none; height: 1px; background: rgba(255,255,255,0.08); margin: 48px 0; }
+
+  .inline-cta {
+    margin: 40px 0; padding: 32px;
+    background: linear-gradient(135deg, var(--navy-card), var(--navy-light));
+    border: 1px solid rgba(197,205,217,0.2); border-radius: 4px; text-align: center;
+  }
+  .inline-cta h4 { font-size: 20px; color: var(--white); margin-bottom: 8px; }
+  .inline-cta p { font-size: 14px !important; margin-bottom: 16px !important; color: var(--gray-light); }
+
+  .related-section { background: var(--navy); padding: 64px 0; border-top: 1px solid rgba(255,255,255,0.05); }
+  .related-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 32px; }
+  .related-card {
+    padding: 24px; background: var(--navy-card); border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.05); transition: all 0.3s;
+  }
+  .related-card:hover { border-color: var(--silver); transform: translateY(-2px); }
+  .related-card .meta { font-size: 11px; color: var(--gray-mid); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+  .related-card h3 { font-size: 16px; line-height: 1.45; margin-bottom: 0; }
+
+  @media (max-width: 880px) {
+    .article-body { padding: 40px 20px; }
+    .article-body h2 { font-size: 22px; }
+    .article-body p { font-size: 15px; }
+    .related-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWN SUPPLY</a>
+    <div class="nav-links">
+      <a href="resources.html">免費資源</a>
+      <a href="notes.html" class="active">內容筆記</a>
+      <a href="products.html">產品</a>
+      <a href="services.html">服務</a>
+      <a href="case-studies.html">案例</a>
+      <a href="about.html">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<header class="article-header">
+  <div class="container">
+    <div class="article-meta">
+      <span>實驗紀錄</span> · <span>2026.05.10</span> · <span>12 分鐘</span>
+    </div>
+    <h1 class="article-title">實驗紀錄 01：<br>CROWN SUPPLY 如何設計第一個名單漏斗</h1>
+    <p class="article-sub">從 0 開始建立名單漏斗的完整設計過程：表單問題怎麼設、Lead Magnet 怎麼選、轉換動線怎麼鋪。</p>
+    <div class="article-author">
+      <div class="author-avatar">CS</div>
+      <span style="font-size:13px;color:var(--gray-light);">CROWN SUPPLY 創辦人</span>
+    </div>
+  </div>
+</header>
+
+<article class="article-body">
+  <p>多數人開始做副業，會犯一個共同的錯誤：<strong>先想內容、再想產品，最後才想名單</strong>。</p>
+  <p>結果就是：發了 30 篇貼文，沒人留言；上架了產品，沒人來買；最後懷疑「是不是我運氣不好」。</p>
+  <p>正確的順序剛好相反：<em>先想名單，再想產品，最後才想內容</em>。因為內容是手段，產品是目的，<strong>名單才是中間那個讓你能持續對話的橋</strong>。</p>
+  <p>這篇文章公開記錄 CROWN SUPPLY 的第一個名單漏斗怎麼設計的——不是「我做到 1000 名單之後的方法」，而是「我還沒有 1 個名單時的思考過程」。</p>
+
+  <hr>
+
+  <h2>一、為什麼要先想名單，不是先想產品？</h2>
+  <p>產品會迭代、會死掉、會被市場淘汰。但名單是<strong>跟著人走的資產</strong>。一個有 500 個 Email 的人，明天換產品照樣能賣；一個有單一爆紅產品但沒名單的人，產品一過氣就什麼都沒了。</p>
+  <p>這不是我發明的觀點，是行銷世界 30 年的共識。所有 SaaS 公司、所有電商品牌、所有教育品牌都是這樣運作。</p>
+
+  <h2>二、Lead Magnet 怎麼選？</h2>
+  <p>Lead Magnet 是「免費資源」，目的只有一個：<strong>讓陌生人願意給你 Email</strong>。</p>
+  <p>選擇標準有 3 個：</p>
+  <ol>
+    <li><strong>解決一個具體痛點</strong>——不是「副業總覽」，是「10 種 AI 線上產品的對照表」。具體 &gt; 廣泛。</li>
+    <li><strong>能立刻拿來用</strong>——不是 50 頁的 PDF，是 1 張可下載的對照表。立即可用 &gt; 內容多。</li>
+    <li><strong>跟你的付費產品有相關性</strong>——免費資源是付費產品的「前菜」，不是不相關的禮物。</li>
+  </ol>
+  <p>我選的是《10 種 AI 線上產品模型對照表》。理由：</p>
+  <ul>
+    <li>解決「我想做副業但不知道做什麼」這個第一痛點</li>
+    <li>1 張表格，5 分鐘讀完，立刻能對照自己的情況</li>
+    <li>跟我的 299 啟動筆記強相關（筆記裡會把 10 種拆成 20 種）</li>
+  </ul>
+
+  <h2>三、表單問題怎麼設？</h2>
+  <p>多數人犯的錯：「表單越短越好，只要 Email 就夠了」。</p>
+  <p>這對<em>純名單收集</em>來說對。但對<em>名單分類</em>來說錯。</p>
+  <p>我設的問題：</p>
+  <ol>
+    <li><strong>暱稱</strong>（拉近距離，未來寄信用）</li>
+    <li><strong>Email</strong>（必填，主要聯絡方式）</li>
+    <li><strong>你目前最想做哪一種？</strong>（5 個選項：AI 模板包 / 自媒體內容 / 線上代工 / 一頁式銷售頁 / 還不知道）</li>
+  </ol>
+  <p>第三題最關鍵。為什麼？因為 100 個人填表後，我能立刻看到：</p>
+  <ul>
+    <li>哪一個產品方向最熱（決定我下個產品做什麼）</li>
+    <li>哪些人「還不知道」（這群人最適合 1 對 1 諮詢）</li>
+    <li>每個方向的人有多少（決定後續內容比重）</li>
+  </ul>
+
+  <blockquote>
+    表單不只是收名單，是收「市場研究資料」。多問一題、就多一個決策依據。
+  </blockquote>
+
+  <div class="inline-cta">
+    <h4>想拿到完整的對照表？</h4>
+    <p>免費領取《10 種 AI 線上產品模型對照表》，每種模型附啟動成本、適合對象、風險提醒。</p>
+    <a href="resources.html" class="btn btn-primary btn-sm">免費領取 →</a>
+  </div>
+
+  <h2>四、轉換動線怎麼鋪？</h2>
+  <p>從「陌生人看到你」到「他留 Email」，中間需要 3～5 個觸點。多數人只設了 1 個（直接放表單），所以轉換率永遠在 1～3% 卡關。</p>
+  <p>CROWN SUPPLY 的設計：</p>
+  <ol>
+    <li><strong>觸點 1：社群貼文</strong>（Threads / IG）— 提到痛點，引導到網站</li>
+    <li><strong>觸點 2：首頁 Hero</strong>— 直接放「免費領取」按鈕</li>
+    <li><strong>觸點 3：免費資源頁</strong>— 完整介紹會拿到什麼，再給表單</li>
+    <li><strong>觸點 4：表單填完後</strong>— 引導到「也許你會喜歡 299 筆記」</li>
+    <li><strong>觸點 5：Email 寄送對照表</strong>— 信件最下方加一個「準備好的話，看 299 筆記」</li>
+  </ol>
+  <p>每個觸點都是「再一次說服機會」。多數人只用了觸點 1+3，難怪轉換率上不來。</p>
+
+  <h2>五、目前的進度與預期</h2>
+  <p>截至本文撰寫時，CROWN SUPPLY 還沒收到第一個名單。<strong>這就是「實驗紀錄」的意思</strong>——我把過程公開，未來無論結果好壞，都會回來更新。</p>
+  <p>預期目標：</p>
+  <ul>
+    <li>第一個月：100 名單（透過 Threads + IG 自然流量）</li>
+    <li>第二個月：300 名單（如果第一個月有反應，會試 FB 社團發文）</li>
+    <li>第三個月：500 名單 + 第一個 299 訂單（驗證付費意願的關鍵點）</li>
+  </ul>
+  <p>如果第三個月還沒有第一個 299 訂單，代表：(a) 文案要改、(b) 客群選錯、(c) Lead Magnet 品質不夠。任一條都會回來公開檢討。</p>
+
+  <hr>
+
+  <h2>給你的反思題</h2>
+  <p>不用回答我，回答你自己：</p>
+  <ol>
+    <li>你的 Lead Magnet 是什麼？解決一個具體痛點還是「總覽型」？</li>
+    <li>你的表單除了 Email 還問了什麼？這些答案能幫你做出哪些決策？</li>
+    <li>從陌生人到留 Email，你設了幾個觸點？</li>
+  </ol>
+  <p>下篇文章我會拆<em>「自己的 Lead Magnet」怎麼快速做出來</em>——從選題、寫稿、到設計，預計用 3 小時做出第一版。</p>
+  <p>訂閱實驗信，下篇上線就會收到。</p>
+</article>
+
+<section class="newsletter-band">
+  <div class="container">
+    <div class="eyebrow">CROWN SUPPLY · 實驗信</div>
+    <h2>下篇上線就告訴你</h2>
+    <p class="muted" style="margin-top:12px;">每週一封信，沒有廣告。</p>
+    <form class="newsletter-form" action="https://formspree.io/f/xpqboopp" method="POST">
+      <input type="hidden" name="_subject" value="📧 新訂閱者：實驗信">
+      <input type="hidden" name="form_source" value="note-detail.html · Newsletter">
+      <input type="email" name="email" placeholder="你的 Email" required>
+      <button class="btn btn-primary" type="submit">訂閱實驗信</button>
+    </form>
+  </div>
+</section>
+
+<section class="related-section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:8px;">
+      <div class="eyebrow">RELATED</div>
+      <h2 style="font-size:24px;">繼續讀</h2>
+    </div>
+    <div class="related-grid">
+      <a href="note-detail.html" class="related-card">
+        <div class="meta">線上產品 · 10 分鐘</div>
+        <h3>定價心理學：為什麼 299 比 250 更賣得出去</h3>
+      </a>
+      <a href="note-detail.html" class="related-card">
+        <div class="meta">合法邊界 · 8 分鐘</div>
+        <h3>做匿名內容號之前你必須知道的 7 條法律紅線</h3>
+      </a>
+      <a href="note-detail.html" class="related-card">
+        <div class="meta">實驗紀錄 · 6 分鐘</div>
+        <h3>第二週實驗：把 Threads 流量導到 Email 的 3 種測試</h3>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWN SUPPLY</a>
+        <p>一人公司的 AI 資源供應站。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+      </div>
+      <div class="footer-col">
+        <h5>合作</h5>
+        <a href="partners.html">分潤合作</a>
+        <a href="industry-packs.html">產業授權包</a>
+        <a href="about.html">關於</a>
+        <a href="contact.html">聯絡</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+      </div>
+    </div>
+    <div class="footer-bottom">© 2026 CROWN SUPPLY. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50 ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>
