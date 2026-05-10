@@ -2,6 +2,7 @@
    CROWN SUPPLY · 全站共用樣式
    配色：深海軍藍 + 冷銀灰 + 純白
    字型：Playfair Display（標題）+ Noto Sans TC（內文）
+   v2 (2026-05-11) — 修正 checkbox 一字一行排版 bug
    ========================================================== */
 
 :root {
@@ -262,4 +263,106 @@ footer {
   .btn-row { flex-direction: column; }
   .btn { width: 100%; }
   .footer-inner { grid-template-columns: 1fr; }
+}
+
+/* ==========================================================
+   v2 修補區 (2026-05-11)
+   修正：結帳頁勾選同意條款「一字一行垂直排版」bug
+   原因：checkbox 與 label 容器多半使用 flex + space-between
+        但 label 沒設 flex:1，被擠成最小寬度 = 中文一字寬
+   解法：用 :has() 與通用選擇器強制覆蓋，無論 HTML 用哪個 class
+        都會被修好。!important 用在這裡是合理的（修補既有 bug）
+   ========================================================== */
+
+/* 1. 任何包含 checkbox 的容器 → 強制水平 flex、不要 space-between */
+.form-group:has(> input[type="checkbox"]),
+.form-group:has(input[type="checkbox"] + label),
+.checkbox-row,
+.checkbox-group,
+.agreement-row,
+.agreement,
+.terms-row,
+.terms-checkbox,
+.consent-row,
+.consent {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  flex-wrap: nowrap;
+  margin-bottom: 16px;
+}
+
+/* 2. 容器內的 checkbox → 固定寬度，不要被壓 */
+.form-group:has(> input[type="checkbox"]) > input[type="checkbox"],
+.checkbox-row input[type="checkbox"],
+.checkbox-group input[type="checkbox"],
+.agreement-row input[type="checkbox"],
+.agreement input[type="checkbox"],
+.terms-row input[type="checkbox"],
+.terms-checkbox input[type="checkbox"],
+.consent-row input[type="checkbox"],
+.consent input[type="checkbox"] {
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  margin: 5px 0 0 !important;
+  cursor: pointer;
+  accent-color: var(--silver);
+}
+
+/* 3. 容器內的 label → 必須吃掉剩餘空間，文字才會正常換行 */
+.form-group:has(> input[type="checkbox"]) > label,
+.checkbox-row label,
+.checkbox-group label,
+.agreement-row label,
+.agreement label,
+.terms-row label,
+.terms-checkbox label,
+.consent-row label,
+.consent label {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  display: inline-block !important;
+  margin: 0 !important;
+  font-size: 13px !important;
+  line-height: 1.7 !important;
+  color: var(--gray-light) !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+  white-space: normal !important;
+  writing-mode: horizontal-tb !important;
+  cursor: pointer;
+}
+
+/* 4. 全域兜底：任何「checkbox 直接接 label」的組合 */
+input[type="checkbox"] + label {
+  display: inline-block !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  word-break: normal !important;
+  white-space: normal !important;
+  writing-mode: horizontal-tb !important;
+}
+
+/* 5. 訂單摘要側欄：聯絡資訊區塊（提升可讀性） */
+.order-summary .contact-info,
+.order-summary .help-box,
+aside .help-info {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.order-summary a,
+aside a {
+  color: var(--silver);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.order-summary a:hover,
+aside a:hover {
+  color: var(--white);
 }
