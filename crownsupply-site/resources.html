@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>免費資源 · CROWNSUPPLY</title>
+<meta name="description" content="CROWNSUPPLY 整理的免費資源：10 種 AI 線上產品模型表、副業檢查清單、AI 工具清單、合法邊界 PDF。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .featured-resource {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 48px;
+    align-items: center;
+    margin-bottom: 64px;
+  }
+  .featured-info ul li {
+    padding: 8px 0;
+    padding-left: 26px;
+    position: relative;
+    font-size: 15px;
+  }
+  .featured-info ul li::before {
+    content: '◆';
+    position: absolute;
+    left: 0;
+    color: var(--silver);
+    font-size: 11px;
+    top: 14px;
+  }
+
+  .resource-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: 40px;
+  }
+  .resource-card {
+    padding: 32px 28px;
+    background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s;
+  }
+  .resource-card:hover {
+    border-color: var(--silver);
+    transform: translateY(-2px);
+  }
+  .resource-icon {
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--silver);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--silver);
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 20px;
+    margin-bottom: 18px;
+  }
+  .resource-card h3 { font-size: 19px; margin-bottom: 10px; }
+  .resource-card p { font-size: 13px; flex: 1; }
+  .resource-card .meta {
+    font-size: 11px;
+    color: var(--gray-mid);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .form-card.large { padding: 48px; }
+
+  @media (max-width: 880px) {
+    .featured-resource { grid-template-columns: 1fr; gap: 32px; }
+    .resource-grid { grid-template-columns: 1fr; }
+    .form-card.large { padding: 28px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWNSUPPLY</a>
+    <div class="nav-links">
+      <a href="index.html">首頁</a>
+      <a href="resources.html" class="active">免費資源</a>
+      <a href="notes.html">內容筆記</a>
+      <a href="products.html">產品</a>
+      <a href="services.html">服務</a>
+      <a href="about.html">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="container page-header-inner">
+    <div class="eyebrow">FREE RESOURCES</div>
+    <h1>先試試免費的，<br>再決定要不要往下走。</h1>
+    <p class="lead muted">
+      所有資源都不需付費、不需訂閱、留 Email 直接拿。
+      我相信「先讓你看到品質」比「逼你先付錢」對雙方都好。
+    </p>
+  </div>
+</header>
+
+<!-- 主打 Lead Magnet -->
+<section class="section">
+  <div class="container">
+    <div class="featured-resource">
+      <div class="featured-info">
+        <span class="tag">主打資源</span>
+        <h2>10 種 AI 線上產品<br>模型對照表</h2>
+        <div class="gold-divider" style="margin-left:0;max-width:120px;"><span></span></div>
+        <p class="lead muted" style="margin-bottom:24px;">
+          一張 A4 對照表，幫你快速看懂：哪些線上產品適合低成本起步、需要什麼工具、第一週怎麼做、可能有哪些風險。
+        </p>
+        <ul>
+          <li>10 種 AI 線上產品模型總覽</li>
+          <li>每種模型的啟動成本（時間 / 金錢）</li>
+          <li>適合的人格特質與技能</li>
+          <li>可實際採用的變現方式</li>
+          <li>法律與平台的風險提醒</li>
+          <li>第一週可動手的具體步驟</li>
+        </ul>
+      </div>
+
+      <form class="form-card large" onsubmit="event.preventDefault();alert('感謝你！下載連結將寄到你的 Email。');">
+        <h3 style="text-align:center;">立即免費領取</h3>
+        <p class="form-note" style="margin: 4px 0 24px;">不訂閱、不轟炸、隨時可退訂</p>
+        <div class="form-group">
+          <label>暱稱</label>
+          <input type="text" required placeholder="想被怎麼稱呼">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" required placeholder="領取連結會寄到這裡">
+        </div>
+        <div class="form-group">
+          <label>你目前最想做哪一種？</label>
+          <select required>
+            <option value="">請選擇方向</option>
+            <option>AI 模板包</option>
+            <option>自媒體內容</option>
+            <option>線上代工</option>
+            <option>一頁式銷售頁</option>
+            <option>還不知道，想先看方向</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit" style="width:100%;margin-top:8px;">免費領取模型表 →</button>
+        <p class="form-note">送出後立即收到下載連結</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- 其他資源 -->
+<section class="section" style="background: var(--navy);">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">MORE FREE</div>
+      <h2>其他免費資源</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">點擊任一資源都會先請你留 Email，方便我把後續更新寄給你。</p>
+    </div>
+
+    <div class="resource-grid">
+      <div class="resource-card">
+        <div class="resource-icon">①</div>
+        <h3>副業 30 天行動表</h3>
+        <p>我用了 3 個版本才迭代出的「每天 30 分鐘也能往前推」的行動表。每天的任務具體到「打開哪個工具、寫哪一段」。</p>
+        <div class="meta">PDF · 2 頁 · 中文</div>
+        <a href="#" class="btn btn-outline btn-sm" style="margin-top:14px;">取得 →</a>
+      </div>
+      <div class="resource-card">
+        <div class="resource-icon">②</div>
+        <h3>AI 工具清單（我實際用的）</h3>
+        <p>不是「100 個 AI 工具大全」那種列表。是我實際用在 CROWNSUPPLY 工作流的 12 個工具，附月費、用途、推薦度。</p>
+        <div class="meta">Notion 連結 · 持續更新</div>
+        <a href="#" class="btn btn-outline btn-sm" style="margin-top:14px;">取得 →</a>
+      </div>
+      <div class="resource-card">
+        <div class="resource-icon">③</div>
+        <h3>合法邊界檢查清單</h3>
+        <p>20 個在台灣 / 中港地區做副業最容易踩到的紅線。不是法律建議，是經驗整理。涉及具體爭議請諮詢律師。</p>
+        <div class="meta">PDF · 4 頁 · 中文</div>
+        <a href="#" class="btn btn-outline btn-sm" style="margin-top:14px;">取得 →</a>
+      </div>
+      <div class="resource-card">
+        <div class="resource-icon">④</div>
+        <h3>一頁式銷售頁框架模板</h3>
+        <p>10 個必備區塊 + 每個區塊的寫作提問。你只要對著問題回答，文案就生出來了。</p>
+        <div class="meta">PDF + Notion · 中文</div>
+        <a href="#" class="btn btn-outline btn-sm" style="margin-top:14px;">取得 →</a>
+      </div>
+      <div class="resource-card">
+        <div class="resource-icon">⑤</div>
+        <h3>內容鉤子 50 種公式</h3>
+        <p>從爆款內容拆出來的 50 種開頭公式。你不會再卡在「貼文第一句怎麼寫」。</p>
+        <div class="meta">PDF · 6 頁 · 中文</div>
+        <a href="#" class="btn btn-outline btn-sm" style="margin-top:14px;">取得 →</a>
+      </div>
+      <div class="resource-card">
+        <div class="resource-icon">⑥</div>
+        <h3>定價心理學速查表</h3>
+        <p>9 / 19 / 29 / 99 / 299 / 999 — 不同價格區間的心理觸發點與適用情境。</p>
+        <div class="meta">PDF · 3 頁 · 中文</div>
+        <a href="#" class="btn btn-outline btn-sm" style="margin-top:14px;">取得 →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 為什麼免費 -->
+<section class="section">
+  <div class="container section-narrow text-center">
+    <div class="eyebrow">WHY FREE</div>
+    <h2>為什麼這些都免費？</h2>
+    <div class="gold-divider"><span></span></div>
+    <p class="lead muted" style="margin:0 auto 24px;">
+      我相信內容行銷的基本道理：先給出真實有用的東西，讓你信任這個品牌的判斷。
+      如果你看完免費資源覺得「這個人是認真的」，再考慮要不要往下看付費內容。
+    </p>
+    <p class="lead muted" style="margin:0 auto;">
+      如果你看完覺得「這沒什麼」，那也很好，**至少我們都節省了之後不對盤的時間**。
+    </p>
+    <div class="btn-row" style="justify-content:center;margin-top:32px;">
+      <a href="products.html" class="btn btn-outline">看付費產品</a>
+      <a href="about.html" class="btn btn-ghost">了解 CROWNSUPPLY 在做什麼 →</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWNSUPPLY</a>
+        <p>一人公司的 AI 資源供應站。整理合法、低成本、可動手的線上變現系統。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+      </div>
+      <div class="footer-col">
+        <h5>品牌</h5>
+        <a href="about.html">關於 CROWNSUPPLY</a>
+        <a href="contact.html">聯絡</a>
+        <a href="notes.html">實驗紀錄</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+        <a href="#">LINE 官方帳號</a>
+        <a href="#">Threads</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © 2026 CROWNSUPPLY. All rights reserved.<br>
+      本站內容不構成法律、稅務、投資建議。涉及個案請諮詢專業人士。
+    </div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50
+      ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>

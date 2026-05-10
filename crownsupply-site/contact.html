@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>聯絡 · CROWNSUPPLY</title>
+<meta name="description" content="想聯絡 CROWNSUPPLY？選擇對的入口讓我們更快回覆你。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .contact-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-top: 40px;
+  }
+  .contact-route {
+    padding: 32px;
+    background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 4px;
+    transition: all 0.3s;
+  }
+  .contact-route:hover {
+    border-color: var(--silver);
+    transform: translateY(-2px);
+  }
+  .contact-route .icon {
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--silver);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--silver);
+    font-family: var(--serif);
+    font-size: 18px;
+    margin-bottom: 18px;
+  }
+  .contact-route h3 { font-size: 19px; margin-bottom: 8px; }
+  .contact-route p {
+    font-size: 13px;
+    line-height: 1.7;
+    margin-bottom: 16px;
+  }
+
+  .general-form-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 48px;
+    align-items: start;
+  }
+  .form-info h2 { font-size: 30px; margin-bottom: 16px; }
+  .form-info ul { margin-top: 24px; }
+  .form-info li {
+    padding: 8px 0;
+    padding-left: 24px;
+    position: relative;
+    font-size: 14px;
+    color: var(--gray-light);
+  }
+  .form-info li::before {
+    content: '◆';
+    position: absolute;
+    left: 0;
+    color: var(--silver);
+    font-size: 11px;
+    top: 12px;
+  }
+
+  .channel-list {
+    display: flex;
+    gap: 16px;
+    margin-top: 32px;
+    flex-wrap: wrap;
+  }
+  .channel {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 30px;
+    font-size: 13px;
+    color: var(--gray-light);
+    transition: all 0.2s;
+  }
+  .channel:hover { border-color: var(--silver); color: var(--silver); }
+
+  @media (max-width: 880px) {
+    .contact-grid { grid-template-columns: 1fr; }
+    .general-form-wrapper { grid-template-columns: 1fr; gap: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWNSUPPLY</a>
+    <div class="nav-links">
+      <a href="index.html">首頁</a>
+      <a href="resources.html">免費資源</a>
+      <a href="notes.html">內容筆記</a>
+      <a href="products.html">產品</a>
+      <a href="services.html">服務</a>
+      <a href="about.html">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="container page-header-inner">
+    <div class="eyebrow">CONTACT</div>
+    <h1>選對入口，<br>我們會回得更快。</h1>
+    <p class="lead muted">
+      不同需求對應不同窗口。先選你最接近的情境，能省下你和我的來回時間。
+    </p>
+  </div>
+</header>
+
+<!-- 分流入口 -->
+<section class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:8px;">
+      <div class="eyebrow">CHOOSE A PATH</div>
+      <h2>你最接近哪一種情況？</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+
+    <div class="contact-grid">
+      <a href="resources.html" class="contact-route">
+        <div class="icon">①</div>
+        <h3>我想拿免費資源</h3>
+        <p>《10 種 AI 線上產品模型表》、副業檢查清單、AI 工具清單。直接前往免費資源頁，留 Email 即可拿到。</p>
+        <span class="btn btn-outline btn-sm">前往免費資源 →</span>
+      </a>
+      <a href="products.html" class="contact-route">
+        <div class="icon">②</div>
+        <h3>我想買《啟動筆記》</h3>
+        <p>NT$ 299 內測首版。前往產品頁查看完整目錄、付款方式、交付流程。</p>
+        <span class="btn btn-outline btn-sm">看產品詳情 →</span>
+      </a>
+      <a href="services.html" class="contact-route">
+        <div class="icon">③</div>
+        <h3>我想申請代做服務</h3>
+        <p>從 NT$ 4,980 起。前往服務頁填寫初步需求，48 小時內回覆是否合適。</p>
+        <span class="btn btn-outline btn-sm">看服務詳情 →</span>
+      </a>
+      <a href="#general-form" class="contact-route">
+        <div class="icon">④</div>
+        <h3>其他諮詢 / 合作</h3>
+        <p>媒體採訪、跨界合作、聯盟分潤、社群邀請、Podcast 來賓邀約等。請填下方表單。</p>
+        <span class="btn btn-outline btn-sm">前往一般表單 ↓</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- 一般聯絡表單 -->
+<section id="general-form" class="section" style="background: var(--navy);">
+  <div class="container">
+    <div class="general-form-wrapper">
+      <div class="form-info">
+        <div class="eyebrow">GENERAL INQUIRY</div>
+        <h2>一般聯絡 / 合作</h2>
+        <div class="gold-divider" style="margin-left:0;max-width:120px;"><span></span></div>
+        <p class="lead muted">
+          如果你的需求不在上面四種，歡迎透過這個表單聯絡。我會在 3～5 個工作日內回覆。
+        </p>
+        <ul>
+          <li>媒體採訪、Podcast 來賓邀請</li>
+          <li>聯盟分潤、跨界合作</li>
+          <li>企業內訓、講座邀約</li>
+          <li>合作提案、品牌共創</li>
+          <li>對 CROWNSUPPLY 的回饋與建議</li>
+        </ul>
+
+        <div style="margin-top:32px;padding-top:32px;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="font-size:13px;color:var(--gray-mid);margin-bottom:14px;">或透過以下管道直接找我：</p>
+          <div class="channel-list">
+            <a href="mailto:hello@crownsupply.com" class="channel">✉ hello@crownsupply.com</a>
+            <a href="#" class="channel">LINE 官方</a>
+            <a href="#" class="channel">Threads</a>
+          </div>
+        </div>
+      </div>
+
+      <form class="form-card" onsubmit="event.preventDefault();alert('已收到你的訊息！3～5 個工作日內回覆。');">
+        <div class="form-group">
+          <label>暱稱 / 姓名</label>
+          <input type="text" required placeholder="想被怎麼稱呼">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" required placeholder="你的聯絡 Email">
+        </div>
+        <div class="form-group">
+          <label>來自哪個單位 / 角色（選填）</label>
+          <input type="text" placeholder="例：媒體記者、Podcast 主持、企業 HR">
+        </div>
+        <div class="form-group">
+          <label>需求類型</label>
+          <select required>
+            <option value="">請選擇</option>
+            <option>媒體採訪</option>
+            <option>Podcast 來賓</option>
+            <option>聯盟 / 跨界合作</option>
+            <option>企業內訓 / 講座</option>
+            <option>合作提案</option>
+            <option>產品回饋</option>
+            <option>其他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>具體說明</label>
+          <textarea required rows="5" placeholder="請描述你的需求、時程、預期投入..."></textarea>
+        </div>
+        <button class="btn btn-primary" type="submit" style="width:100%;">送出 →</button>
+        <p class="form-note">送出後 3～5 個工作日內回覆</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- 為什麼分流 -->
+<section class="section">
+  <div class="container section-narrow text-center">
+    <div class="eyebrow">WHY THIS WAY</div>
+    <h2>為什麼要先分流？</h2>
+    <div class="gold-divider"><span></span></div>
+    <p class="lead muted" style="margin:0 auto 16px;">
+      因為一個一人公司每週能處理的訊息有上限。把對的問題送到對的窗口，對你（更快收到答案）和對我（不用一封封猜你要什麼）都更好。
+    </p>
+    <p class="lead muted" style="margin:0 auto;">
+      如果你發現上面四個入口沒有完全對應你的需求——選最接近的就好，我會引導你到對的地方。
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWNSUPPLY</a>
+        <p>一人公司的 AI 資源供應站。整理合法、低成本、可動手的線上變現系統。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+      </div>
+      <div class="footer-col">
+        <h5>品牌</h5>
+        <a href="about.html">關於</a>
+        <a href="contact.html">聯絡</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © 2026 CROWNSUPPLY. All rights reserved.
+    </div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50
+      ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>

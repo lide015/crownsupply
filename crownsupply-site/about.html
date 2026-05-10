@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>關於 · CROWNSUPPLY</title>
+<meta name="description" content="CROWNSUPPLY 是一人公司的 AI 資源供應站。我們相信什麼、不做什麼、適合誰。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .belief-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-top: 40px;
+  }
+  .belief {
+    padding: 32px;
+    background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-left: 2px solid var(--silver);
+    border-radius: 4px;
+  }
+  .belief-num {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--silver);
+    font-size: 14px;
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+  }
+  .belief h3 { font-size: 22px; margin-bottom: 12px; }
+  .belief p { font-size: 14px; line-height: 1.85; }
+
+  .who-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin-top: 48px;
+  }
+  .who-card {
+    padding: 36px;
+    background: var(--navy-card);
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .who-card.yes { border-top: 3px solid var(--silver); }
+  .who-card.no { border-top: 3px solid var(--gray-dim); opacity: 0.85; }
+  .who-card h3 { font-size: 22px; margin-bottom: 16px; }
+  .who-card ul li {
+    padding: 8px 0;
+    padding-left: 28px;
+    position: relative;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .who-card.yes li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: var(--silver);
+    font-weight: 700;
+  }
+  .who-card.no li::before {
+    content: '✕';
+    position: absolute;
+    left: 4px;
+    color: var(--gray-mid);
+  }
+
+  .manifesto {
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: left;
+  }
+  .manifesto p {
+    font-size: 17px;
+    line-height: 1.95;
+    margin-bottom: 20px;
+    color: var(--gray-light);
+  }
+  .manifesto p.lead-stmt {
+    font-family: var(--serif);
+    font-size: 22px;
+    color: var(--white);
+    line-height: 1.6;
+    font-style: italic;
+    margin: 32px 0;
+    padding-left: 24px;
+    border-left: 2px solid var(--silver);
+  }
+
+  @media (max-width: 880px) {
+    .belief-grid, .who-section { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWNSUPPLY</a>
+    <div class="nav-links">
+      <a href="index.html">首頁</a>
+      <a href="resources.html">免費資源</a>
+      <a href="notes.html">內容筆記</a>
+      <a href="products.html">產品</a>
+      <a href="services.html">服務</a>
+      <a href="about.html" class="active">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="container page-header-inner">
+    <div class="eyebrow">ABOUT</div>
+    <h1>不講暴富，<br>只拆解真實的路徑。</h1>
+    <p class="lead muted">
+      CROWNSUPPLY 不是課程、不是訂閱社群、不是線上學院。
+      是一個給「想用 AI 開始線上變現」的人，把資訊整理成可動手的資源站。
+    </p>
+  </div>
+</header>
+
+<!-- Manifesto -->
+<section class="section">
+  <div class="container">
+    <div class="manifesto">
+      <div class="eyebrow">為什麼有 CROWNSUPPLY</div>
+      <h2>市場上有太多「結果」，太少「順序」。</h2>
+      <div class="gold-divider" style="margin-left:0;max-width:120px;"><span></span></div>
+
+      <p>打開 YouTube、IG、Threads，你看到的是別人的終點：「我月入 6 位數」、「靠 AI 躺著賺」、「30 天破百萬訂閱」。</p>
+
+      <p>這些內容不會告訴你：他們花了多久才開始有第一塊錢進帳、踩過哪些雷、哪些事其實是違法或踩平台紅線、哪些方法只適合他不適合你。</p>
+
+      <p class="lead-stmt">
+        我們做 CROWNSUPPLY，是因為你需要的不是更多「成功故事」，而是一張**能照做的地圖**。
+      </p>
+
+      <p>這張地圖會告訴你哪些路是真的、哪些是幻覺、哪些紅線一旦踩到所有努力會歸零。它不會幫你做事，但它能讓你停止亂試、開始累積。</p>
+
+      <p>我們不保證收入。任何跟你保證收入的人，都應該被你懷疑。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 我們相信什麼 -->
+<section class="section" style="background: var(--navy);">
+  <div class="container section-narrow text-center">
+    <div class="eyebrow">PRINCIPLES</div>
+    <h2>我們相信的四件事</h2>
+    <div class="gold-divider"><span></span></div>
+  </div>
+  <div class="container">
+    <div class="belief-grid">
+      <div class="belief">
+        <div class="belief-num">/01</div>
+        <h3>結構 &gt; 努力</h3>
+        <p>多數人不是不努力，是用錯方法。一個好的結構讓 1 倍努力產生 5 倍結果。我們花時間在拆解結構，不販賣雞湯。</p>
+      </div>
+      <div class="belief">
+        <div class="belief-num">/02</div>
+        <h3>合法 &gt; 激進</h3>
+        <p>線上變現有太多灰色地帶。我們刻意避開所有踩線手法（代操、跑分、盜版、刷單），因為長期看，合法路徑才能累積資產。</p>
+      </div>
+      <div class="belief">
+        <div class="belief-num">/03</div>
+        <h3>系統 &gt; 個人</h3>
+        <p>一人公司不等於什麼都自己做。是用工具、模板、流程，把「重複勞動」變成「可複用資產」。AI 是工具，不是替代品。</p>
+      </div>
+      <div class="belief">
+        <div class="belief-num">/04</div>
+        <h3>誠實 &gt; 包裝</h3>
+        <p>我們公開實驗紀錄、公開失敗、公開實際數字。市場不缺包裝過的成功，缺的是有人示範「真實這件事」是什麼樣子。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 適合誰 / 不適合誰 -->
+<section class="section">
+  <div class="container section-narrow text-center">
+    <div class="eyebrow">WHO</div>
+    <h2>適合 / 不適合誰</h2>
+    <div class="gold-divider"><span></span></div>
+    <p class="lead muted" style="margin:0 auto;">
+      我們相信「主動篩選對的人」比「假裝適合所有人」對雙方都好。
+    </p>
+  </div>
+  <div class="container">
+    <div class="who-section">
+      <div class="who-card yes">
+        <h3>適合：</h3>
+        <ul>
+          <li>有正職，想用下班時間測試一條副業路徑的人</li>
+          <li>有一項可賣的技能（寫作、設計、剪輯、行業知識）但不會包裝的人</li>
+          <li>願意每週投入 5～10 小時、連續做 3 個月以上的人</li>
+          <li>想用 AI 提升效率，而不是用 AI 取代思考的人</li>
+          <li>能接受「先小規模測試、再決定要不要放大」的節奏</li>
+          <li>看完別人的成功故事後，會想「他怎麼做到的」而不是「我也行」</li>
+        </ul>
+      </div>
+      <div class="who-card no">
+        <h3>不適合：</h3>
+        <ul>
+          <li>想找「一夜致富」、「躺著賺錢」公式的人</li>
+          <li>不願意動手，只想聽到「秘訣」的人</li>
+          <li>對任何違法 / 灰色地帶感興趣的人（代操、跑分、博弈、盜版）</li>
+          <li>把買筆記 / 上課等於「已經在做副業」的人</li>
+          <li>不能接受「3 個月才看到第一筆收入」這個基本現實的人</li>
+          <li>已經有穩定線上事業、月營收破 5 萬的人（你不需要 CROWNSUPPLY）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 創辦人視角 -->
+<section class="section" style="background: var(--navy);">
+  <div class="container section-narrow">
+    <div class="text-center" style="margin-bottom:32px;">
+      <div class="eyebrow">FOUNDER NOTE</div>
+      <h2>來自創辦人的一段話</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+    <div class="card" style="padding:48px;">
+      <p style="font-family:var(--serif);font-style:italic;font-size:18px;color:var(--white);margin-bottom:20px;line-height:1.75;">
+        「我做 CROWNSUPPLY，不是因為我已經月入 6 位數。」
+      </p>
+      <p style="margin-bottom:16px;">
+        市面上多數線上變現的內容，都是「成功之後才開始講方法」。我選擇相反的路：在累積過程中公開記錄。
+      </p>
+      <p style="margin-bottom:16px;">
+        這代表你會在 CROWNSUPPLY 看到很多「還沒有確定答案」的內容。我會明確標註哪些是我已驗證的、哪些是還在實驗的、哪些是我參考其他人但自己還沒做的。
+      </p>
+      <p style="margin-bottom:16px;">
+        如果你期待一個「全知導師告訴你怎麼做」的形象，CROWNSUPPLY 不是那個地方。如果你期待一個「跟你一起拆解、一起踩坑、一起累積的人」，那我們頻率對得上。
+      </p>
+      <p class="muted" style="margin-top:24px;font-size:13px;">
+        — CROWNSUPPLY 創辦人
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- 訂閱 -->
+<section class="newsletter-band">
+  <div class="container">
+    <div class="eyebrow">JOIN</div>
+    <h2>跟著實驗紀錄一起前進</h2>
+    <p class="muted" style="margin-top:12px;">每週一封信，告訴你這週的實驗、模型、坑。</p>
+    <form class="newsletter-form" onsubmit="event.preventDefault();alert('感謝訂閱！');">
+      <input type="email" placeholder="你的 Email" required>
+      <button class="btn btn-primary" type="submit">訂閱</button>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWNSUPPLY</a>
+        <p>一人公司的 AI 資源供應站。整理合法、低成本、可動手的線上變現系統。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+      </div>
+      <div class="footer-col">
+        <h5>品牌</h5>
+        <a href="about.html">關於 CROWNSUPPLY</a>
+        <a href="contact.html">聯絡</a>
+        <a href="notes.html">實驗紀錄</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+        <a href="#">LINE 官方帳號</a>
+        <a href="#">Threads</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © 2026 CROWNSUPPLY. All rights reserved.<br>
+      本站內容不構成法律、稅務、投資建議。涉及個案請諮詢專業人士。
+    </div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50
+      ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>

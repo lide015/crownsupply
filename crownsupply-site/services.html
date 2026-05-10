@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>代做服務 · CROWNSUPPLY</title>
+<meta name="description" content="AI 線上產品代做包：從產品定位到一頁式銷售頁，幫你做出第一版可上線的雛形。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .service-hero {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 48px;
+    align-items: start;
+  }
+  .service-info {
+    background: var(--navy-card);
+    padding: 48px;
+    border-radius: 4px;
+    border: 1px solid rgba(197,205,217,0.15);
+  }
+  .service-info h4 {
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--silver);
+    letter-spacing: 0.15em;
+    margin: 28px 0 12px;
+    text-transform: uppercase;
+  }
+  .service-info ul li {
+    padding: 6px 0;
+    padding-left: 22px;
+    position: relative;
+    font-size: 14px;
+  }
+  .service-info ul li::before {
+    content: '·';
+    position: absolute;
+    left: 8px;
+    color: var(--silver);
+    font-size: 18px;
+    line-height: 1;
+  }
+  .service-pricing {
+    display: flex;
+    gap: 24px;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .service-tier { flex: 1; }
+  .service-tier-label {
+    font-size: 11px;
+    color: var(--silver);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .service-tier-price {
+    font-family: var(--serif);
+    font-size: 22px;
+    color: var(--white);
+  }
+
+  .apply-form {
+    background: var(--navy-card);
+    padding: 40px;
+    border-radius: 4px;
+    border: 1px solid rgba(197,205,217,0.15);
+    position: sticky;
+    top: 90px;
+  }
+  .apply-form h3 {
+    text-align: center;
+    font-size: 22px;
+    margin-bottom: 8px;
+  }
+  .apply-form .sub {
+    text-align: center;
+    font-size: 12px;
+    color: var(--gray-mid);
+    margin-bottom: 24px;
+  }
+
+  .process-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-top: 48px;
+  }
+  .process-step {
+    padding: 24px 20px;
+    background: var(--navy-card);
+    border-radius: 4px;
+    border-top: 2px solid var(--silver);
+    position: relative;
+  }
+  .process-num {
+    font-family: var(--serif);
+    font-size: 28px;
+    color: var(--silver);
+    font-weight: 700;
+    margin-bottom: 10px;
+    line-height: 1;
+  }
+  .process-step h4 {
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: var(--white);
+  }
+  .process-step p {
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--gray-light);
+  }
+
+  .deliverables-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-top: 40px;
+  }
+  .deliverable {
+    padding: 28px;
+    background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 4px;
+    border-left: 2px solid var(--silver);
+  }
+  .deliverable h4 { font-size: 17px; margin-bottom: 8px; }
+  .deliverable p { font-size: 13px; line-height: 1.7; }
+
+  @media (max-width: 880px) {
+    .service-hero { grid-template-columns: 1fr; }
+    .service-info { padding: 28px; }
+    .apply-form { padding: 24px; position: static; }
+    .process-grid { grid-template-columns: 1fr 1fr; }
+    .deliverables-grid { grid-template-columns: 1fr; }
+    .service-pricing { flex-direction: column; gap: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWNSUPPLY</a>
+    <div class="nav-links">
+      <a href="index.html">首頁</a>
+      <a href="resources.html">免費資源</a>
+      <a href="notes.html">內容筆記</a>
+      <a href="products.html">產品</a>
+      <a href="services.html" class="active">服務</a>
+      <a href="about.html">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="container page-header-inner">
+    <div class="eyebrow">DONE-FOR-YOU</div>
+    <h1>不想自己摸索？<br>我幫你做出第一版可上線的雛形。</h1>
+    <p class="lead muted">
+      AI 線上產品代做包：把「想做副業卻沒有產品」的人，直接交付一份可上線的產品雛形。
+    </p>
+  </div>
+</header>
+
+<!-- 服務主區塊 -->
+<section class="section">
+  <div class="container">
+    <div class="service-hero">
+      <div class="service-info">
+        <span class="tag">代做服務</span>
+        <h2>AI 線上產品代做包</h2>
+        <p class="lead muted" style="margin-bottom:8px;">
+          我不會幫你決定要做什麼產品（這個由你決定，因為你最了解你的領域）。
+          但我會幫你把「想法」變成「能上線的具體成品」。
+        </p>
+
+        <h4>適合對象</h4>
+        <ul>
+          <li>想做副業但不知道賣什麼的人</li>
+          <li>想經營個人品牌但不知道發什麼的人</li>
+          <li>想做數位產品但不會整理內容的人</li>
+          <li>有技能但不知道怎麼包裝成商品的人</li>
+          <li>想用 AI 做內容、文案、銷售頁的人</li>
+        </ul>
+
+        <h4>交付內容</h4>
+        <ul>
+          <li>產品定位（市場切入點 + 差異化）</li>
+          <li>產品大綱（章節 / 結構 / 模組設計）</li>
+          <li>免費資源（Lead Magnet）設計</li>
+          <li>一頁式銷售頁完整文案</li>
+          <li>10～30 篇社群貼文初稿</li>
+          <li>10～30 支短影音腳本</li>
+          <li>私訊成交話術腳本</li>
+          <li>7 天上線行動表</li>
+        </ul>
+
+        <div class="service-pricing">
+          <div class="service-tier">
+            <div class="service-tier-label">內測名額</div>
+            <div class="service-tier-price">NT$ 4,980 起</div>
+            <p style="font-size:11px;color:var(--gray-mid);margin-top:4px;">每月限 4 位</p>
+          </div>
+          <div class="service-tier">
+            <div class="service-tier-label">標準方案</div>
+            <div class="service-tier-price">NT$ 9,800 起</div>
+            <p style="font-size:11px;color:var(--gray-mid);margin-top:4px;">完整交付期 14 天</p>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--gray-mid);margin-top:20px;font-style:italic;">
+          本服務不保證收益。最終交付的是「可上線的線上產品雛形」，市場結果由你後續執行決定。
+        </p>
+      </div>
+
+      <!-- 申請表單 -->
+      <form class="apply-form" onsubmit="event.preventDefault();alert('已收到你的申請！會在 48 小時內回覆。');">
+        <h3>申請代做服務</h3>
+        <p class="sub">先填這份初步表單，我會在 48 小時內回覆是否合適。</p>
+        <div class="form-group">
+          <label>你目前想做什麼？</label>
+          <textarea required placeholder="例：想做 Notion 模板、想做匿名內容號..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>你有什麼技能 / 資源 / 興趣？</label>
+          <textarea required placeholder="例：擅長剪輯、有 5 年房仲經驗..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>想賣產品還是服務？</label>
+          <select required>
+            <option value="">請選擇</option>
+            <option>數位產品（一次買斷）</option>
+            <option>線上服務（DFY 代做）</option>
+            <option>內容變現（廣告 / 業配）</option>
+            <option>還不確定</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>預算範圍</label>
+          <select required>
+            <option value="">請選擇</option>
+            <option>內測（4,980 起）</option>
+            <option>標準（9,800 起）</option>
+            <option>客製（需報價）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>聯絡方式（Email / LINE）</label>
+          <input type="text" required placeholder="方便回覆你的方式">
+        </div>
+        <button class="btn btn-primary" type="submit" style="width:100%;">送出申請 →</button>
+        <p class="form-note">收到後 48 小時內回覆是否合適</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- 服務流程 -->
+<section class="section" style="background: var(--navy);">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">PROCESS</div>
+      <h2>5 步驟交付流程</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">
+        透明化每一階段你會拿到什麼，避免你買了之後不知道在幹嘛。
+      </p>
+    </div>
+
+    <div class="process-grid">
+      <div class="process-step">
+        <div class="process-num">01</div>
+        <h4>初步通話</h4>
+        <p>30 分鐘 Zoom，確認方向、技能、可投入時間是否對得上。如果不合適，這通電話結束就互不打擾。</p>
+      </div>
+      <div class="process-step">
+        <div class="process-num">02</div>
+        <h4>產品定位</h4>
+        <p>3 天內提交「產品定位文件」：你要賣給誰、解決什麼、跟同業差在哪、定價建議。</p>
+      </div>
+      <div class="process-step">
+        <div class="process-num">03</div>
+        <h4>內容產出</h4>
+        <p>7 天內完成：產品大綱、Lead Magnet、銷售頁文案、社群貼文、短影音腳本。每一份都附說明為什麼這樣寫。</p>
+      </div>
+      <div class="process-step">
+        <div class="process-num">04</div>
+        <h4>修訂回合</h4>
+        <p>2 輪修改機會。你提具體意見、我針對性調整。不是無限改，但保證你拿到的是你能直接用的版本。</p>
+      </div>
+      <div class="process-step">
+        <div class="process-num">05</div>
+        <h4>上線陪跑</h4>
+        <p>交付 7 天後做一次 30 分鐘的上線檢核：你卡在哪、需要補什麼。讓你的產品真的上得了線。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 你會拿到什麼 -->
+<section class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">DELIVERABLES</div>
+      <h2>具體你會拿到什麼</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+
+    <div class="deliverables-grid">
+      <div class="deliverable">
+        <h4>① 產品定位文件（PDF · 8～12 頁）</h4>
+        <p>市場切入點、目標客群描繪、競爭分析、定價策略、差異化主張。所有內容都附「為什麼這樣定」的說明。</p>
+      </div>
+      <div class="deliverable">
+        <h4>② 產品大綱（Notion · 模組化）</h4>
+        <p>章節結構、每章重點、章節順序的設計邏輯。可以直接帶著它去寫內容、錄影片或做 PDF。</p>
+      </div>
+      <div class="deliverable">
+        <h4>③ Lead Magnet（PDF + 設計檔）</h4>
+        <p>免費資源完整成品（不是建議，是做好的檔案）。附 Canva 設計檔，方便你後續修改。</p>
+      </div>
+      <div class="deliverable">
+        <h4>④ 一頁式銷售頁（HTML / Notion）</h4>
+        <p>可直接上 Cloudflare Pages 或貼到 Notion 公開的完整文案。包含 Hero、痛點、產品介紹、FAQ、CTA。</p>
+      </div>
+      <div class="deliverable">
+        <h4>⑤ 社群貼文 10～30 篇</h4>
+        <p>分類為：拉新（Top of Funnel）、教育（中段）、轉化（CTA）。每一篇附建議發文時段與標籤。</p>
+      </div>
+      <div class="deliverable">
+        <h4>⑥ 短影音腳本 10～30 支</h4>
+        <p>30～60 秒結構化腳本：開頭鉤子、中段內容、結尾 CTA。可直接念稿錄製。</p>
+      </div>
+      <div class="deliverable">
+        <h4>⑦ 私訊成交話術（5 個情境）</h4>
+        <p>從第一句話到收款的完整話術腳本：詢問者、猶豫者、殺價者、退費要求者、推薦朋友者。</p>
+      </div>
+      <div class="deliverable">
+        <h4>⑧ 7 天上線行動表（Notion 模板）</h4>
+        <p>從拿到交付到產品正式上線，每一天該做什麼具體任務。可以直接打勾追蹤。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 兩段式付款 -->
+<section class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">PAYMENT</div>
+      <h2>兩段式付款 + 退費規則</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">
+        高價代做服務採 50% 訂金 + 50% 尾款，確保雙方都有保障。
+      </p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px;">
+      <div class="card" style="border-top: 3px solid var(--silver);">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">第 1 段</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">50% 訂金</h4>
+        <p style="font-size:13px;line-height:1.85;">
+          確認合作後支付，用於排入製作時程與前期市場研究。<br>
+          訂金支付後正式開工。
+        </p>
+      </div>
+      <div class="card" style="border-top: 3px solid var(--silver);">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">第 2 段</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">50% 尾款</h4>
+        <p style="font-size:13px;line-height:1.85;">
+          初稿完成、修訂後支付。<br>
+          尾款確認後，交付完整檔案與最終版本。
+        </p>
+      </div>
+      <div class="card" style="border-top: 3px solid var(--silver);">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">付款管道</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">銀行轉帳 / LINE Pay</h4>
+        <p style="font-size:13px;line-height:1.85;">
+          內測階段採銀行轉帳或 LINE Pay。<br>
+          雙方簽署服務同意書，明確列出交付內容與時程。
+        </p>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px;">
+      <div class="card" style="border-left: 2px solid var(--silver);">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">服務退費</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">訂金不退、依進度結算</h4>
+        <p style="font-size:13px;line-height:1.85;">
+          訂金用於保留製作時程與前期研究，付款後不退還。<br>
+          若尚未開始製作，可協議延期或更換服務項目。<br>
+          若已進入製作階段，依實際完成進度結算。
+        </p>
+      </div>
+      <div class="card" style="border-left: 2px solid var(--silver);">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">不適合誰</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">這個服務不適合：</h4>
+        <p style="font-size:13px;line-height:1.85;">
+          想找「保證收益」的人 / 期待「無限改稿」的人 / 還沒想清楚要做什麼產業 / 預算低於 NT$ 4,980 / 期待我代發內容、代回訊息的人。
+        </p>
+      </div>
+    </div>
+
+    <div style="margin-top:32px;padding:20px 24px;background:rgba(197,205,217,0.04);border-left:2px solid var(--silver);font-size:13px;color:var(--gray-mid);line-height:1.85;">
+      <strong style="color:var(--white);">付款流程：</strong>
+      申請通過 → 30 分鐘需求通話 → 確認方案 → <a href="checkout.html?product=service-deposit" style="color:var(--silver);">支付 50% 訂金</a> → 7～14 天交付初稿 → 2 輪修改 → 支付 50% 尾款 → 交付完整檔案。
+    </div>
+  </div>
+</section>
+
+<!-- 服務 FAQ -->
+<section class="section" style="background: var(--navy);">
+  <div class="container section-narrow">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">SERVICE FAQ</div>
+      <h2>關於服務的常見問題</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px;">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q1：保證我能賺錢嗎？</h4>
+      <p style="font-size:14px;">不保證。我交付的是「可上線的產品雛形」，市場結果取決於你後續的執行、選題的市場真實需求。我可以做出很完整的產品，但能不能賣出去，還是要看你願不願意每天發內容、回訊息、調整。</p>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q2：你會幫我發內容嗎？</h4>
+      <p style="font-size:14px;">不會。我交付的是「可發的內容」，但實際發布、互動、回覆，是你的工作。這個界線很重要：你才是這個品牌的擁有者。</p>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q3：可以無限次修改嗎？</h4>
+      <p style="font-size:14px;">不行。內測方案 1 輪、標準方案 2 輪修改。第三輪以上需另外計價（NT$ 1,500 / 輪）。這個設計是為了保護雙方時間，避免無限循環。</p>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q4：我可以中途取消嗎？</h4>
+      <p style="font-size:14px;">在「產品定位文件」交付前可以全額退費。交付後依完成階段計算退費比例。具體條款會在通話確認後簽署的服務同意書上載明。</p>
+    </div>
+    <div class="card">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q5：我可以分期付款嗎？</h4>
+      <p style="font-size:14px;">標準方案以上可分兩期：簽約付 50%、交付前付 50%。內測方案需一次付清。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 最終 CTA -->
+<section class="section">
+  <div class="container section-narrow text-center">
+    <div class="eyebrow">START</div>
+    <h2>還在猶豫？<br>先填表單，我們再聊聊。</h2>
+    <p class="lead muted" style="margin: 16px auto 32px;">
+      送出表單不等於下訂。我會看完你的情況，回覆你「適合 / 不適合」，以及為什麼。
+    </p>
+    <div class="btn-row" style="justify-content:center;">
+      <a href="#top" class="btn btn-primary">回到上方填表 ↑</a>
+      <a href="contact.html" class="btn btn-outline">先一般諮詢</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWNSUPPLY</a>
+        <p>一人公司的 AI 資源供應站。整理合法、低成本、可動手的線上變現系統。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+      </div>
+      <div class="footer-col">
+        <h5>品牌</h5>
+        <a href="about.html">關於</a>
+        <a href="contact.html">聯絡</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © 2026 CROWNSUPPLY. All rights reserved.
+    </div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50
+      ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>

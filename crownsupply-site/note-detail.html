@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>沒有粉絲也能賣出去：低流量也能成交的 5 種產品結構 · CROWNSUPPLY</title>
+<meta name="description" content="不是每個線上產品都需要先養粉。本文拆解 5 種「冷流量也能轉化」的產品設計邏輯。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .article-header {
+    padding: 100px 0 56px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .article-meta {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--silver);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .article-meta span { color: var(--gray-mid); }
+  .article-title {
+    max-width: 800px;
+    margin: 0 auto;
+    font-size: clamp(28px, 4.4vw, 44px);
+  }
+  .article-sub {
+    max-width: 680px;
+    margin: 20px auto 0;
+    font-size: 17px;
+    color: var(--gray-light);
+    line-height: 1.85;
+  }
+  .article-author {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 32px;
+    padding: 12px 20px;
+    background: var(--navy-card);
+    border-radius: 30px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .author-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--silver);
+    color: var(--navy-deep);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  .article-body {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 56px 24px;
+  }
+  .article-body h2 {
+    font-size: 26px;
+    margin: 48px 0 16px;
+    padding-top: 16px;
+  }
+  .article-body h3 {
+    font-size: 20px;
+    color: var(--silver);
+    margin: 32px 0 12px;
+    font-style: italic;
+  }
+  .article-body p {
+    font-size: 16px;
+    line-height: 1.95;
+    margin-bottom: 18px;
+  }
+  .article-body ul, .article-body ol {
+    margin: 16px 0 24px;
+    padding-left: 24px;
+  }
+  .article-body ul li, .article-body ol li {
+    list-style: disc;
+    margin-bottom: 10px;
+    font-size: 16px;
+    line-height: 1.85;
+  }
+  .article-body ol li { list-style: decimal; }
+  .article-body strong { color: var(--white); font-weight: 700; }
+  .article-body em { color: var(--silver); font-style: italic; }
+  .article-body blockquote {
+    margin: 28px 0;
+    padding: 20px 28px;
+    background: var(--navy-card);
+    border-left: 3px solid var(--silver);
+    border-radius: 4px;
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--white);
+    font-size: 18px;
+    line-height: 1.7;
+  }
+  .article-body hr {
+    border: none;
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+    margin: 48px 0;
+  }
+  .article-body code {
+    background: var(--navy-card);
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-size: 14px;
+    color: var(--silver);
+    font-family: 'Monaco', monospace;
+  }
+
+  /* 文中 CTA */
+  .inline-cta {
+    margin: 40px 0;
+    padding: 32px;
+    background: linear-gradient(135deg, var(--navy-card), var(--navy-light));
+    border: 1px solid rgba(197,205,217,0.2);
+    border-radius: 4px;
+    text-align: center;
+  }
+  .inline-cta h4 {
+    font-size: 20px;
+    color: var(--white);
+    margin-bottom: 8px;
+  }
+  .inline-cta p {
+    font-size: 14px !important;
+    margin-bottom: 16px !important;
+    color: var(--gray-light);
+  }
+
+  /* 相關文章 */
+  .related-section {
+    background: var(--navy);
+    padding: 64px 0;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .related-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: 32px;
+  }
+  .related-card {
+    padding: 24px;
+    background: var(--navy-card);
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.05);
+    transition: all 0.3s;
+  }
+  .related-card:hover {
+    border-color: var(--silver);
+    transform: translateY(-2px);
+  }
+  .related-card .meta {
+    font-size: 11px;
+    color: var(--gray-mid);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .related-card h3 {
+    font-size: 16px;
+    line-height: 1.45;
+    margin-bottom: 0;
+  }
+
+  @media (max-width: 880px) {
+    .article-body { padding: 40px 20px; }
+    .article-body h2 { font-size: 22px; }
+    .article-body p { font-size: 15px; }
+    .related-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWNSUPPLY</a>
+    <div class="nav-links">
+      <a href="index.html">首頁</a>
+      <a href="resources.html">免費資源</a>
+      <a href="notes.html" class="active">內容筆記</a>
+      <a href="products.html">產品</a>
+      <a href="services.html">服務</a>
+      <a href="about.html">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<!-- 文章標題區 -->
+<header class="article-header">
+  <div class="container">
+    <div class="article-meta">
+      <span>線上產品</span> · <span>2026.05.06</span> · <span>6 分鐘</span>
+    </div>
+    <h1 class="article-title">沒有粉絲也能賣出去：<br>低流量也能成交的 5 種產品結構</h1>
+    <p class="article-sub">不是每個線上產品都需要先養粉。本文拆解 5 種「冷流量也能轉化」的產品設計邏輯。</p>
+    <div class="article-author">
+      <div class="author-avatar">CS</div>
+      <span style="font-size:13px;color:var(--gray-light);">CROWNSUPPLY 創辦人</span>
+    </div>
+  </div>
+</header>
+
+<!-- 文章內文 -->
+<article class="article-body">
+  <p>「我沒有粉絲，怎麼可能賣得出去？」這是我每週至少被問 3 次的問題。</p>
+
+  <p>多數人對「線上變現」的想像是：先養出 10K 粉絲、再上架產品。但如果你回頭看真正在線上賺錢的人，你會發現一個有趣的事實：<strong>很多月入 6 位數的線上產品，創辦人在 IG / Threads 上根本沒有 1000 個粉絲。</strong></p>
+
+  <p>差別不在粉絲數，在<em>產品結構</em>。</p>
+
+  <p>這篇文章會拆 5 種「不靠粉絲也能賣」的產品結構，每種都會說：適合什麼人、為什麼有效、第一步怎麼做。</p>
+
+  <hr>
+
+  <h2>一、特定問題的「即時解法包」</h2>
+
+  <p>核心邏輯：<strong>用戶不在乎你是誰，只在乎這個包能不能解決他現在這個問題。</strong></p>
+
+  <p>例如：</p>
+  <ul>
+    <li>「房仲 LINE 開發話術 30 句包」（賣給房仲新人）</li>
+    <li>「家長學測陪考 SOP 手冊」（賣給高三家長）</li>
+    <li>「結婚登記 24 小時行動表」（賣給準新人）</li>
+  </ul>
+
+  <p>這類產品共同特徵：<em>使用情境窄、急迫性高、用戶會用 Google 主動搜尋</em>。你不需要養粉，你需要的是 SEO + Google 廣告。</p>
+
+  <blockquote>
+    搜尋流量比社群流量更願意付錢。因為他正在尋找答案，而你的產品就是答案。
+  </blockquote>
+
+  <p>第一步：去 Google Trends 和 Answer The Public，找你的領域裡「每月被搜超過 500 次但沒有完整解法」的關鍵字。</p>
+
+  <h2>二、把零散資訊整理成「決策工具」</h2>
+
+  <p>核心邏輯：用戶買的不是「資訊」，是<strong>「我幫你做完比較了」這件事的時間成本</strong>。</p>
+
+  <p>例如：</p>
+  <ul>
+    <li>「2026 台灣副業稅務試算表」</li>
+    <li>「30 個 AI 工具實測對照表（含月費 / 中文支援 / 我的推薦度）」</li>
+    <li>「全台 50 家共享辦公室全比較表」</li>
+  </ul>
+
+  <p>這類產品本質是<em>資訊差 + 整理勞動</em>的價值。資訊本身可能都是公開的，但把它整理到「能直接做決策」的程度，是一個明確可付費的價值。</p>
+
+  <h2>三、針對特定身份的「身份套件」</h2>
+
+  <p>核心邏輯：當一個人剛進入新身份（新手爸媽、剛接任主管、第一次創業），他願意付錢買「我在這個身份應該知道什麼」的整套答案。</p>
+
+  <p>例如：</p>
+  <ul>
+    <li>「新手 PM 第一週生存包」</li>
+    <li>「剛當爸媽的第一個月清單」</li>
+    <li>「第一次接案的 5 份合約模板」</li>
+  </ul>
+
+  <p>這類產品的關鍵：<em>明確的進入時機</em>。用戶不是隨時想買，而是在進入新身份的那 1～2 週內，特別容易付錢。</p>
+
+  <div class="inline-cta">
+    <h4>想直接拿到 20 種模型完整表？</h4>
+    <p>免費領取《10 種 AI 線上產品模型對照表》，每種模型附啟動成本、適合對象、風險提醒。</p>
+    <a href="resources.html" class="btn btn-primary btn-sm">免費領取 →</a>
+  </div>
+
+  <h2>四、可被搜尋的「教學型 PDF」</h2>
+
+  <p>核心邏輯：你寫一篇 5000 字的部落格文章，分文不取。但同樣內容做成 PDF + 可下載 + 加上工作表，就能賣 199 元。</p>
+
+  <p>差別在哪？<strong>檔案 = 可下載 = 可重複使用 = 用戶感覺有「擁有感」</strong>。心理學上叫「Endowment Effect（稟賦效應）」。</p>
+
+  <p>例如：</p>
+  <ul>
+    <li>「ChatGPT 商業 Prompt 100 句（PDF + Notion 雙版本）」</li>
+    <li>「銷售頁框架練習簿（含 30 個範例 + 寫作引導問題）」</li>
+  </ul>
+
+  <h2>五、解決「我不會做」的 DFY（Done-For-You）服務</h2>
+
+  <p>核心邏輯：當有人卡在「我不會做但我必須要做」的時候，他要的不是教學，是<strong>「你直接幫我做」</strong>。</p>
+
+  <p>例如：</p>
+  <ul>
+    <li>幫人寫履歷</li>
+    <li>幫人剪輯短影音</li>
+    <li>幫人翻譯字幕</li>
+    <li>幫人做 Notion 系統</li>
+  </ul>
+
+  <p>這類服務不需要任何粉絲。你需要的是：<em>明確的服務範圍 + 報價公式 + 第一個願意付錢的客戶</em>。第一個客戶可以從 5 個免費通路找到（FB 社團、PTT、Threads 主動搜尋）。</p>
+
+  <hr>
+
+  <h2>所以你該做哪一種？</h2>
+
+  <p>這個問題沒有絕對答案，但可以用三個提問刪掉不適合的：</p>
+
+  <ol>
+    <li><strong>你有時間限制嗎？</strong>（每天 1 小時 vs 每天 4 小時，能做的產品結構完全不同）</li>
+    <li><strong>你要的是被動收入還是主動收入？</strong>（DFY 服務是主動收入，PDF 是被動收入）</li>
+    <li><strong>你的領域有沒有「明確身份」可以鎖定？</strong>（房仲、新手爸媽、PM 都是明確身份；「想創業的人」不是）</li>
+  </ol>
+
+  <p>把這三個問題的答案寫下來，再對照上面 5 種結構，通常會剩下 1～2 個明顯適合的。</p>
+
+  <p>下一步：選一個，做一個最小可行版本（PDF / Notion / 文字頁面都可以），<strong>賣出去之後再優化</strong>。不要先做到完美再上架。</p>
+
+  <blockquote>
+    完美的產品永遠不會上架。粗糙但已經有 3 個人付錢的版本，比「再修一週」的版本價值高 10 倍。
+  </blockquote>
+
+  <p>下篇文章我會拆<em>每一種結構的「最小可行版本」</em>長什麼樣，包含：要寫多少字、要做多少頁、定價怎麼起步、第一週怎麼讓 3 個人看到。</p>
+
+  <p>訂閱電子報，下篇上線就會收到。</p>
+</article>
+
+<!-- 訂閱 -->
+<section class="newsletter-band">
+  <div class="container">
+    <div class="eyebrow">SUBSCRIBE</div>
+    <h2>下篇上線就告訴你</h2>
+    <p class="muted" style="margin-top:12px;">每週一封信，沒有廣告。</p>
+    <form class="newsletter-form" onsubmit="event.preventDefault();alert('感謝訂閱！');">
+      <input type="email" placeholder="你的 Email" required>
+      <button class="btn btn-primary" type="submit">訂閱</button>
+    </form>
+  </div>
+</section>
+
+<!-- 相關文章 -->
+<section class="related-section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:8px;">
+      <div class="eyebrow">RELATED</div>
+      <h2 style="font-size:24px;">繼續讀</h2>
+    </div>
+    <div class="related-grid">
+      <a href="note-detail.html" class="related-card">
+        <div class="meta">線上產品 · 10 分鐘</div>
+        <h3>定價心理學：為什麼 299 比 250 更賣得出去</h3>
+      </a>
+      <a href="note-detail.html" class="related-card">
+        <div class="meta">合法邊界 · 8 分鐘</div>
+        <h3>做匿名內容號之前你必須知道的 7 條法律紅線</h3>
+      </a>
+      <a href="note-detail.html" class="related-card">
+        <div class="meta">實驗紀錄 · 6 分鐘</div>
+        <h3>第二週實驗：把 Threads 流量導到 Email 的 3 種測試</h3>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWNSUPPLY</a>
+        <p>一人公司的 AI 資源供應站。整理合法、低成本、可動手的線上變現系統。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+      </div>
+      <div class="footer-col">
+        <h5>品牌</h5>
+        <a href="about.html">關於 CROWNSUPPLY</a>
+        <a href="contact.html">聯絡</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © 2026 CROWNSUPPLY. All rights reserved.
+    </div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50
+      ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>

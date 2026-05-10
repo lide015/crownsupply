@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CROWNSUPPLY｜一人公司的 AI 資源供應站</title>
+<meta name="description" content="CROWNSUPPLY 整理 AI 工具、數位模板、線上產品模型與一人公司資源，幫你用低成本測試副業方向。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* 首頁專屬 */
+  .home-hero {
+    min-height: 88vh;
+    padding: 140px 0 80px;
+    display: flex;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .home-hero::before {
+    content: '';
+    position: absolute;
+    top: -20%; right: -10%;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(197,205,217,0.07), transparent 70%);
+    pointer-events: none;
+  }
+  .home-hero-inner { position: relative; z-index: 2; max-width: 880px; }
+  .home-hero h1 .accent { color: var(--silver); font-style: italic; }
+  .home-hero .lead { margin: 24px 0 36px; }
+
+  /* 流量漏斗視覺化 */
+  .funnel-flow {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 40px;
+    margin-bottom: 0;
+  }
+  .funnel-step {
+    padding: 20px 18px;
+    background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 4px;
+    text-align: center;
+    position: relative;
+  }
+  .funnel-step .num {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--silver);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+  .funnel-step h4 { font-size: 15px; margin-bottom: 6px; color: var(--white); }
+  .funnel-step p { font-size: 11px; line-height: 1.6; color: var(--gray-mid); }
+
+  /* 4 大支柱 */
+  .pillars-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 48px;
+  }
+  .pillar {
+    padding: 28px 24px;
+    background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 4px;
+    transition: all 0.3s;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+  .pillar:hover {
+    border-color: var(--silver);
+    transform: translateY(-2px);
+  }
+  .pillar-num {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--silver);
+    margin-bottom: 8px;
+    letter-spacing: 0.1em;
+  }
+  .pillar h3 { font-size: 19px; margin-bottom: 8px; }
+  .pillar p { font-size: 13px; color: var(--gray-light); }
+  .pillar-link {
+    display: inline-flex;
+    gap: 6px;
+    margin-top: 16px;
+    color: var(--silver);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* 文章卡片 */
+  .latest-notes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-top: 48px;
+  }
+  .note-card {
+    background: var(--navy-card);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.05);
+    transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+  }
+  .note-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--silver);
+  }
+  .note-card .thumb {
+    height: 160px;
+    background: linear-gradient(135deg, var(--navy-light), var(--navy-card));
+    border-bottom: 1px solid rgba(197,205,217,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 32px;
+    color: rgba(197,205,217,0.5);
+  }
+  .note-card-body {
+    padding: 24px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .note-meta {
+    font-size: 11px;
+    color: var(--gray-mid);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .note-card h3 { font-size: 18px; line-height: 1.4; margin-bottom: 10px; }
+  .note-card p { font-size: 13px; color: var(--gray-light); flex: 1; }
+  .note-card .read-more {
+    margin-top: 16px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--silver);
+    text-transform: uppercase;
+  }
+
+  /* 4 層產品階梯 */
+  .ladder {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 48px;
+  }
+  .ladder-step {
+    padding: 32px 24px;
+    background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 4px;
+    position: relative;
+  }
+  .ladder-step.featured {
+    border-color: var(--silver);
+    background: linear-gradient(180deg, var(--navy-card), var(--navy-light));
+  }
+  .ladder-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    background: var(--silver-soft);
+    color: var(--silver);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    border-radius: 2px;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+  .ladder-step h3 { font-size: 19px; margin-bottom: 10px; }
+  .ladder-price {
+    font-family: var(--serif);
+    font-size: 26px;
+    color: var(--white);
+    font-weight: 700;
+    margin: 10px 0 14px;
+    line-height: 1;
+  }
+  .ladder-price small {
+    font-size: 12px;
+    color: var(--gray-mid);
+    margin-left: 4px;
+    font-family: var(--sans);
+    font-weight: 400;
+  }
+  .ladder-step p { font-size: 12px; color: var(--gray-light); margin-bottom: 18px; line-height: 1.7; }
+
+  /* 合作入口 */
+  .partners-cta {
+    background: linear-gradient(135deg, var(--navy-light), var(--navy-card));
+    border: 1px solid rgba(197,205,217,0.15);
+    border-radius: 4px;
+    padding: 56px;
+    margin-top: 48px;
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 48px;
+    align-items: center;
+  }
+  .partners-cta h2 { font-size: 28px; margin-bottom: 12px; }
+  .partners-cta-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .stat-block {
+    padding: 20px;
+    background: var(--navy);
+    border-radius: 4px;
+    border-left: 2px solid var(--silver);
+  }
+  .stat-block .label {
+    font-size: 11px;
+    color: var(--gray-mid);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .stat-block .value {
+    font-family: var(--serif);
+    font-size: 22px;
+    color: var(--white);
+    font-weight: 700;
+  }
+
+  @media (max-width: 880px) {
+    .funnel-flow { grid-template-columns: 1fr 1fr; }
+    .pillars-grid { grid-template-columns: 1fr 1fr; }
+    .latest-notes { grid-template-columns: 1fr; }
+    .ladder { grid-template-columns: 1fr 1fr; }
+    .partners-cta { grid-template-columns: 1fr; padding: 32px 24px; }
+  }
+  @media (max-width: 480px) {
+    .ladder { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ Navbar ============ -->
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWNSUPPLY</a>
+    <div class="nav-links">
+      <a href="resources.html">免費資源</a>
+      <a href="notes.html">內容筆記</a>
+      <a href="products.html">產品</a>
+      <a href="services.html">服務</a>
+      <a href="case-studies.html">案例</a>
+      <a href="about.html">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<!-- ============ Hero ============ -->
+<section class="home-hero">
+  <div class="container home-hero-inner">
+    <div class="eyebrow">CROWNSUPPLY · 一人公司的 AI 資源供應站</div>
+    <h1>用 AI 做出你的<br><span class="accent">第一個可販售線上產品</span>。</h1>
+    <p class="lead">
+      整理 AI 工具、數位模板、線上產品模型與一人公司資源。
+      不講暴富，不碰違法，只拆解：能不能做、怎麼做、風險在哪。
+    </p>
+    <div class="btn-row">
+      <a href="resources.html" class="btn btn-primary">免費領取模型表 →</a>
+      <a href="notes.html" class="btn btn-outline">看內容筆記</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 商業模式漏斗 ============ -->
+<section class="section" style="padding-top:60px;">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">HOW IT WORKS</div>
+      <h2>CROWNSUPPLY 的運作邏輯</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">
+        從陌生人到付費客戶到合作夥伴。每一步都對應一個產品階段。
+      </p>
+    </div>
+
+    <div class="funnel-flow">
+      <div class="funnel-step">
+        <div class="num">/01</div>
+        <h4>內容流量</h4>
+        <p>Threads / IG / Reels / FB 社團</p>
+      </div>
+      <div class="funnel-step">
+        <div class="num">/02</div>
+        <h4>免費資源</h4>
+        <p>10 種模型表 → Email 名單</p>
+      </div>
+      <div class="funnel-step">
+        <div class="num">/03</div>
+        <h4>付費產品</h4>
+        <p>299 / 1999 / 4980</p>
+      </div>
+      <div class="funnel-step">
+        <div class="num">/04</div>
+        <h4>合作放大</h4>
+        <p>分潤 / 授權 / 產業包</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 四大支柱 ============ -->
+<section class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">EXPLORE</div>
+      <h2>你能在這裡找到什麼</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">
+        把線上變現拆成四個區塊。每一塊都對應一種你能立刻動手的方向。
+      </p>
+    </div>
+
+    <div class="pillars-grid">
+      <a href="resources.html" class="pillar">
+        <div class="pillar-num">/01</div>
+        <h3>免費資源</h3>
+        <p>10 種模型表、副業檢查清單、AI 工具庫。零成本起步用。</p>
+        <span class="pillar-link">前往 →</span>
+      </a>
+      <a href="notes.html" class="pillar">
+        <div class="pillar-num">/02</div>
+        <h3>內容筆記</h3>
+        <p>實驗紀錄、模型拆解、合法邊界、AI 工具實測。每週更新。</p>
+        <span class="pillar-link">前往 →</span>
+      </a>
+      <a href="products.html" class="pillar">
+        <div class="pillar-num">/03</div>
+        <h3>產品階梯</h3>
+        <p>299 啟動筆記 → 1999 模板包 → 4980 代做服務。一步步深入。</p>
+        <span class="pillar-link">前往 →</span>
+      </a>
+      <a href="case-studies.html" class="pillar">
+        <div class="pillar-num">/04</div>
+        <h3>案例展示</h3>
+        <p>房仲版、保險版、創作者、小店、命理等模擬與真實案例。</p>
+        <span class="pillar-link">前往 →</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 最新內容 ============ -->
+<section class="section" style="background: var(--navy);">
+  <div class="container">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+      <div>
+        <div class="eyebrow">LATEST NOTES</div>
+        <h2>最新內容筆記</h2>
+      </div>
+      <a href="notes.html" class="btn btn-ghost">看全部 →</a>
+    </div>
+
+    <div class="latest-notes">
+      <a href="note-detail.html" class="note-card">
+        <div class="thumb">01</div>
+        <div class="note-card-body">
+          <div class="note-meta">線上產品 · 6 分鐘</div>
+          <h3>沒有粉絲也能賣出去：低流量也能成交的 5 種產品結構</h3>
+          <p>不是每個線上產品都需要先養粉。本文拆解 5 種「冷流量也能轉化」的產品設計邏輯。</p>
+          <span class="read-more">繼續閱讀 →</span>
+        </div>
+      </a>
+      <a href="note-detail.html" class="note-card">
+        <div class="thumb">02</div>
+        <div class="note-card-body">
+          <div class="note-meta">合法邊界 · 8 分鐘</div>
+          <h3>做匿名內容號之前你必須知道的 7 條法律紅線</h3>
+          <p>搬運、二創、原創之間的法律分界，一篇看懂。</p>
+          <span class="read-more">繼續閱讀 →</span>
+        </div>
+      </a>
+      <a href="note-detail.html" class="note-card">
+        <div class="thumb">03</div>
+        <div class="note-card-body">
+          <div class="note-meta">實驗紀錄 · 5 分鐘</div>
+          <h3>實驗紀錄 01：CROWNSUPPLY 如何設計第一個名單漏斗</h3>
+          <p>從 0 開始建立名單漏斗的完整設計過程：表單問題怎麼設、Lead Magnet 怎麼選、轉換動線怎麼鋪。</p>
+          <span class="read-more">繼續閱讀 →</span>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4 層產品階梯 ============ -->
+<section class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">PRODUCT LADDER</div>
+      <h2>4 層產品階梯</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">
+        從免費試水溫到團隊授權，每一階都明確標出「為誰設計」。
+      </p>
+    </div>
+
+    <div class="ladder">
+      <div class="ladder-step">
+        <span class="ladder-tag">免費</span>
+        <h3>模型表</h3>
+        <div class="ladder-price">NT$ 0</div>
+        <p>收名單、測需求、給陌生人試味道。</p>
+        <a href="resources.html" class="btn btn-outline btn-sm">免費領取 →</a>
+      </div>
+      <div class="ladder-step">
+        <span class="ladder-tag">入門</span>
+        <h3>啟動筆記</h3>
+        <div class="ladder-price">NT$ 299</div>
+        <p>驗證付費意願。20 種模型 + 30 天行動表。</p>
+        <a href="products.html" class="btn btn-outline btn-sm">看詳情 →</a>
+      </div>
+      <div class="ladder-step featured">
+        <span class="ladder-tag">完整</span>
+        <h3>模板包</h3>
+        <div class="ladder-price">NT$ 1,999</div>
+        <p>填空式 SOP + 完整模板。中價深度款。</p>
+        <a href="products.html#template-pack" class="btn btn-primary btn-sm">看詳情 →</a>
+      </div>
+      <div class="ladder-step">
+        <span class="ladder-tag">代做</span>
+        <h3>雛形代做包</h3>
+        <div class="ladder-price">NT$ 4,980<small>～19,800</small></div>
+        <p>主要現金流。一對一交付完整產品雛形。</p>
+        <a href="services.html" class="btn btn-outline btn-sm">了解服務 →</a>
+      </div>
+    </div>
+
+    <p class="muted" style="text-align:center;font-size:13px;margin-top:32px;">
+      還有第 5 層：<a href="industry-packs.html" style="color:var(--silver);text-decoration:underline;">產業授權包</a>（NT$ 19,800 起 / 年，給整個團隊使用，突破一人交付上限）
+    </p>
+  </div>
+</section>
+
+<!-- ============ 合作入口 ============ -->
+<section class="section" style="background: var(--navy);">
+  <div class="container">
+    <div class="partners-cta">
+      <div>
+        <div class="eyebrow">PARTNERS</div>
+        <h2>有流量？<br>用你的觸及換 30～50% 分潤。</h2>
+        <p class="lead muted" style="margin-bottom:24px;">
+          CROWNSUPPLY 不打廣告。我們選擇把預算換成「分潤」，給真正能帶流量的合作夥伴。
+          你推薦你信任的東西、你的觀眾受益、你拿到對應收入。
+        </p>
+        <div class="btn-row">
+          <a href="partners.html" class="btn btn-primary">了解合作方案 →</a>
+          <a href="industry-packs.html" class="btn btn-outline">看產業授權</a>
+        </div>
+      </div>
+      <div class="partners-cta-stats">
+        <div class="stat-block">
+          <div class="label">299 產品分潤</div>
+          <div class="value">50%</div>
+        </div>
+        <div class="stat-block">
+          <div class="label">1999 包分潤</div>
+          <div class="value">40%</div>
+        </div>
+        <div class="stat-block">
+          <div class="label">9800 服務分潤</div>
+          <div class="value">30%</div>
+        </div>
+        <div class="stat-block">
+          <div class="label">團隊授權</div>
+          <div class="value">客製</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 實驗信 ============ -->
+<section class="newsletter-band">
+  <div class="container">
+    <div class="eyebrow">CROWNSUPPLY · 實驗信</div>
+    <h2>本週測了什麼、<br>哪裡有效、哪裡踩坑、下週怎麼調整。</h2>
+    <p class="muted" style="margin-top:12px;max-width:560px;margin-left:auto;margin-right:auto;">
+      每週整理一封實驗信，公開記錄 CROWNSUPPLY 從 0 建立線上產品系統的真實過程。<br>
+      沒有廣告、沒有業配、隨時可退訂。
+    </p>
+    <form class="newsletter-form" onsubmit="event.preventDefault();alert('感謝訂閱實驗信！');">
+      <input type="email" placeholder="你的 Email" required>
+      <button class="btn btn-primary" type="submit">訂閱實驗信</button>
+    </form>
+  </div>
+</section>
+
+<!-- ============ Footer ============ -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWNSUPPLY</a>
+        <p>一人公司的 AI 資源供應站。整理合法、低成本、可動手的線上變現系統。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+        <a href="case-studies.html">案例</a>
+      </div>
+      <div class="footer-col">
+        <h5>合作</h5>
+        <a href="partners.html">分潤合作</a>
+        <a href="industry-packs.html">產業授權包</a>
+        <a href="about.html">關於</a>
+        <a href="contact.html">聯絡</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+        <a href="#">LINE 官方帳號</a>
+        <a href="#">Threads</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © 2026 CROWNSUPPLY. All rights reserved.<br>
+      本站內容不構成法律、稅務、投資建議。涉及個案請諮詢專業人士。
+    </div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50
+      ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+
+</body>
+</html>
