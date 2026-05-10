@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>感謝你 · CROWN SUPPLY</title>
+<meta name="description" content="感謝訂閱 CROWN SUPPLY。立即下載你的免費資源。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+
+  .thank-hero {
+    flex: 1;
+    padding: 100px 0 80px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .thank-hero::before {
+    content: ''; position: absolute;
+    top: -20%; left: 50%; transform: translateX(-50%);
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, rgba(197,205,217,0.06), transparent 70%);
+    pointer-events: none;
+  }
+  .thank-content { text-align: center; max-width: 680px; position: relative; z-index: 2; padding: 0 24px; }
+  .check-icon {
+    width: 80px; height: 80px;
+    margin: 0 auto 24px;
+    border: 2px solid var(--silver); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px; color: var(--silver);
+    font-family: var(--serif); font-weight: 700;
+  }
+  .thank-eyebrow {
+    display: inline-block; font-size: 12px;
+    letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--silver); margin-bottom: 16px;
+  }
+  .thank-title {
+    font-family: var(--serif);
+    font-size: clamp(32px, 5vw, 48px);
+    color: var(--white); margin-bottom: 20px; line-height: 1.3;
+  }
+  .thank-title em { color: var(--silver); font-style: italic; }
+  .thank-message {
+    font-size: 17px; color: var(--gray-light);
+    line-height: 1.85; margin-bottom: 40px;
+  }
+
+  .download-card {
+    background: linear-gradient(135deg, var(--navy-card), var(--navy-light));
+    border: 1px solid var(--silver);
+    border-radius: 6px;
+    padding: 40px;
+    margin-bottom: 40px;
+  }
+  .download-card .label {
+    font-size: 11px; color: var(--silver);
+    letter-spacing: 0.25em; text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .download-card h2 {
+    font-family: var(--serif); font-size: 26px;
+    color: var(--white); margin-bottom: 12px;
+  }
+  .download-card p {
+    font-size: 14px; color: var(--gray-light);
+    margin-bottom: 24px; line-height: 1.7;
+  }
+  .download-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 16px 32px;
+    background: var(--silver); color: var(--navy-deep);
+    border-radius: 4px; font-weight: 600;
+    font-size: 15px; letter-spacing: 0.05em;
+    transition: all 0.25s ease;
+  }
+  .download-btn:hover {
+    background: var(--white); transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(197, 205, 217, 0.25);
+  }
+  .download-btn .icon { font-size: 18px; }
+
+  .next-section {
+    padding-top: 32px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .next-label {
+    font-size: 12px; letter-spacing: 0.25em;
+    text-transform: uppercase; color: var(--gray-mid);
+    margin-bottom: 20px;
+  }
+  .next-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .next-card {
+    padding: 20px 18px;
+    background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 4px;
+    text-decoration: none; color: inherit;
+    transition: all 0.3s;
+  }
+  .next-card:hover {
+    border-color: var(--silver);
+    transform: translateY(-2px);
+  }
+  .next-card .num {
+    font-family: var(--serif); font-style: italic;
+    color: var(--silver); font-size: 13px;
+    letter-spacing: 0.1em; margin-bottom: 8px;
+  }
+  .next-card h4 { font-size: 15px; color: var(--white); margin-bottom: 4px; }
+  .next-card p { font-size: 12px; color: var(--gray-mid); line-height: 1.6; }
+
+  @media (max-width: 880px) {
+    .download-card { padding: 28px 24px; }
+    .next-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="/" class="logo">CROWN SUPPLY</a>
+    <div class="nav-links">
+      <a href="/resources">免費資源</a>
+      <a href="/notes">內容筆記</a>
+      <a href="/products">產品</a>
+      <a href="/services">服務</a>
+      <a href="/case-studies">案例</a>
+      <a href="/about">關於</a>
+      <a href="/resources" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<main class="thank-hero">
+  <div class="thank-content">
+    <div class="check-icon">✓</div>
+    <div class="thank-eyebrow">SUBMISSION RECEIVED</div>
+    <h1 class="thank-title">收到了，<em>謝謝你的信任</em>。</h1>
+    <p class="thank-message">
+      你的免費資源已經準備好。<br>
+      點下方按鈕直接下載，未來新內容會寄到你 Email。
+    </p>
+
+    <div class="download-card">
+      <div class="label">FREE DOWNLOAD</div>
+      <h2>《10 種 AI 線上產品模型對照表》</h2>
+      <p>
+        10 種模型 · 啟動成本對照 · 適合對象 · 風險提醒 · 第一週行動步驟
+      </p>
+      <a href="https://drive.google.com/uc?export=download&id=1aSbSmiJw3S7873Tv1dZQNqqCeeYk9fyl" class="download-btn" target="_blank" rel="noopener">
+        <span class="icon">↓</span>
+        <span>立即下載 PDF</span>
+      </a>
+    </div>
+
+    <div class="next-section">
+      <div class="next-label">看完之後，這裡還有</div>
+      <div class="next-grid">
+        <a href="/notes" class="next-card">
+          <div class="num">/01</div>
+          <h4>內容筆記</h4>
+          <p>實驗紀錄、模型拆解、AI 工具實測</p>
+        </a>
+        <a href="/products" class="next-card">
+          <div class="num">/02</div>
+          <h4>啟動筆記 NT$ 299</h4>
+          <p>20 種模型完整版 + 30 天行動表</p>
+        </a>
+        <a href="/services" class="next-card">
+          <div class="num">/03</div>
+          <h4>代做服務</h4>
+          <p>不想自己做？我幫你做出第一版產品</p>
+        </a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="/" class="logo">CROWN SUPPLY</a>
+        <p>一人公司的 AI 資源供應站。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="/resources">免費資源</a>
+        <a href="/notes">內容筆記</a>
+        <a href="/products">產品</a>
+        <a href="/services">服務</a>
+      </div>
+      <div class="footer-col">
+        <h5>合作</h5>
+        <a href="/partners">分潤合作</a>
+        <a href="/industry-packs">產業授權包</a>
+        <a href="/about">關於</a>
+        <a href="/contact">聯絡</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+      </div>
+    </div>
+    <div class="footer-bottom">© 2026 CROWN SUPPLY. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50 ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>
