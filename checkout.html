@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>付款 · CROWN SUPPLY</title>
-<meta name="description" content="CROWN SUPPLY 內測階段付款頁。銀行轉帳 / LINE Pay，24 小時內人工交付數位產品。">
+<meta name="description" content="CROWN SUPPLY 內測階段付款頁。將來銀行 / 街口支付，24 小時內人工交付數位產品。">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -165,7 +165,7 @@
     <div class="eyebrow">CHECKOUT</div>
     <h1>內測階段 · 人工付款</h1>
     <p class="lead muted">
-      銀行轉帳或 LINE Pay → 回填付款後五碼 → 24 小時內收到下載連結。
+      將來銀行轉帳或街口支付 → 回填付款後五碼 → 24 小時內收到下載連結。
     </p>
   </div>
 </header>
@@ -227,20 +227,20 @@
 
         <div class="checkout-block">
           <h2>② 選擇付款方式</h2>
-          <p class="block-sub">內測階段僅支援銀行轉帳與 LINE Pay。</p>
+          <p class="block-sub">內測階段僅支援將來銀行轉帳與街口支付。後續穩定後會接信用卡 / 超商代碼。</p>
           <div class="pay-methods">
             <label class="pay-method" data-method="bank">
               <input type="radio" name="method_select" value="bank" style="display:none;">
               <div class="icon">B</div>
-              <h4>銀行轉帳 / ATM</h4>
-              <p>適合熟悉網銀 / ATM 的人</p>
-              <span class="badge">手續費可能 0～15 元</span>
+              <h4>將來銀行轉帳</h4>
+              <p>網銀 / ATM 都可以</p>
+              <span class="badge">手續費 0～15 元</span>
             </label>
-            <label class="pay-method" data-method="linepay">
-              <input type="radio" name="method_select" value="linepay" style="display:none;">
-              <div class="icon">L</div>
-              <h4>LINE Pay 轉帳</h4>
-              <p>用 LINE Pay 朋友轉帳功能</p>
+            <label class="pay-method" data-method="jko">
+              <input type="radio" name="method_select" value="jko" style="display:none;">
+              <div class="icon">J</div>
+              <h4>街口支付轉帳</h4>
+              <p>掃 QR 或點連結直接轉</p>
               <span class="badge">免手續費</span>
             </label>
           </div>
@@ -252,31 +252,43 @@
           <div id="pay-info-bank" class="pay-info-card">
             <div class="pay-info-row">
               <span class="label">銀行</span>
-              <div><span class="value">XXX 銀行（待補）</span><button class="copy-btn" onclick="copyText('待補')">複製</button></div>
+              <div><span class="value">將來銀行（代碼 815）</span><button class="copy-btn" onclick="copyText('815')">複製代碼</button></div>
             </div>
             <div class="pay-info-row">
               <span class="label">戶名</span>
-              <div><span class="value">XXX（待補）</span><button class="copy-btn" onclick="copyText('待補')">複製</button></div>
+              <div><span class="value">張O得</span><button class="copy-btn" onclick="copyText('張O得')">複製</button></div>
             </div>
             <div class="pay-info-row">
               <span class="label">帳號</span>
-              <div><span class="value">XXXX-XXXX-XXXX-XX（待補）</span><button class="copy-btn" onclick="copyText('待補帳號')">複製</button></div>
+              <div><span class="value">88670900640957</span><button class="copy-btn" onclick="copyText('88670900640957')">複製帳號</button></div>
             </div>
             <p style="font-size:12px;color:var(--gray-mid);margin-top:14px;line-height:1.7;">
-              ※ 請將上方銀行資訊替換為你的實際帳號（在 GitHub 上編輯 checkout.html）。
+              ※ 將來銀行代碼 815，跨行 ATM 轉帳手續費約 15 元。<br>
+              ※ 同行轉帳免手續費，建議從手機網銀操作最快。
             </p>
           </div>
-          <div id="pay-info-linepay" class="pay-info-card">
+          <div id="pay-info-jko" class="pay-info-card">
             <div class="pay-info-row">
-              <span class="label">LINE Pay 帳戶</span>
-              <div><span class="value">@crownsupply（待補）</span><button class="copy-btn" onclick="copyText('@crownsupply')">複製</button></div>
+              <span class="label">機構代碼</span>
+              <div><span class="value">396</span><button class="copy-btn" onclick="copyText('396')">複製</button></div>
+            </div>
+            <div class="pay-info-row">
+              <span class="label">街口帳號</span>
+              <div><span class="value">909072775</span><button class="copy-btn" onclick="copyText('909072775')">複製</button></div>
             </div>
             <div class="pay-info-row">
               <span class="label">收款人</span>
-              <span class="value">CROWN SUPPLY</span>
+              <span class="value">張O得</span>
+            </div>
+            <div style="margin-top: 16px; padding: 14px 16px; background: var(--navy-card); border-radius: 3px; border: 1px solid rgba(197,205,217,0.2);">
+              <p style="font-size: 12px; color: var(--gray-light); margin-bottom: 8px;">📱 手機開街口 App 的話，直接點：</p>
+              <a href="https://service.jkopay.com/r/transfer?j=Transfer:909072775" target="_blank" rel="noopener" style="color: var(--silver); font-size: 13px; word-break: break-all; text-decoration: underline;">
+                點此直接打開街口轉帳頁 →
+              </a>
             </div>
             <p style="font-size:12px;color:var(--gray-mid);margin-top:14px;line-height:1.7;">
-              ※ 用 LINE Pay 「轉帳給朋友」功能，搜尋上方 LINE ID。
+              ※ 點上方連結會自動帶入收款人資訊，免手續費、即時到帳。<br>
+              ※ 桌面瀏覽請用機構代碼 396 + 街口帳號手動轉。
             </p>
           </div>
           <div id="pay-info-empty" class="pay-info-card active">
@@ -339,7 +351,7 @@
           <div style="margin-top: 24px; padding: 16px; background: var(--navy); border-radius: 3px; border-left: 2px solid var(--silver);">
             <div style="font-family: var(--serif); font-style: italic; color: var(--silver); font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 8px;">需要協助？</div>
             <p style="font-size: 13px; color: var(--gray-light); line-height: 1.7;">
-              <a href="mailto:hello@crownsupply.com" style="color:var(--silver);">hello@crownsupply.com</a><br>
+              <a href="mailto:crownsupply0111@gmail.com" style="color:var(--silver);">crownsupply0111@gmail.com</a><br>
               LINE：<span style="color:var(--silver);">@crownsupply</span>
             </p>
           </div>
@@ -395,10 +407,10 @@
       </div>
       <div class="footer-col">
         <h5>聯絡</h5>
-        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+        <a href="mailto:crownsupply0111@gmail.com">crownsupply0111@gmail.com</a>
       </div>
     </div>
-    <div class="footer-bottom">© 2026 CROWN SUPPLY. All rights reserved.</div>
+    <div class="footer-bottom">© 2026 CROWN SUPPLY. All rights reserved.<br><a href="/privacy" style="color:var(--silver);text-decoration:underline;">隱私權政策</a> · <a href="/terms" style="color:var(--silver);text-decoration:underline;">服務條款</a> · 本站內容不構成法律、稅務、投資建議</div>
   </div>
 </footer>
 
@@ -409,7 +421,7 @@
     'combo': { name: '啟動筆記 + 模板包合購', price: 2098 },
     'service-deposit': { name: '代做服務訂金（依方案）', price: 0 },
   };
-  const METHOD_LABEL = { 'bank': '銀行轉帳 / ATM', 'linepay': 'LINE Pay 轉帳' };
+  const METHOD_LABEL = { 'bank': '將來銀行轉帳', 'jko': '街口支付' };
 
   let selectedProduct = null;
   let selectedMethod = null;
@@ -443,7 +455,7 @@
   function showPayInfo(method) {
     document.querySelectorAll('.pay-info-card').forEach(c => c.classList.remove('active'));
     if (method === 'bank') document.getElementById('pay-info-bank').classList.add('active');
-    else if (method === 'linepay') document.getElementById('pay-info-linepay').classList.add('active');
+    else if (method === 'jko') document.getElementById('pay-info-jko').classList.add('active');
     else document.getElementById('pay-info-empty').classList.add('active');
   }
 
