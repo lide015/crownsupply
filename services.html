@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>代做服務 · CROWN SUPPLY</title>
+<meta name="description" content="AI 線上產品代做包：從產品定位到一頁式銷售頁，幫你做出第一版可上線的雛形。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .service-hero { display: grid; grid-template-columns: 1.2fr 1fr; gap: 48px; align-items: start; }
+  .service-info {
+    background: var(--navy-card); padding: 48px;
+    border-radius: 4px; border: 1px solid rgba(197,205,217,0.15);
+  }
+  .service-info h4 {
+    font-family: var(--sans); font-size: 13px; color: var(--silver);
+    letter-spacing: 0.15em; margin: 28px 0 12px; text-transform: uppercase;
+  }
+  .service-info ul li { padding: 6px 0; padding-left: 22px; position: relative; font-size: 14px; }
+  .service-info ul li::before { content: '·'; position: absolute; left: 8px; color: var(--silver); font-size: 18px; line-height: 1; }
+  .service-pricing { display: flex; gap: 24px; margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .service-tier { flex: 1; }
+  .service-tier-label { font-size: 11px; color: var(--silver); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 6px; }
+  .service-tier-price { font-family: var(--serif); font-size: 22px; color: var(--white); }
+
+  .apply-form {
+    background: var(--navy-card); padding: 40px;
+    border-radius: 4px; border: 1px solid rgba(197,205,217,0.15);
+    position: sticky; top: 90px;
+  }
+  .apply-form h3 { text-align: center; font-size: 22px; margin-bottom: 8px; }
+  .apply-form .sub { text-align: center; font-size: 12px; color: var(--gray-mid); margin-bottom: 24px; }
+
+  .process-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-top: 48px; }
+  .process-step {
+    padding: 24px 20px; background: var(--navy-card);
+    border-radius: 4px; border-top: 2px solid var(--silver);
+  }
+  .process-num { font-family: var(--serif); font-size: 28px; color: var(--silver); font-weight: 700; margin-bottom: 10px; line-height: 1; }
+  .process-step h4 { font-size: 16px; margin-bottom: 8px; color: var(--white); }
+  .process-step p { font-size: 12px; line-height: 1.7; color: var(--gray-light); }
+
+  .deliverables-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 40px; }
+  .deliverable {
+    padding: 28px; background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.05); border-radius: 4px;
+    border-left: 2px solid var(--silver);
+  }
+  .deliverable h4 { font-size: 17px; margin-bottom: 8px; }
+  .deliverable p { font-size: 13px; line-height: 1.7; }
+
+  @media (max-width: 880px) {
+    .service-hero { grid-template-columns: 1fr; }
+    .service-info { padding: 28px; }
+    .apply-form { padding: 24px; position: static; }
+    .process-grid { grid-template-columns: 1fr 1fr; }
+    .deliverables-grid { grid-template-columns: 1fr; }
+    .service-pricing { flex-direction: column; gap: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWN SUPPLY</a>
+    <div class="nav-links">
+      <a href="resources.html">免費資源</a>
+      <a href="notes.html">內容筆記</a>
+      <a href="products.html">產品</a>
+      <a href="services.html" class="active">服務</a>
+      <a href="case-studies.html">案例</a>
+      <a href="about.html">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="container page-header-inner">
+    <div class="eyebrow">DONE-FOR-YOU</div>
+    <h1>不想自己摸索？<br>我幫你做出第一版可上線的雛形。</h1>
+    <p class="lead muted">AI 線上產品代做包：把「想做副業卻沒有產品」的人，直接交付一份可上線的產品雛形。</p>
+  </div>
+</header>
+
+<section class="section">
+  <div class="container">
+    <div class="service-hero">
+      <div class="service-info">
+        <span class="tag">代做服務</span>
+        <h2>AI 線上產品代做包</h2>
+        <p class="lead muted" style="margin-bottom:8px;">
+          我不會幫你決定要做什麼產品（這個由你決定，因為你最了解你的領域）。
+          但我會幫你把「想法」變成「能上線的具體成品」。
+        </p>
+        <h4>適合對象</h4>
+        <ul>
+          <li>想做副業但不知道賣什麼的人</li>
+          <li>想經營個人品牌但不知道發什麼的人</li>
+          <li>想做數位產品但不會整理內容的人</li>
+          <li>有技能但不知道怎麼包裝成商品的人</li>
+          <li>想用 AI 做內容、文案、銷售頁的人</li>
+        </ul>
+        <h4>交付內容</h4>
+        <ul>
+          <li>產品定位（市場切入點 + 差異化）</li>
+          <li>產品大綱（章節 / 結構 / 模組設計）</li>
+          <li>免費資源（Lead Magnet）設計</li>
+          <li>一頁式銷售頁完整文案</li>
+          <li>10～30 篇社群貼文初稿</li>
+          <li>10～30 支短影音腳本</li>
+          <li>私訊成交話術腳本</li>
+          <li>7 天上線行動表</li>
+        </ul>
+        <div class="service-pricing">
+          <div class="service-tier">
+            <div class="service-tier-label">內測名額</div>
+            <div class="service-tier-price">NT$ 4,980 起</div>
+            <p style="font-size:11px;color:var(--gray-mid);margin-top:4px;">每月限 4 位</p>
+          </div>
+          <div class="service-tier">
+            <div class="service-tier-label">標準方案</div>
+            <div class="service-tier-price">NT$ 9,800 起</div>
+            <p style="font-size:11px;color:var(--gray-mid);margin-top:4px;">完整交付期 14 天</p>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--gray-mid);margin-top:20px;font-style:italic;">
+          本服務不保證收益。最終交付的是「可上線的線上產品雛形」，市場結果由你後續執行決定。
+        </p>
+      </div>
+
+      <form class="apply-form" action="https://formspree.io/f/xwvywwlq" method="POST">
+        <h3>申請代做服務</h3>
+        <p class="sub">先填這份初步表單，我會在 48 小時內回覆是否合適。</p>
+        <input type="hidden" name="_subject" value="🛠 新申請：代做服務">
+        <input type="hidden" name="form_source" value="services.html · DFY Application">
+        <div class="form-group">
+          <label>你目前想做什麼？</label>
+          <textarea name="goal" required placeholder="例：想做 Notion 模板、想做匿名內容號..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>你有什麼技能 / 資源 / 興趣？</label>
+          <textarea name="skill" required placeholder="例：擅長剪輯、有 5 年房仲經驗..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>想賣產品還是服務？</label>
+          <select name="type" required>
+            <option value="">請選擇</option>
+            <option>數位產品（一次買斷）</option>
+            <option>線上服務（DFY 代做）</option>
+            <option>內容變現（廣告 / 業配）</option>
+            <option>還不確定</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>預算範圍</label>
+          <select name="budget" required>
+            <option value="">請選擇</option>
+            <option>內測（4,980 起）</option>
+            <option>標準（9,800 起）</option>
+            <option>客製（需報價）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>聯絡方式（Email / LINE）</label>
+          <input type="text" name="contact" required placeholder="方便回覆你的方式">
+        </div>
+        <button class="btn btn-primary" type="submit" style="width:100%;">送出申請 →</button>
+        <p class="form-note">收到後 48 小時內回覆是否合適</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background: var(--navy);">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">PROCESS</div>
+      <h2>5 步驟交付流程</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">透明化每一階段你會拿到什麼，避免你買了之後不知道在幹嘛。</p>
+    </div>
+    <div class="process-grid">
+      <div class="process-step">
+        <div class="process-num">01</div>
+        <h4>初步通話</h4>
+        <p>30 分鐘 Zoom，確認方向、技能、可投入時間是否對得上。</p>
+      </div>
+      <div class="process-step">
+        <div class="process-num">02</div>
+        <h4>產品定位</h4>
+        <p>3 天內提交「產品定位文件」：你要賣給誰、解決什麼、跟同業差在哪。</p>
+      </div>
+      <div class="process-step">
+        <div class="process-num">03</div>
+        <h4>內容產出</h4>
+        <p>7 天內完成：產品大綱、Lead Magnet、銷售頁、社群貼文、短影音腳本。</p>
+      </div>
+      <div class="process-step">
+        <div class="process-num">04</div>
+        <h4>修訂回合</h4>
+        <p>2 輪修改機會。你提具體意見、我針對性調整。</p>
+      </div>
+      <div class="process-step">
+        <div class="process-num">05</div>
+        <h4>上線陪跑</h4>
+        <p>交付 7 天後做一次 30 分鐘的上線檢核。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">PAYMENT</div>
+      <h2>兩段式付款 + 退費規則</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">
+        高價代做服務採 50% 訂金 + 50% 尾款，確保雙方都有保障。
+      </p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px;">
+      <div class="card" style="border-top: 3px solid var(--silver);">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">第 1 段</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">50% 訂金</h4>
+        <p style="font-size:13px;line-height:1.85;">確認合作後支付，用於排入製作時程與前期市場研究。訂金支付後正式開工。</p>
+      </div>
+      <div class="card" style="border-top: 3px solid var(--silver);">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">第 2 段</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">50% 尾款</h4>
+        <p style="font-size:13px;line-height:1.85;">初稿完成、修訂後支付。尾款確認後，交付完整檔案與最終版本。</p>
+      </div>
+      <div class="card" style="border-top: 3px solid var(--silver);">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">付款管道</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">銀行轉帳 / LINE Pay</h4>
+        <p style="font-size:13px;line-height:1.85;">內測階段採銀行轉帳或 LINE Pay。雙方簽署服務同意書。</p>
+      </div>
+    </div>
+    <div style="margin-top:32px;padding:20px 24px;background:rgba(197,205,217,0.04);border-left:2px solid var(--silver);font-size:13px;color:var(--gray-mid);line-height:1.85;">
+      <strong style="color:var(--white);">付款流程：</strong>
+      申請通過 → 30 分鐘需求通話 → 確認方案 → <a href="checkout.html?product=service-deposit" style="color:var(--silver);">支付 50% 訂金</a> → 7～14 天交付初稿 → 2 輪修改 → 支付 50% 尾款 → 交付完整檔案。
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background: var(--navy);">
+  <div class="container section-narrow">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">SERVICE FAQ</div>
+      <h2>關於服務的常見問題</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q1：保證我能賺錢嗎？</h4>
+      <p style="font-size:14px;">不保證。我交付的是「可上線的產品雛形」，市場結果取決於你後續的執行、選題的市場真實需求。</p>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q2：你會幫我發內容嗎？</h4>
+      <p style="font-size:14px;">不會。我交付的是「可發的內容」，但實際發布、互動、回覆，是你的工作。</p>
+    </div>
+    <div class="card">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q3：可以無限次修改嗎？</h4>
+      <p style="font-size:14px;">不行。內測方案 1 輪、標準方案 2 輪修改。第三輪以上需另外計價（NT$ 1,500 / 輪）。</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWN SUPPLY</a>
+        <p>一人公司的 AI 資源供應站。整理合法、低成本、可動手的線上變現系統。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+        <a href="case-studies.html">案例</a>
+      </div>
+      <div class="footer-col">
+        <h5>合作</h5>
+        <a href="partners.html">分潤合作</a>
+        <a href="industry-packs.html">產業授權包</a>
+        <a href="about.html">關於</a>
+        <a href="contact.html">聯絡</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+      </div>
+    </div>
+    <div class="footer-bottom">© 2026 CROWN SUPPLY. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50 ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>產品 · CROWN SUPPLY</title>
+<meta name="description" content="CROWN SUPPLY 的數位產品：AI 線上產品啟動筆記、完整模板包、未來產品預告。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .ladder-vis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 40px; }
+  .ladder-step {
+    padding: 32px 24px; background: var(--navy-card);
+    border: 1px solid rgba(255,255,255,0.05); border-radius: 4px;
+  }
+  .ladder-step.featured { border-color: var(--silver); background: linear-gradient(180deg, var(--navy-card), var(--navy-light)); }
+  .ladder-step .num { font-family: var(--serif); font-style: italic; color: var(--silver); font-size: 14px; margin-bottom: 12px; letter-spacing: 0.1em; }
+  .ladder-step h3 { font-size: 19px; margin-bottom: 10px; }
+  .ladder-step .price { font-family: var(--serif); font-size: 26px; color: var(--white); font-weight: 700; margin: 10px 0 14px; line-height: 1; }
+  .ladder-step .price small { font-size: 12px; color: var(--gray-mid); margin-left: 4px; font-family: var(--sans); font-weight: 400; }
+
+  .product-detail {
+    background: var(--navy-card); border: 1px solid rgba(197,205,217,0.2);
+    border-radius: 4px; padding: 56px; margin-top: 56px;
+    position: relative; overflow: hidden;
+  }
+  .product-detail::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(to right, transparent, var(--silver), transparent);
+  }
+  .product-tag {
+    display: inline-block; padding: 4px 12px;
+    background: var(--silver-soft); color: var(--silver);
+    font-size: 12px; letter-spacing: 0.1em;
+    border-radius: 2px; margin-bottom: 14px;
+  }
+  .product-detail h2 { font-size: 32px; margin-bottom: 20px; }
+  .product-content { display: grid; grid-template-columns: 1.4fr 1fr; gap: 48px; margin-top: 32px; }
+  .product-content h4 {
+    font-family: var(--sans); font-size: 13px;
+    color: var(--silver); letter-spacing: 0.15em;
+    margin-bottom: 16px; text-transform: uppercase;
+  }
+  .product-list li { padding: 8px 0; padding-left: 24px; position: relative; font-size: 15px; }
+  .product-list li::before { content: '✓'; position: absolute; left: 0; color: var(--silver); font-weight: 700; }
+  .product-price-card {
+    background: var(--navy-light); padding: 32px;
+    border-radius: 4px; text-align: center; align-self: start;
+  }
+  .price-amount { font-family: var(--serif); font-size: 56px; color: var(--white); font-weight: 700; line-height: 1; }
+  .price-amount .currency { font-size: 20px; margin-right: 4px; color: var(--silver); vertical-align: top; line-height: 1; }
+  .price-label { font-size: 12px; color: var(--gray-mid); margin: 12px 0 24px; letter-spacing: 0.1em; }
+
+  .upcoming-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 40px; }
+  .upcoming-card {
+    padding: 32px 28px; background: var(--navy-card);
+    border: 1px dashed rgba(197,205,217,0.2); border-radius: 4px;
+    opacity: 0.85;
+  }
+  .upcoming-card .badge {
+    display: inline-block; padding: 3px 10px;
+    background: rgba(255,255,255,0.05); color: var(--gray-mid);
+    font-size: 11px; letter-spacing: 0.15em;
+    border-radius: 2px; margin-bottom: 12px; text-transform: uppercase;
+  }
+  .upcoming-card h3 { font-size: 19px; margin-bottom: 8px; }
+
+  @media (max-width: 880px) {
+    .ladder-vis { grid-template-columns: 1fr; }
+    .product-detail { padding: 32px 24px; }
+    .product-content { grid-template-columns: 1fr; gap: 32px; }
+    .upcoming-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container nav-inner">
+    <a href="index.html" class="logo">CROWN SUPPLY</a>
+    <div class="nav-links">
+      <a href="resources.html">免費資源</a>
+      <a href="notes.html">內容筆記</a>
+      <a href="products.html" class="active">產品</a>
+      <a href="services.html">服務</a>
+      <a href="case-studies.html">案例</a>
+      <a href="about.html">關於</a>
+      <a href="resources.html" class="nav-cta">免費領取</a>
+    </div>
+    <button class="nav-toggle" aria-label="選單" onclick="document.querySelector('.nav-links').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="container page-header-inner">
+    <div class="eyebrow">PRODUCTS</div>
+    <h1>從免費資源到深度筆記，<br>一步步往上。</h1>
+    <p class="lead muted">沒有訂閱、沒有強迫升級。每一階都是一次買斷、終身更新。</p>
+  </div>
+</header>
+
+<section class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">PRODUCT LADDER</div>
+      <h2>產品階梯一覽</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+    <div class="ladder-vis">
+      <div class="ladder-step">
+        <div class="num">/01</div>
+        <h3>免費資源</h3>
+        <div class="price" style="font-size:22px;">FREE</div>
+        <p style="font-size:13px;margin-bottom:20px;">10 種模型表、AI 工具清單、合法邊界 PDF。</p>
+        <a href="resources.html" class="btn btn-outline btn-sm">取得 →</a>
+      </div>
+      <div class="ladder-step">
+        <div class="num">/02</div>
+        <h3>啟動筆記</h3>
+        <div class="price">NT$ 299</div>
+        <p style="font-size:13px;margin-bottom:20px;">20 種 AI 線上產品模型 + 30 天行動表。</p>
+        <a href="#starter-notes" class="btn btn-outline btn-sm">看詳情 →</a>
+      </div>
+      <div class="ladder-step featured">
+        <div class="num">/03</div>
+        <h3>完整模板包</h3>
+        <div class="price">NT$ 1,999</div>
+        <p style="font-size:13px;margin-bottom:20px;">深度模板 + 完整工作流 + 案例拆解。</p>
+        <a href="#template-pack" class="btn btn-primary btn-sm">看詳情 →</a>
+      </div>
+      <div class="ladder-step">
+        <div class="num">/04</div>
+        <h3>代做服務</h3>
+        <div class="price">NT$ 4,980<small>起</small></div>
+        <p style="font-size:13px;margin-bottom:20px;">幫你把第一個產品從 0 做到能上線。</p>
+        <a href="services.html" class="btn btn-outline btn-sm">了解 →</a>
+      </div>
+    </div>
+    <p class="muted" style="text-align:center;font-size:13px;margin-top:32px;">
+      還想再上一層？看 <a href="industry-packs.html" style="color:var(--silver);text-decoration:underline;">產業授權包</a>（NT$ 19,800 起，給整個團隊使用）
+    </p>
+  </div>
+</section>
+
+<section id="starter-notes" class="section" style="background: var(--navy);">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">FEATURED</div>
+      <h2>入門款產品</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+    <div class="product-detail">
+      <span class="product-tag">內測首版 · 限量 100 份</span>
+      <h2>《AI 線上產品啟動筆記》</h2>
+      <p class="lead">從 0 到第一塊錢進帳的完整路徑。把選題、做產品、寫銷售頁、私訊成交、避開風險都拆好給你。</p>
+      <div class="product-content">
+        <div>
+          <h4>內容包含</h4>
+          <ul class="product-list">
+            <li>20 種 AI 線上產品模型（每種附啟動成本與風險）</li>
+            <li>每種模型的具體起步方法（第 0 天到第 30 天）</li>
+            <li>常用 AI 工具清單與比較</li>
+            <li>免費資源（Lead Magnet）設計方法</li>
+            <li>一頁式銷售頁完整架構（含 10 個範例）</li>
+            <li>私訊成交話術腳本（5 個情境）</li>
+            <li>30 天行動表（每日具體任務）</li>
+            <li>不能碰的風險紅線清單</li>
+          </ul>
+          <h4 style="margin-top:32px;">適合的人</h4>
+          <ul class="product-list">
+            <li>有正職、想用下班時間測試副業的人</li>
+            <li>有技能但不會包裝成商品的人</li>
+            <li>已經試過幾個方向但都沒結果的人</li>
+            <li>想用 AI 提升效率而不是取代思考的人</li>
+          </ul>
+        </div>
+        <div class="product-price-card">
+          <p style="font-size:12px;color:var(--gray-mid);letter-spacing:0.15em;margin-bottom:14px;">內測首版價格</p>
+          <div class="price-amount"><span class="currency">NT$</span>299</div>
+          <p class="price-label">一次買斷 · 終身免費更新</p>
+          <a href="checkout.html?product=299" class="btn btn-primary" style="width:100%;">內測價 299 取得 →</a>
+          <p style="font-size:11px;color:var(--gray-dim);margin-top:14px;">下版（增加 10 個模型）將調整為 NT$ 599。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="template-pack" class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">DEEP DIVE</div>
+      <h2>中價深度款</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">
+        買過 299 啟動筆記，覺得「想要更深、想要可以直接套用的模板」？這一層為你而設。
+      </p>
+    </div>
+    <div class="product-detail">
+      <span class="product-tag">中價深度款 · 限量 50 份</span>
+      <h2>《AI 線上產品完整模板包》</h2>
+      <p class="lead">不是教你「怎麼做」，是直接給你「做好的模板」。打開就能填、填完就能用、用完就能上線。</p>
+      <div class="product-content">
+        <div>
+          <h4>包含內容</h4>
+          <ul class="product-list">
+            <li>30 個一頁式銷售頁完整模板（HTML + Notion 雙版本）</li>
+            <li>50 種免費資源（Lead Magnet）設計範例</li>
+            <li>10 個產品定價策略試算表（Excel）</li>
+            <li>20 種社群貼文模板（IG / Threads / FB / LinkedIn）</li>
+            <li>30 支短影音腳本模板（30 秒 / 60 秒 / 3 分鐘）</li>
+            <li>完整私訊成交話術系統（含 30 種反對問題回應）</li>
+            <li>5 個 Notion 一人公司作業系統模板</li>
+            <li>產品上市 60 天行動 SOP（每日具體任務）</li>
+            <li>5 個真實案例拆解（含 Before / After / 失敗紀錄）</li>
+            <li>合法邊界完整檢查清單（台灣 / 中國 / 美國差異）</li>
+          </ul>
+        </div>
+        <div class="product-price-card">
+          <p style="font-size:12px;color:var(--gray-mid);letter-spacing:0.15em;margin-bottom:14px;">內測首版價格</p>
+          <div class="price-amount"><span class="currency">NT$</span>1,999</div>
+          <p class="price-label">限量 50 份 · 終身免費更新</p>
+          <a href="checkout.html?product=1999" class="btn btn-primary" style="width:100%;">取得模板包 NT$ 1,999 →</a>
+          <p style="font-size:11px;color:var(--gray-dim);margin-top:14px;">
+            正式版將調整為 NT$ 2,990。<br>
+            首批 50 位享 30 天 LINE 社群答疑。
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">UPCOMING</div>
+      <h2>即將推出</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+    <div class="upcoming-grid">
+      <div class="upcoming-card">
+        <span class="badge">2026 Q3</span>
+        <h3>《AI 模板包設計手冊》</h3>
+        <p>把工作流程包裝成 9～49 美金的數位商品。從選題、定價、上架到避免被盜版的設計。</p>
+        <p class="muted" style="font-size:12px;margin-top:14px;">預計定價：NT$ 590</p>
+      </div>
+      <div class="upcoming-card">
+        <span class="badge">2026 Q3</span>
+        <h3>《Notion 一人公司作業系統模板》</h3>
+        <p>內容、客戶、產品、財務四個資料庫的完整連動模板。</p>
+        <p class="muted" style="font-size:12px;margin-top:14px;">預計定價：NT$ 390</p>
+      </div>
+      <div class="upcoming-card">
+        <span class="badge">2026 Q4</span>
+        <h3>《銷售頁文案 50 個範例集》</h3>
+        <p>50 個不同產業的一頁式銷售頁拆解，每一個都有架構分析。</p>
+        <p class="muted" style="font-size:12px;margin-top:14px;">預計定價：NT$ 890</p>
+      </div>
+      <div class="upcoming-card">
+        <span class="badge">2026 Q4</span>
+        <h3>《私訊成交話術完整集》</h3>
+        <p>從第一句話到收款的完整話術腳本。10 個情境、30 種反對問題。</p>
+        <p class="muted" style="font-size:12px;margin-top:14px;">預計定價：NT$ 690</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background: var(--navy);">
+  <div class="container">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">PAYMENT</div>
+      <h2>付款方式 / 交付 / 退費</h2>
+      <div class="gold-divider"><span></span></div>
+      <p class="lead muted" style="margin:0 auto;">
+        內測階段採人工確認付款。流程簡單透明、沒有第三方金流、沒有信用卡資料外流風險。
+      </p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px;">
+      <div class="card">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">付款方式</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">銀行轉帳 / LINE Pay</h4>
+        <p style="font-size:13px;line-height:1.85;">內測階段僅支援 ATM 轉帳與 LINE Pay 朋友轉帳。</p>
+      </div>
+      <div class="card">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">交付時間</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">24 小時內人工寄送</h4>
+        <p style="font-size:13px;line-height:1.85;">付款後填寫付款後五碼，24 小時內確認並寄送下載連結。</p>
+      </div>
+      <div class="card">
+        <div style="font-family:var(--serif);font-style:italic;color:var(--silver);font-size:13px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px;">退費規則</div>
+        <h4 style="color:var(--white);margin-bottom:12px;">數位產品恕不退費</h4>
+        <p style="font-size:13px;line-height:1.85;">產品為數位檔案，付款並寄送連結後即視為完成交付。檔案無法開啟可於 7 日內補發。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container section-narrow">
+    <div class="text-center" style="margin-bottom:24px;">
+      <div class="eyebrow">FAQ</div>
+      <h2>產品常見問題</h2>
+      <div class="gold-divider"><span></span></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q1：保證能賺到錢嗎？</h4>
+      <p style="font-size:14px;">不保證。任何跟你保證收入的人都該被你懷疑。我能保證的是：你會看到完整的結構，不會再被網路上的片段資訊牽著走。</p>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q2：跟 YouTube 上免費的差在哪？</h4>
+      <p style="font-size:14px;">YouTube 給你「終點」（成功故事），筆記給你「順序」（執行步驟）。差別在你願不願意花時間自己拼湊。</p>
+    </div>
+    <div class="card">
+      <h4 style="color:var(--white);margin-bottom:8px;">Q3：未來會漲價嗎？</h4>
+      <p style="font-size:14px;">每新增一個模型章節會調整一次價格。已購買者終身免費更新，不會被收第二次費用。</p>
+    </div>
+  </div>
+</section>
+
+<section class="newsletter-band">
+  <div class="container">
+    <div class="eyebrow">CROWN SUPPLY · 實驗信</div>
+    <h2>新產品上線優先通知</h2>
+    <p class="muted" style="margin-top:12px;">內測價有限量，名單上的訂戶會先收到。</p>
+    <form class="newsletter-form" action="https://formspree.io/f/xpqboopp" method="POST">
+      <input type="hidden" name="_subject" value="📧 新訂閱者：實驗信">
+      <input type="hidden" name="form_source" value="products.html · Newsletter">
+      <input type="email" name="email" placeholder="你的 Email" required>
+      <button class="btn btn-primary" type="submit">訂閱實驗信</button>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="logo">CROWN SUPPLY</a>
+        <p>一人公司的 AI 資源供應站。整理合法、低成本、可動手的線上變現系統。</p>
+      </div>
+      <div class="footer-col">
+        <h5>探索</h5>
+        <a href="resources.html">免費資源</a>
+        <a href="notes.html">內容筆記</a>
+        <a href="products.html">產品</a>
+        <a href="services.html">服務</a>
+        <a href="case-studies.html">案例</a>
+      </div>
+      <div class="footer-col">
+        <h5>合作</h5>
+        <a href="partners.html">分潤合作</a>
+        <a href="industry-packs.html">產業授權包</a>
+        <a href="about.html">關於</a>
+        <a href="contact.html">聯絡</a>
+      </div>
+      <div class="footer-col">
+        <h5>聯絡</h5>
+        <a href="mailto:hello@crownsupply.com">hello@crownsupply.com</a>
+      </div>
+    </div>
+    <div class="footer-bottom">© 2026 CROWN SUPPLY. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  window.addEventListener('scroll', () => {
+    const nav = document.querySelector('.navbar');
+    nav.style.background = window.scrollY > 50 ? 'rgba(6, 20, 38, 0.95)' : 'rgba(6, 20, 38, 0.85)';
+  });
+</script>
+</body>
+</html>
