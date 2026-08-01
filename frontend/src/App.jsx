@@ -215,6 +215,9 @@ export default function App() {
   const [live, setLive] = useState(null); // true=即時 false=示範
   const [loading, setLoading] = useState(true);
   const [wsConnected, setWsConnected] = useState(false);
+  const [markets, setMarkets] = useState(null); // 台股／美股／大宗商品期貨
+  const [smcData, setSmcData] = useState(null); // M6 選配：SMC 市場結構分析
+  const [tradePlan, setTradePlan] = useState(null); // 規則式（非AI）交易計畫合成
 
   const [gateOn, setGateOn] = useState(true);
   const [gate, setGate] = useState({ absChange: 3, rsiHi: 70, rsiLo: 30, fngLo: 25, fngHi: 75 });
@@ -252,6 +255,9 @@ export default function App() {
       setQuotes(quotesFromBackend(latest.quotes));
       setFng(latest.fng);
       setCloses(klineRows.map((k) => k.close));
+      setMarkets(latest.markets || null);
+      setSmcData(latest.smc || null);
+      setTradePlan(latest.trade_plan || null);
       setLive(true);
     } catch {
       setQuotes(DEMO.quotes);
@@ -278,9 +284,21 @@ export default function App() {
         let data;
         try { data = JSON.parse(evt.data); } catch { return; }
         if (data.type === "heartbeat") return;
+        if (data.type === "tick") {
+          // M6：OKX 秒級 tick，只更新該幣種的價格／24h 變化，其餘欄位維持上次快照的值
+          const id = SYMBOL_TO_ID[data.symbol];
+          if (!id) return;
+          setQuotes((prev) => ({ ...(prev || {}), [id]: { usd: data.usd, usd_24h_change: data.chg24 } }));
+          setLive(true);
+          setLoading(false);
+          return;
+        }
         if (data.quotes) {
           setQuotes(quotesFromBackend(data.quotes));
           setFng(data.fng);
+          setMarkets(data.markets || null);
+          setSmcData(data.smc || null);
+          setTradePlan(data.trade_plan || null);
           setLive(true);
           setLoading(false);
         }
@@ -856,6 +874,120 @@ export default function App() {
             </p>
           </div>
         </section>
+
+        {/* ── 05 全球市場（台股／美股／大宗商品）── */}
+        {markets && (
+          <section>
+            <SectionHead no="05" title="全球市場" sub="本區全程 0 token・預設觀察清單" />
+            <div className="grid md:grid-cols-3 gap-4">
+              {[
+                ["台股", markets.tw_stocks],
+                ["美股", markets.us_stocks],
+                ["大宗商品", markets.commodities],
+              ].map(([label, group]) => (
+                <div key={label} className="p-3 rounded-md" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
+                  <div className="mono text-xs mb-2" style={{ color: C.dim }}>{label}</div>
+                  <div className="space-y-1.5">
+                    {group && Object.keys(group).length > 0 ? (
+                      Object.entries(group).map(([code, m]) => (
+                        <div key={code} className="flex items-center justify-between text-sm">
+                          <span style={{ color: C.paper }}>{m.name}</span>
+                          <span className="mono text-xs">
+                            {num(m.price, m.price < 10 ? 2 : 1)}{" "}
+                            <span style={{ color: m.chg_pct == null ? C.faint : m.chg_pct >= 0 ? C.up : C.down }}>
+                              {pct(m.chg_pct)}
+                            </span>
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs" style={{ color: C.faint }}>載入中或暫無資料</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── 06 SMC 市場結構與交易計畫（規則式合成，非AI）── */}
+        {(smcData || tradePlan) && (
+          <section>
+            <SectionHead no="06" title="SMC 交易計畫" sub="BTC・規則式本地合成，非 AI、非投資建議" />
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-md" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="mono text-xs" style={{ color: C.dim }}>市場結構</span>
+                  <Tag color={smcData?.structure === "bullish" ? C.up : smcData?.structure === "bearish" ? C.down : C.faint}>
+                    {smcData?.structure ?? "—"}
+                  </Tag>
+                </div>
+                {smcData?.last_event ? (
+                  <p className="text-sm" style={{ color: C.paper }}>
+                    最新 {smcData.last_event.type}：
+                    <span style={{ color: smcData.last_event.direction === "bullish" ? C.up : C.down }}>
+                      {" "}{smcData.last_event.direction} 突破 {num(smcData.last_event.level, 1)}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-xs" style={{ color: C.faint }}>目前無 BOS／CHoCH 事件</p>
+                )}
+                {smcData?.fvgs?.length > 0 && (
+                  <div className="mt-3 pt-3 space-y-1" style={{ borderTop: `1px dashed ${C.line}` }}>
+                    <div className="mono text-xs mb-1" style={{ color: C.dim }}>近期 FVG（公允價值缺口）</div>
+                    {smcData.fvgs.map((f, i) => (
+                      <div key={i} className="mono text-xs flex justify-between">
+                        <span style={{ color: C.faint }}>{f.day}</span>
+                        <span style={{ color: f.direction === "bullish" ? C.up : C.down }}>
+                          {f.direction} {num(f.bottom, 1)}–{num(f.top, 1)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 rounded-md" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
+                {!tradePlan?.available ? (
+                  <p className="text-xs" style={{ color: C.faint }}>資料不足，尚無法產生交易計畫</p>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <Tag color={tradePlan.bias === "bullish" ? C.up : tradePlan.bias === "bearish" ? C.down : C.faint}>
+                        {tradePlan.bias}
+                      </Tag>
+                      <span className="mono text-xs" style={{ color: C.dim }}>
+                        評分 {tradePlan.plan_score}/100・預估勝率 {tradePlan.win_rate_pct}%
+                      </span>
+                    </div>
+                    {tradePlan.levels && (
+                      <div className="grid grid-cols-3 gap-2 mono text-xs mb-3">
+                        <div className="p-2 rounded-sm text-center" style={{ background: C.surface2 }}>
+                          <div style={{ color: C.faint }}>SL</div>
+                          <div style={{ color: C.down }}>{num(tradePlan.levels.sl, 1)}</div>
+                        </div>
+                        <div className="p-2 rounded-sm text-center" style={{ background: C.surface2 }}>
+                          <div style={{ color: C.faint }}>TP1 (1:1)</div>
+                          <div style={{ color: C.up }}>{num(tradePlan.levels.tp1, 1)}</div>
+                        </div>
+                        <div className="p-2 rounded-sm text-center" style={{ background: C.surface2 }}>
+                          <div style={{ color: C.faint }}>TP2 (1:1.5)</div>
+                          <div style={{ color: C.up }}>{num(tradePlan.levels.tp2, 1)}</div>
+                        </div>
+                      </div>
+                    )}
+                    <ul className="space-y-1 mb-2">
+                      {tradePlan.reasons?.map((r, i) => (
+                        <li key={i} className="text-xs" style={{ color: C.dim }}>▲ {r}</li>
+                      ))}
+                    </ul>
+                    <p className="mono text-xs" style={{ color: C.faint }}>{tradePlan.disclaimer}</p>
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         <footer className="pt-2 mono text-xs text-center" style={{ color: C.faint }}>
           節流晨報・獨立作業・token 為估算值・所有內容僅供教育用途

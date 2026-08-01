@@ -15,6 +15,16 @@ CREATE TABLE IF NOT EXISTS kline_daily (
   close REAL NOT NULL,
   PRIMARY KEY (symbol, day)
 );
+CREATE TABLE IF NOT EXISTS kline_ohlc_daily (
+  symbol TEXT NOT NULL,
+  day TEXT NOT NULL,
+  open REAL NOT NULL,
+  high REAL NOT NULL,
+  low REAL NOT NULL,
+  close REAL NOT NULL,
+  volume REAL NOT NULL,
+  PRIMARY KEY (symbol, day)
+);
 """
 
 
@@ -99,6 +109,37 @@ def get_closes(symbol: str, limit: int = 100):
     try:
         rows = conn.execute(
             "SELECT day, close FROM kline_daily WHERE symbol = ? ORDER BY day DESC LIMIT ?",
+            (symbol, limit),
+        ).fetchall()
+        return list(reversed(rows))
+    finally:
+        conn.close()
+
+
+def upsert_ohlc(symbol: str, rows):
+    """rows: iterable of (day, open, high, low, close, volume)."""
+    conn = get_connection()
+    try:
+        conn.executemany(
+            "INSERT INTO kline_ohlc_daily (symbol, day, open, high, low, close, volume) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(symbol, day) DO UPDATE SET "
+            "open = excluded.open, high = excluded.high, low = excluded.low, "
+            "close = excluded.close, volume = excluded.volume",
+            [(symbol, day, o, h, l, c, v) for day, o, h, l, c, v in rows],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_ohlc(symbol: str, limit: int = 100):
+    """Returns [(day, open, high, low, close), ...] ascending by day, most recent `limit` days."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT day, open, high, low, close FROM kline_ohlc_daily "
+            "WHERE symbol = ? ORDER BY day DESC LIMIT ?",
             (symbol, limit),
         ).fetchall()
         return list(reversed(rows))

@@ -10,7 +10,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import db, scheduler
+from . import db, okx_ws, scheduler
 from .state import MANAGER, STATE
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -29,15 +29,22 @@ async def lifespan(app: FastAPI):
 
     # prime the cache once at startup so /api/latest isn't empty for a full 60s
     await scheduler.job_fetch_klines()
+    await scheduler.job_fetch_ohlc()
     await scheduler.job_fetch_fng()
+    await scheduler.job_fetch_markets()
     await scheduler.job_fetch_quotes()
 
     sched = scheduler.create_scheduler()
     sched.start()
     logger.info("scheduler started")
+
+    okx_task = asyncio.create_task(okx_ws.run_okx_ws_forever())
+    logger.info("okx ws task started (M6)")
+
     try:
         yield
     finally:
+        okx_task.cancel()
         sched.shutdown(wait=False)
 
 
@@ -79,6 +86,16 @@ async def history(hours: int = 24):
 async def klines(symbol: str = "BTC", days: int = 90):
     rows = db.get_closes(symbol.upper(), limit=days)
     return [{"day": day, "close": close} for day, close in rows]
+
+
+@app.get("/api/smc")
+async def smc_endpoint(symbol: str = "BTC"):
+    return STATE.smc_cache
+
+
+@app.get("/api/trade_plan")
+async def trade_plan_endpoint(symbol: str = "BTC"):
+    return STATE.trade_plan_cache
 
 
 @app.websocket("/ws")

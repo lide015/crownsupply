@@ -13,6 +13,10 @@ class AppState:
         self.quote_source: str = "coingecko"
         self.consecutive_failures: int = 0
         self.last_fetch_ts: int | None = None
+        self.live_ticks: dict = {}
+        self.markets_cache: dict = {"tw_stocks": {}, "us_stocks": {}, "commodities": {}}
+        self.smc_cache: dict = {"structure": "insufficient_data", "last_event": None, "fvgs": []}
+        self.trade_plan_cache: dict = {"available": False}
 
 
 class ConnectionManager:
