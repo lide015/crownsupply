@@ -60,6 +60,55 @@ def chg_pct(closes, days_back):
     return (last / prior - 1.0) * 100.0
 
 
+def bollinger_bands(closes, n=20, k=2.0):
+    """布林通道：n 期簡單移動平均 ± k 倍標準差（母體標準差）。"""
+    if len(closes) < n:
+        return None
+    window = closes[-n:]
+    mid = sum(window) / n
+    variance = sum((c - mid) ** 2 for c in window) / n
+    std = math.sqrt(variance)
+    return {"mid": mid, "upper": mid + k * std, "lower": mid - k * std}
+
+
+def dmi(highs, lows, closes, n=14):
+    """Wilder's DMI/ADX。需要 OHLC（不能只有收盤價）。回傳 {"plus_di","minus_di","adx"} 或 None。"""
+    if len(highs) < n + 1:
+        return None
+    plus_dm, minus_dm, tr = [], [], []
+    for i in range(1, len(highs)):
+        up_move = highs[i] - highs[i - 1]
+        down_move = lows[i - 1] - lows[i]
+        plus_dm.append(up_move if (up_move > down_move and up_move > 0) else 0.0)
+        minus_dm.append(down_move if (down_move > up_move and down_move > 0) else 0.0)
+        tr.append(max(
+            highs[i] - lows[i],
+            abs(highs[i] - closes[i - 1]),
+            abs(lows[i] - closes[i - 1]),
+        ))
+
+    def wilder_smooth(values, period):
+        if len(values) < period:
+            return None
+        smoothed = [sum(values[:period])]
+        for v in values[period:]:
+            smoothed.append(smoothed[-1] - smoothed[-1] / period + v)
+        return smoothed
+
+    smoothed_tr = wilder_smooth(tr, n)
+    smoothed_plus_dm = wilder_smooth(plus_dm, n)
+    smoothed_minus_dm = wilder_smooth(minus_dm, n)
+    if not smoothed_tr or not smoothed_plus_dm or not smoothed_minus_dm:
+        return None
+
+    plus_di = [100.0 * pdm / t if t else 0.0 for pdm, t in zip(smoothed_plus_dm, smoothed_tr)]
+    minus_di = [100.0 * mdm / t if t else 0.0 for mdm, t in zip(smoothed_minus_dm, smoothed_tr)]
+    dx = [100.0 * abs(p - m) / (p + m) if (p + m) else 0.0 for p, m in zip(plus_di, minus_di)]
+    adx = sum(dx[-n:]) / min(len(dx), n)
+
+    return {"plus_di": plus_di[-1], "minus_di": minus_di[-1], "adx": adx}
+
+
 def _round(v, d=2):
     return None if v is None else round(v, d)
 
@@ -116,6 +165,22 @@ if __name__ == "__main__":
     # 6) 7-day change — closes 1..100, last=100, 7d-ago=93 -> (100/93-1)*100
     seq = list(range(1, 101))
     check("chg_pct(1..100, 7)", chg_pct([float(x) for x in seq], 7), 700.0 / 93.0, tol=1e-9)
+
+    # 7) Bollinger — 10 closes at 90 + 10 closes at 110: mid=100, pop-std=10, upper=120, lower=80
+    bb = bollinger_bands([90.0] * 10 + [110.0] * 10, n=20, k=2.0)
+    check("bollinger mid", bb["mid"], 100.0)
+    check("bollinger upper", bb["upper"], 120.0)
+    check("bollinger lower", bb["lower"], 80.0)
+
+    # 8) DMI — 15-candle pure uptrend, high/low/close each rising by 1/day, close = high-1
+    #    (hand-derived: plus_dm=1, minus_dm=0, tr=2 every day -> plus_di=50, minus_di=0, adx=100)
+    dmi_highs = [10.0 + i for i in range(15)]
+    dmi_lows = [8.0 + i for i in range(15)]
+    dmi_closes = [9.0 + i for i in range(15)]
+    d = dmi(dmi_highs, dmi_lows, dmi_closes, n=14)
+    check("dmi plus_di", d["plus_di"], 50.0)
+    check("dmi minus_di", d["minus_di"], 0.0)
+    check("dmi adx", d["adx"], 100.0)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:
