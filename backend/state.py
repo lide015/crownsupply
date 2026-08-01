@@ -17,6 +17,7 @@ class AppState:
         self.markets_cache: dict = {"tw_stocks": {}, "us_stocks": {}, "commodities": {}}
         self.smc_cache: dict = {"structure": "insufficient_data", "last_event": None, "fvgs": []}
         self.trade_plan_cache: dict = {"available": False}
+        self.analysis_cache: dict = {}  # 台股/美股/商品代表性標的的獨立分析，見 fetcher.EXTRA_ANALYSIS_SYMBOLS
 
 
 class ConnectionManager:
