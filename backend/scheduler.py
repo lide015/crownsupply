@@ -111,6 +111,33 @@ async def job_fetch_ohlc():
     STATE.trade_plan_cache = trade_plan.build_trade_plan(ohlc_rows, STATE.indicators_cache, STATE.smc_cache)
 
 
+async def job_fetch_extra_analysis():
+    """台股／美股／商品各挑一檔代表性標的（見 fetcher.EXTRA_ANALYSIS_SYMBOLS）做獨立技術分析，
+    跟 BTC 用同一套 indicators/smc/trade_plan，資料來源 Yahoo Finance 歷史日K。"""
+    for key, yahoo_symbol in fetcher.EXTRA_ANALYSIS_SYMBOLS.items():
+        try:
+            rows = await asyncio.to_thread(fetcher.fetch_yahoo_ohlc, yahoo_symbol, 100)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("fetch_yahoo_ohlc(%s) failed, keeping cached analysis: %s", yahoo_symbol, exc)
+            continue
+        if not rows:
+            continue
+
+        db.upsert_ohlc(key, rows)
+        ohlc_rows = db.get_ohlc(key, 100)
+        closes = [r[4] for r in ohlc_rows]
+        ind = indicators.compute_indicators(closes)
+        smc_res = smc.compute_smc(ohlc_rows)
+        plan = trade_plan.build_trade_plan(ohlc_rows, ind, smc_res)
+        STATE.analysis_cache[key] = {
+            "symbol": key,
+            "price": closes[-1] if closes else None,
+            "indicators": ind,
+            "smc": smc_res,
+            "trade_plan": plan,
+        }
+
+
 async def job_fetch_markets():
     """台股 / 美股 / 大宗商品期貨 — 預設觀察清單，見 fetcher.py 的 TW_STOCKS/US_STOCKS/COMMODITIES。"""
     try:
@@ -134,6 +161,7 @@ def create_scheduler() -> AsyncIOScheduler:
     sched.add_job(job_fetch_fng, "interval", minutes=60, id="fetch_fng", max_instances=1)
     sched.add_job(job_fetch_klines, "interval", minutes=60, id="fetch_klines", max_instances=1)
     sched.add_job(job_fetch_ohlc, "interval", minutes=60, id="fetch_ohlc", max_instances=1)
+    sched.add_job(job_fetch_extra_analysis, "interval", minutes=60, id="fetch_extra_analysis", max_instances=1)
     sched.add_job(job_fetch_markets, "interval", minutes=5, id="fetch_markets", max_instances=1)
     sched.add_job(job_prune, "cron", hour=4, minute=0, id="prune", max_instances=1)
     return sched
@@ -150,6 +178,9 @@ async def _run_once_test_mode():
     await job_fetch_ohlc()
     print(f"fetch_ohlc done, smc_cache={STATE.smc_cache}")
     print(f"trade_plan_cache={STATE.trade_plan_cache}")
+
+    await job_fetch_extra_analysis()
+    print(f"fetch_extra_analysis done, analysis_cache={STATE.analysis_cache}")
 
     await job_fetch_fng()
     print(f"fetch_fng done, fng_cache={STATE.fng_cache}")

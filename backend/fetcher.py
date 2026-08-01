@@ -184,3 +184,30 @@ def fetch_us_stocks() -> dict:
 
 def fetch_commodities() -> dict:
     return _fetch_yahoo_group(COMMODITIES)
+
+
+# 各資產類別的「代表性標的」，用來做獨立技術分析（RSI/SMA/SMC/交易計畫）——
+# 跟 BTC 代表整個加密貨幣頁面同一個邏輯。想換代表標的就改這裡。
+EXTRA_ANALYSIS_SYMBOLS = {"TWII": "^TWII", "SPY": "SPY", "GC": "GC=F"}
+
+
+def fetch_yahoo_ohlc(symbol: str, days: int = 100) -> list[tuple[str, float, float, float, float, float]]:
+    """任一 Yahoo Finance 代碼的歷史日K（升冪）。台股用 .TW／^TWII 這類代碼，
+    美股/商品用原生代碼（AAPL、GC=F）。回傳 [(day, open, high, low, close, volume), ...]。"""
+    data = _get_json(
+        YAHOO_CHART_URL.format(symbol=symbol),
+        params={"range": f"{days}d", "interval": "1d"},
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
+    result = data["chart"]["result"][0]
+    timestamps = result["timestamp"]
+    quote = result["indicators"]["quote"][0]
+    out = []
+    for i, ts in enumerate(timestamps):
+        o, h, low, c = quote["open"][i], quote["high"][i], quote["low"][i], quote["close"][i]
+        if o is None or h is None or low is None or c is None:
+            continue  # Yahoo 對非交易日／缺漏資料會回傳 null，跳過
+        vol = quote["volume"][i] or 0.0
+        day = time.strftime("%Y-%m-%d", time.gmtime(ts))
+        out.append((day, float(o), float(h), float(low), float(c), float(vol)))
+    return out

@@ -20,7 +20,14 @@ backend/
 ├─ db.py            # SQLite 連線、schema、讀寫函式（WAL 模式）
 ├─ scheduler.py      # APScheduler 任務定義與註冊（含測試模式）
 └─ state.py         # 進程內記憶體快取（最新快照）＋ WS 連線管理器
-frontend/           # Vite + React（《節流晨報》頁面）
+frontend/src/
+├─ App.jsx           # 極簡路由（不用 react-router-dom，見下方說明），依路徑分派到各頁面
+├─ router.jsx         # 自製 useRoute() hook（history API），4 個靜態頁面不需要完整路由庫
+├─ shared.jsx         # 跨頁共用：配色、格式化函式、Tag/SectionHead 等小元件
+├─ Nav.jsx            # 頂部導覽列（加密貨幣／台股／美股／大宗商品）
+└─ pages/
+   ├─ CryptoPage.jsx   # 原《節流晨報》主頁：BTC/ETH/SOL/BNB、AI 管線、學習室（唯一會呼叫 AI 的頁面）
+   └─ AnalysisPage.jsx # 台股/美股/商品共用的獨立分析頁（RSI/SMC/交易計畫），依 symbol prop 切換
 data/brief.db       # SQLite（自動建立，已 .gitignore）
 scripts/
 ├─ smoke.ps1        # 驗收煙霧測試（REST + WebSocket）
@@ -99,10 +106,11 @@ python -m backend.scheduler    # 測試模式：跑一輪所有排程任務，�
                      "reasons": [...], "disclaimer": "本地規則式合成，非 AI 研判、非投資建議" } }
   ```
 - `GET /api/history?hours=24` → snapshots 陣列（同上結構，最多 720 筆）
-- `GET /api/klines?symbol=BTC&days=90` → `[{ "day": "2026-07-30", "close": 96500.0 }, ...]`
+- `GET /api/klines?symbol=BTC&days=90` → `[{ "day": "2026-07-30", "close": 96500.0 }, ...]`；`symbol` 也接受 `TWII`/`SPY`/`GC`（見下方獨立分析頁）
 - `GET /api/smc?symbol=BTC` → 同快照裡的 `smc` 欄位
 - `GET /api/trade_plan?symbol=BTC` → 同快照裡的 `trade_plan` 欄位
-- `WS /ws` → 連上先推最新快照，之後每次排程更新即推播完整快照；M6 額外會推播 `{"type":"tick","symbol":"BTC","usd":...,"chg24":...}` 秒級價格更新；閒置 30 秒送一次 `{"type":"heartbeat","ts":...}` 心跳
+- `GET /api/analysis?symbol=TWII|SPY|GC` → 台股（加權指數）／美股（SPY）／商品（黃金期貨）代表性標的的獨立分析：`{ "symbol": "TWII", "price": ..., "indicators": {...}, "smc": {...}, "trade_plan": {...} }`
+- `WS /ws` → 連上先推最新快照，之後每次排程更新即推播完整快照（僅涵蓋加密貨幣頁）；M6 額外會推播 `{"type":"tick","symbol":"BTC","usd":...,"chg24":...}` 秒級價格更新；閒置 30 秒送一次 `{"type":"heartbeat","ts":...}` 心跳
 
 ## 排程表（跑在 `main.py` 進程內，APScheduler）
 
@@ -112,6 +120,7 @@ python -m backend.scheduler    # 測試模式：跑一輪所有排程任務，�
 | fetch_fng | 每 60 分 | 恐懼貪婪指數 |
 | fetch_klines | 每 60 分 | BTC 日 K（close-only）近 100 根 → upsert `kline_daily` → 重算 RSI/SMA/波動率/回撤 |
 | fetch_ohlc | 每 60 分 | BTC 完整 OHLCV 近 100 根（OKX）→ upsert `kline_ohlc_daily` → 重算 SMC 與交易計畫 |
+| fetch_extra_analysis | 每 60 分 | 台股（^TWII）／美股（SPY）／商品（GC=F）代表性標的的完整 OHLCV（Yahoo）→ 重算各自的 RSI/SMC/交易計畫 |
 | fetch_markets | 每 5 分 | 台股（TWSE）／美股／大宗商品期貨（Yahoo Finance）預設觀察清單 |
 | prune | 每日 04:00 | 清 30 天前的 snapshots |
 | OKX WS（M6） | 常駐背景任務，非排程 | 連 OKX public WebSocket，秒級 tick 直推所有 `/ws` 連線；斷線自動重連（指數退避，2s→60s） |
@@ -129,6 +138,22 @@ python -m backend.scheduler    # 測試模式：跑一輪所有排程任務，�
 | 台股即時 | `GET https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw\|tse_2317.tw\|...`（預設：加權指數、台積電、鴻海、聯發科） |
 | 美股／大宗商品 | `GET https://query1.finance.yahoo.com/v8/finance/chart/{symbol}`（美股預設：SPY/AAPL/MSFT/NVDA；商品預設：黃金 GC=F／WTI原油 CL=F／白銀 SI=F） |
 | OKX 秒級行情（M6，WebSocket） | `wss://ws.okx.com:8443/ws/v5/public`，訂閱 `tickers` 頻道 |
+| 獨立分析用歷史日K（台股/美股/商品） | `GET https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=100d&interval=1d`（`^TWII`／`SPY`／`GC=F`，同一支函式服務三個資產類別） |
+
+## 多頁架構（台股／美股／加密貨幣／大宗商品各自獨立）
+
+前端不是單頁，是 4 個獨立頁面，各自獨立抓資料、獨立跑分析：
+
+| 路徑 | 頁面 | 代表性標的 | 說明 |
+|---|---|---|---|
+| `/` | 加密貨幣 | BTC/ETH/SOL/BNB | 原《節流晨報》，唯一有 AI 管線（條件閘門控管）的頁面 |
+| `/tw` | 台股 | 加權指數（^TWII） | RSI/SMC/交易計畫，零 AI |
+| `/us` | 美股 | S&P 500 ETF（SPY） | 同上 |
+| `/commodities` | 大宗商品 | 黃金期貨（GC=F） | 同上 |
+
+沒有裝 `react-router-dom`——當下所有已發布版本都落在已知高風險 CVE 區間（RSC/SSR/prerender 相關，跟這個純前端 SPA 用不到的功能有關），而 4 個靜態頁面的路由需求很簡單，所以 `frontend/src/router.jsx` 自己用瀏覽器 `history` API 寫了一個十幾行的 `useRoute()` hook，換路徑不用重新整理頁面（但直接打網址或重新整理某個子頁面，後端 `main.py` 有做 SPA fallback，會照樣正確回傳 `index.html` 交給前端路由接手）。
+
+`/tw`、`/us`、`/commodities` 三頁共用同一個 `pages/AnalysisPage.jsx` 元件（用 `symbol` prop 切換資料來源），跟 `/` 的 `pages/CryptoPage.jsx` 分開——因為加密貨幣頁面多了 WS 秒級推播、AI 管線、學習室這些跟其他三頁不對稱的功能，硬要共用反而複雜。
 
 > 台股／美股／大宗商品都是**預設觀察清單**，不是全市場，想調整就改 `backend/fetcher.py` 裡的 `TW_STOCKS` / `US_STOCKS` / `COMMODITIES` 三個 dict。
 
