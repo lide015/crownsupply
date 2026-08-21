@@ -65,7 +65,7 @@
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-base font-semibold text-gray-300 flex items-center">
-          <span class="mr-2">📰</span> AI 即時新聞情緒大腦
+          <span class="mr-2">📰</span> AI 即時新聞情緒大腦（整體市場）
         </h2>
         <span id="ai-sentiment" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400">
           尚未分析
@@ -75,6 +75,10 @@
         <p id="news-headline" class="text-gray-200 text-sm leading-relaxed">按上方「立即分析」開始第一次掃描。</p>
         <p id="news-reason" class="text-gray-500 text-xs leading-relaxed"></p>
       </div>
+      <p class="text-[11px] text-gray-600 mt-2 leading-relaxed">
+        這裡是不分標的的整體市場情緒。每一檔訊號卡片下方另外會顯示<b>那一檔專屬</b>的新聞（如果有查到的話）——
+        不是每張卡片都套用同一份新聞，同一次分析、同一次 AI 呼叫問完，不會多燒 token。
+      </p>
     </section>
 
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
@@ -464,6 +468,10 @@ function renderDashboard(data) {
       <div class="text-xs text-gray-400 bg-gray-950/50 p-2.5 rounded border border-gray-800/60 leading-relaxed">
         <span class="font-semibold text-indigo-400">大腦研判：</span>${sig.reason}
       </div>
+      ${sig.news_headline ? `<div class="text-xs text-gray-500 bg-gray-950/30 p-2.5 rounded border border-gray-800/40 leading-relaxed">
+        <span class="font-semibold text-gray-400">📰 ${sig.name} 相關新聞：</span>${sig.news_headline}
+        ${sig.news_reason ? `<div class="text-gray-600 mt-1">${sig.news_reason}</div>` : ""}
+      </div>` : ""}
       ${sig.signal_type ? `<button class="calc-fill-btn w-full text-xs px-3 py-1.5 rounded-lg border border-indigo-800 text-indigo-400 hover:bg-indigo-950/40 transition-colors">🧮 用此訊號試算倉位</button>` : ""}`;
     if (sig.signal_type) {
       card.querySelector(".calc-fill-btn").addEventListener("click", () => fillCalcFromSignal(sig));

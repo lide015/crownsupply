@@ -11,6 +11,11 @@ state.STATE。刻意**不是**背景排程——沒有 while True + sleep 的自
    打一次免費公開的恐懼貪婪指數 API——零 AI 成本。
 5. 抓每檔商品的合約未平倉量（OI），跟上次分析週期比較出變化幅度（見 oi_tracker.py），
    當「推薦強度榜」籌碼面維度的資料來源（見 ranking.py）。
+
+新聞情緒判讀刻意放在「OKX 篩選出這輪實際監控哪些商品」**之後**才做（不是開頭第一步）：
+要先知道這輪到底在看哪幾檔商品，才能各自搜尋「這檔」的專屬新聞，而不是每一檔訊號都套用
+同一份籠統的整體市場情緒（見 news_client.py 的說明）。逐檔判讀跟整體市場判讀塞在同一次
+AI 呼叫裡問完，不會因為監控檔數變多就跟著燒更多 AI token。
 """
 import logging
 import time
@@ -23,15 +28,6 @@ from .state import STATE
 BTC_INST_ID = "BTC-USDT-SWAP"  # 山寨季代理指標的比較基準（見 market_pulse.py 說明）
 
 logger = logging.getLogger("background")
-
-
-async def _refresh_news(client: httpx.AsyncClient):
-    """每次呼叫都是使用者主動按下按鈕的結果，所以每次都抓最新新聞、重新判斷情緒，
-    不做時間快取節流（節流的意義在自動背景輪詢；手動觸發本身就是節流）。"""
-    sentiment = await news_client.get_market_sentiment(client)
-    STATE.market_sentiment = sentiment["sentiment"]
-    STATE.news_headline = sentiment["headline"]
-    STATE.news_reason = sentiment["reason"]
 
 
 async def _resolve_open_signals(client: httpx.AsyncClient):
@@ -164,11 +160,22 @@ async def _refresh_signals(client: httpx.AsyncClient):
     )
     STATE.monitored = monitored
 
-    sentiment = {
-        "sentiment": STATE.market_sentiment,
-        "headline": STATE.news_headline,
-        "reason": STATE.news_reason,
-    }
+    # --- 新聞情緒：現在知道這輪實際監控哪些商品了，逐檔查專屬新聞 + 整體市場，
+    # 塞進同一次 AI 呼叫問完（見 news_client.py 說明，不會因為監控檔數變多而多燒 AI token）。
+    news_targets = [
+        {"instId": item["instId"], "query": item["instId"].split("-")[0], "label": item["name"]}
+        for item in monitored
+    ]
+    try:
+        news = await news_client.get_market_and_instrument_sentiment(client, news_targets)
+    except Exception as exc:  # noqa: BLE001 — 新聞失敗不影響技術面訊號照常更新，維持上一輪的情緒
+        logger.warning("news refresh failed, keeping previous sentiment: %s", exc)
+        stale = {"sentiment": STATE.market_sentiment, "headline": STATE.news_headline, "reason": STATE.news_reason}
+        news = {"market": stale, "by_instrument": {t["instId"]: stale for t in news_targets}}
+    STATE.market_sentiment = news["market"]["sentiment"]
+    STATE.news_headline = news["market"]["headline"]
+    STATE.news_reason = news["market"]["reason"]
+    sentiment_by_inst = news["by_instrument"]
 
     signals = []
     rsi_values = []
@@ -199,6 +206,10 @@ async def _refresh_signals(client: httpx.AsyncClient):
         # 推薦強度榜「籌碼面」維度用的附加資料（見 ranking.py / oi_tracker.py）。
         oi_delta = await _fetch_oi_delta(client, inst_id, now_ms)
 
+        # 這檔專屬的新聞情緒（查不到專屬新聞時，news_client 已經 fallback 成整體市場情緒，
+        # 這裡不用再判斷一次「有沒有資料」）。
+        sentiment = sentiment_by_inst.get(inst_id, news["market"])
+
         fused = brain.fuse(tech, sentiment)
         signals.append({
             "name": item["name"],
@@ -215,6 +226,8 @@ async def _refresh_signals(client: httpx.AsyncClient):
             "amplitude_pct": item["amplitude_pct"],
             "signal_type": tech["signal"] if tech else None,
             "ai_sentiment": sentiment["sentiment"],
+            "news_headline": sentiment.get("headline"),
+            "news_reason": sentiment.get("reason"),
             "rsi": rsi,
             "oi_change_pct": oi_delta["oi_change_pct"],
             "oi_label": oi_delta["label"],
@@ -248,14 +261,10 @@ async def _refresh_signals(client: httpx.AsyncClient):
 
 
 async def refresh_cycle(client: httpx.AsyncClient):
-    """完整跑一輪分析：新聞情緒 → 回頭結算舊訊號 → 商品篩選（可能已被自動優化調整）→
-    每檔的技術訊號 → 多空共振 → 記錄新訊號。由 app.py 在收到 POST /api/v1/analyze 時
-    呼叫，一次請求對應一輪，不重複、不背景自動跑。"""
-    try:
-        await _refresh_news(client)
-    except Exception as exc:  # noqa: BLE001 — 新聞失敗不影響技術面訊號照常更新
-        logger.warning("news refresh failed, keeping previous sentiment: %s", exc)
-
+    """完整跑一輪分析：回頭結算舊訊號 → 商品篩選（可能已被自動優化調整）→ 逐檔新聞情緒
+    （見 _refresh_signals 內部說明，故意排在篩選「之後」才做）→ 每檔的技術訊號 → 多空共振
+    → 記錄新訊號。由 app.py 在收到 POST /api/v1/analyze 時呼叫，一次請求對應一輪，
+    不重複、不背景自動跑。"""
     try:
         await _resolve_open_signals(client)
     except Exception as exc:  # noqa: BLE001 — 舊訊號結算失敗不該擋住本輪新訊號的產生

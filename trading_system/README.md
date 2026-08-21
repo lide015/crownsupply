@@ -22,7 +22,7 @@
 ```
 trading_system/
 ├─ app.py            # FastAPI 進入點：REST API（含手動觸發用的 POST /api/v1/analyze）+ 掛載 index.html
-├─ background.py      # 分析邏輯：新聞 → 結算舊訊號 → OKX 篩選 → K線 → 技術訊號 → 融合 AI 新聞情緒，跑一輪
+├─ background.py      # 分析邏輯：結算舊訊號 → OKX 篩選 → 逐檔+整體 AI 新聞情緒 → K線 → 技術訊號 → 融合，跑一輪
 ├─ okx_client.py       # OKX public REST：商品篩選（screen_active_instruments）+ K線抓取
 ├─ strategy.py          # 技術面大腦：20 EMA + 盤整盒子突破（純函式，內建自測）
 ├─ news_client.py        # AI 新聞大腦：抓 RSS 頭條 → LLM 判斷多空情緒（Anthropic/OpenAI）
@@ -249,11 +249,18 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 停損固定設在盒子中線；停利用風報比算：risk = │進場價 − 停損價│，TP1 = 進場價 ± risk × `TP1_RR`
 （預設 1.5，可先減碼）、TP2 = 進場價 ± risk × `TP2_RR`（預設 2.0，留給趨勢延續的部位）。
 
-**AI 新聞情緒**（`news_client.py`）：抓 CoinDesk／CoinTelegraph 公開 RSS 頭條，丟給 LLM 判斷
-整體市場是利多/利空/中性。
+**AI 新聞情緒**（`news_client.py`）：分兩層。整體市場情緒抓 CoinDesk／CoinTelegraph 公開 RSS
+頭條判斷；**每一檔實際被監控的商品另外各自查一次 Google News RSS**（免費公開、不需金鑰），
+讓「大腦研判」的新聞脈絡真的對到那一檔商品，而不是不管哪一檔訊號都套用同一份籠統的市場
+情緒——一檔比特幣訊號跟一檔完全不相干的小幣訊號，過去會顯示一模一樣的新聞理由，這是不準確
+的，現在會分開判讀。**兩層判讀塞在同一次 AI 呼叫裡問完**（`get_market_and_instrument_sentiment`），
+不管監控幾檔商品，一次分析永遠只燒一次 AI token；查不到某檔的專屬新聞，畫面上會老實顯示
+「沒有找到該標的專屬新聞，套用整體市場情緒」，不會假裝有資料。新聞抓取沒有任何時間快取，
+每次「立即分析」都重新抓最新的——手動觸發本身就已經是節流，資料本來就是即時的。
 
-**多空共振**（`brain.py`）：技術面訊號跟 AI 新聞情緒同向 → 標記「強烈做多/做空」；技術面突破但
-AI 新聞情緒明確反向 → 標記「潛在假突破，觀望」並不建議進場；AI 新聞中性或未啟用 → 顯示純技術面訊號。
+**多空共振**（`brain.py`）：技術面訊號跟該檔的 AI 新聞情緒同向 → 標記「強烈做多/做空」；技術面
+突破但該檔新聞情緒明確反向 → 標記「潛在假突破，觀望」並不建議進場；該檔新聞中性或 AI 未啟用
+→ 顯示純技術面訊號。
 
 ## 股票永續合約（Stock Perpetuals）支援狀況
 
