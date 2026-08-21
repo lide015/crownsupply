@@ -17,6 +17,11 @@ class SystemState:
         self.monitored: list[dict] = []
         self.signals: list[dict] = []
         self.last_error: str | None = None
+        # 訊號結果追蹤與自動優化（見 db.py / outcome_tracker.py / strategy_tuner.py）
+        self.win_rate_stats: dict = {"total": 0, "wins": 0, "losses": 0, "win_rate_pct": None}
+        self.recent_resolved: list[dict] = []
+        self.tuning_note: str | None = None  # 這一輪如果剛好觸發自動優化，放調整理由；沒有就 None
+        self.effective_min_amplitude_pct: float = 0.0  # 目前實際生效的振幅門檻（可能已被自動優化調整過）
 
 
 STATE = SystemState()

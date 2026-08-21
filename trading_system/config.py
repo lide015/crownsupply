@@ -48,3 +48,10 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 # 沒有背景排程、沒有自動輪詢——分析只在使用者按下「立即分析」時才觸發一輪，
 # 用量由點擊次數決定，不需要額外的節流間隔設定。
+
+# ---- 訊號結果追蹤與自動優化（見 db.py / outcome_tracker.py / strategy_tuner.py） ----
+# 每次分析時回頭檢查未結算訊號要抓多少根已收盤 K 線（OKX /market/candles 單次上限 300）
+RESOLUTION_LOOKBACK_CANDLES = int(os.getenv("RESOLUTION_LOOKBACK_CANDLES", "300"))
+# 訊號追蹤超過這麼久還沒結果就標記為「逾期」，不再無限期追蹤——當沖訊號本來就不該留倉過夜，
+# 拖過這個時限代表已經失去「當沖」的參考意義。預設 25 小時（涵蓋隔一天再來看的情況）。
+SIGNAL_EXPIRE_HOURS = float(os.getenv("SIGNAL_EXPIRE_HOURS", "25"))

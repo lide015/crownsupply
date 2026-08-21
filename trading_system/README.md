@@ -19,12 +19,15 @@
 ```
 trading_system/
 ├─ app.py            # FastAPI 進入點：REST API（含手動觸發用的 POST /api/v1/analyze）+ 掛載 index.html
-├─ background.py      # 分析邏輯：OKX 篩選 → K線 → 技術訊號 → 融合 AI 新聞情緒，跑一輪
+├─ background.py      # 分析邏輯：新聞 → 結算舊訊號 → OKX 篩選 → K線 → 技術訊號 → 融合 AI 新聞情緒，跑一輪
 ├─ okx_client.py       # OKX public REST：商品篩選（screen_active_instruments）+ K線抓取
 ├─ strategy.py          # 技術面大腦：20 EMA + 盤整盒子突破（純函式，內建自測）
 ├─ news_client.py        # AI 新聞大腦：抓 RSS 頭條 → LLM 判斷多空情緒（Anthropic/OpenAI）
 ├─ brain.py               # 多空共振：技術面 + AI 情緒融合成最終建議（純函式，內建自測）
-├─ state.py                # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
+├─ outcome_tracker.py      # 訊號結果模擬 + 失效原因判斷（純規則，零 AI 成本，內建自測）
+├─ strategy_tuner.py        # 勝率偏低時自動調高篩選門檻（純函式，內建自測）
+├─ db.py                     # SQLite：訊號歷史 + 自動優化後的參數，跨重啟持續累積
+├─ state.py                   # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
 ├─ index.html                # 網頁前端：🎯當沖訊號／📚知識宇宙 兩個分頁的單一 SPA
 ├─ static/tailwind.css        # 編譯好的樣式表（已 commit，見下方「前端樣式」），伺服器直接掛載 /static
 ├─ package.json                # 只用來跑 Tailwind CLI 編譯 static/tailwind.css，非必要不用裝
@@ -94,6 +97,8 @@ python -m trading_system.okx_client   # 商品篩選邏輯自測
 python -m trading_system.strategy     # 20 EMA + 盒子突破訊號自測
 python -m trading_system.brain        # 多空共振融合邏輯自測
 python -m trading_system.news_client  # JSON 解析（LLM 回覆容錯）自測
+python -m trading_system.outcome_tracker  # 訊號結果模擬 + 失效原因判斷自測
+python -m trading_system.strategy_tuner   # 自動優化門檻的判斷邏輯自測
 ```
 
 ## AI 新聞情緒 — 如何啟用
@@ -130,6 +135,34 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/dashboard` | GET | 讀取「上一次」分析結果的快取，不觸發新分析、不打任何外部 API |
 | `/api/v1/analyze` | POST | 觸發一輪全新分析（OKX 篩選＋K線＋AI 新聞情緒），跑完回傳結果；上一輪還沒跑完時回 `409` |
 | `/api/v1/health` | GET | 存活檢查 + 上次更新時間 + 上次錯誤訊息 |
+
+## 訊號結果追蹤與自動優化（零 AI 成本）
+
+每次按「立即分析」，`background._resolve_open_signals` 會先回頭檢查之前產生、還沒結算的
+訊號：抓該商品訊號產生「之後」的已收盤 K 線（`RESOLUTION_LOOKBACK_CANDLES`，預設 300 根、
+約 25 小時），純規則模擬先中停利還是停損（`outcome_tracker.simulate_resolution`）——只是
+多打幾次免費的 OKX K 線查詢，**不呼叫任何 AI**，符合「基本分析不要每次大量消耗用量」的
+設計目標。同一根 K 線內同時觸及停損與停利時，保守判定為停損（避免高估勝率）；TP1 達成後
+視為已經「成功」（模擬有先減碼的心態），之後就算拉回跌破停損也不會倒扣。追蹤超過
+`SIGNAL_EXPIRE_HOURS`（預設 25 小時）還沒有結果，標記為「逾期」，不再無限期追蹤——當沖
+訊號本來就不該留倉過夜。
+
+觸及停損時，`outcome_tracker.classify_failure_reason` 用純規則判斷可能的失效原因（一樣
+零 AI 成本）：突破後 1~2 根 K 線內就反轉（疑似插針假突破）、盤整盒子過窄（雜訊容易觸發
+停損）、進場當下離 20 EMA 太近（趨勢過濾條件邊緣）——找不到明顯弱點就老實說「可能是短期
+雜訊或市場氣氛轉變，不代表策略邏輯有誤」，不會硬掰一個聽起來很專業但沒根據的理由。
+
+累積 `strategy_tuner.MIN_SAMPLES`（預設 10）筆以上已驗證訊號後，如果勝率低於
+`LOW_WATERMARK_PCT`（預設 40%），自動把 `MIN_AMPLITUDE_PCT` 調高 `STEP`（預設 0.5，上限
+`MAX_AMPLITUDE_PCT` 8.0），篩掉波動較弱、雜訊較多的商品。**不是黑箱**：每次調整都會在畫面
+上顯示明確的理由（近幾筆勝率多少、從多少調到多少）；也不會對同一批舊資料重複調整——只有
+自從上次調整後有新的訊號結算，才會再評估一次。調整後的門檻存在 SQLite（`db.py`），跨重啟
+持續生效，不會每次重開伺服器就跑回預設值。想手動重置，刪除 `data/trading_system.db` 裡
+`strategy_params` 表對應的那一列即可（或直接刪掉整個檔案，重新累積歷史）。
+
+歷史資料存在 `data/trading_system.db`（跟 `backend/` 共用 repo 根目錄的 `data/` 資料夾，
+已在 `.gitignore` 排除）——這是本地檔案，純粹讓「訊號有沒有用」這件事跨重啟持續累積，
+不會傳到任何外部服務。
 
 ## 訊號邏輯
 

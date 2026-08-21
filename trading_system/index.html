@@ -77,6 +77,26 @@
       </div>
     </section>
 
+    <div id="tuning-banner" class="hidden bg-indigo-950/40 border border-indigo-800/60 text-indigo-300 text-xs px-4 py-3 rounded-lg">
+      ⚙️ <span id="tuning-note"></span>
+    </div>
+
+    <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-300 flex items-center">
+          <span class="mr-2">📊</span> 訊號結果追蹤（零 AI 成本，純規則判斷）
+        </h2>
+        <span id="win-rate-badge" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400">
+          尚無已驗證訊號
+        </span>
+      </div>
+      <p class="text-xs text-gray-500 leading-relaxed">
+        每次按「立即分析」時，系統會順便回頭檢查之前產生的訊號後來是中停利還是停損（只看 OKX 免費歷史 K 線，
+        不呼叫 AI）。累積夠多已驗證訊號後，勝率偏低會自動調高篩選門檻——上面有調整會顯示原因。
+      </p>
+      <div id="resolved-list" class="hidden space-y-2"></div>
+    </section>
+
     <section class="space-y-3">
       <h2 class="text-base font-semibold text-gray-300 flex items-center">
         <span class="mr-2">🎯</span> 多空雙向訊號面板（5 分鐘 K 線・20 EMA + 盤整盒子突破）
@@ -199,6 +219,66 @@ function fmt(v, d = 4) {
   return (v === null || v === undefined) ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: d });
 }
 
+function fmtTime(ms) {
+  if (!ms) return "—";
+  return new Date(ms).toLocaleString("zh-TW", { hour12: false });
+}
+
+function renderTuningBanner(note) {
+  const banner = document.getElementById("tuning-banner");
+  if (note) {
+    document.getElementById("tuning-note").textContent = note;
+    banner.classList.remove("hidden");
+  } else {
+    banner.classList.add("hidden");
+  }
+}
+
+function renderWinRate(stats) {
+  const badge = document.getElementById("win-rate-badge");
+  if (!stats || stats.total === 0) {
+    badge.textContent = "尚無已驗證訊號";
+    badge.className = "px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400";
+    return;
+  }
+  badge.textContent = `勝率 ${stats.win_rate_pct}%（${stats.total} 筆中 ${stats.wins} 勝 ${stats.losses} 負）`;
+  const healthy = stats.win_rate_pct >= 50;
+  badge.className = healthy
+    ? "px-3 py-1 text-xs font-bold rounded-full bg-green-950 text-green-400 border border-green-800"
+    : "px-3 py-1 text-xs font-bold rounded-full bg-red-950 text-red-400 border border-red-800";
+}
+
+const RESOLUTION_META = {
+  hit_tp1: { label: "✅ 中停利1", cls: "text-green-400" },
+  hit_tp2: { label: "✅ 中停利2", cls: "text-green-300" },
+  hit_sl:  { label: "❌ 觸及停損", cls: "text-red-400" },
+  expired: { label: "⏱️ 追蹤逾期", cls: "text-gray-500" },
+};
+
+function renderResolvedList(rows) {
+  const wrap = document.getElementById("resolved-list");
+  wrap.innerHTML = "";
+  if (!rows || rows.length === 0) {
+    wrap.classList.add("hidden");
+    return;
+  }
+  wrap.classList.remove("hidden");
+  for (const r of rows) {
+    const meta = RESOLUTION_META[r.resolution] || { label: r.resolution, cls: "text-gray-400" };
+    const div = document.createElement("div");
+    div.className = "bg-gray-950 border border-gray-800 rounded-lg p-3 text-xs space-y-1";
+    div.innerHTML = `
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-white font-semibold">${r.name}（${r.signal_type === "long" ? "做多" : "做空"}）</span>
+        <span class="${meta.cls} font-bold">${meta.label}</span>
+      </div>
+      <div class="text-gray-500 font-mono">進場 ${fmt(r.entry_price)} → 結算 ${fmt(r.resolution_price)}
+        <span class="text-gray-600">・${fmtTime(r.created_at)} → ${fmtTime(r.resolved_at)}</span></div>
+      ${r.failure_reason ? `<div class="text-gray-400 leading-relaxed"><span class="text-red-400 font-semibold">失效原因：</span>${r.failure_reason}</div>` : ""}`;
+    wrap.appendChild(div);
+  }
+}
+
 function renderDashboard(data) {
   document.getElementById("last-update").textContent = data.last_update || "尚未分析";
 
@@ -207,6 +287,10 @@ function renderDashboard(data) {
   sentimentEl.className = data.has_run ? (sentimentClass[data.market_sentiment] || sentimentClass.NEUTRAL) : sentimentClass.NEUTRAL;
   document.getElementById("news-headline").textContent = data.news_headline || "—";
   document.getElementById("news-reason").textContent = data.news_reason || "";
+
+  renderTuningBanner(data.tuning_note);
+  renderWinRate(data.win_rate_stats);
+  renderResolvedList(data.recent_resolved);
 
   const container = document.getElementById("signals-container");
   container.innerHTML = "";

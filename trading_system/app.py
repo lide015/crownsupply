@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import background, config
+from . import background, config, db
 from .state import STATE
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -36,6 +36,7 @@ _analyze_lock = asyncio.Lock()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _http_client
+    db.init_db()  # 訊號歷史／自動優化參數的 SQLite（見 db.py），純本地檔案，不連網
     # 只是建立可重複使用的連線池，開機當下不打任何 OKX/AI API——完全被動，等按鈕觸發。
     _http_client = httpx.AsyncClient(timeout=15.0, headers={"User-Agent": "Mozilla/5.0"})
     logger.info("http client ready, waiting for manual /api/v1/analyze trigger (no auto background polling)")
@@ -73,6 +74,10 @@ def _dashboard_payload() -> dict:
         "monitored": STATE.monitored,
         "signals": STATE.signals,
         "last_error": STATE.last_error,
+        "win_rate_stats": STATE.win_rate_stats,
+        "recent_resolved": STATE.recent_resolved,
+        "tuning_note": STATE.tuning_note,
+        "effective_min_amplitude_pct": STATE.effective_min_amplitude_pct,
         "disclaimer": "僅供訊號監控參考，非投資建議；本系統不執行任何自動化下單，也不會自動在背景分析。",
     }
 
