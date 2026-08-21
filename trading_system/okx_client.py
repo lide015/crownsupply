@@ -87,12 +87,25 @@ def parse_instruments(tickers: list[dict], extra_keywords: tuple = (), product_t
         if low <= 0:
             continue
         amplitude_pct = (high - low) / low * 100.0
+
+        # 24h 漲跌幅（有方向性，畫面上綠漲紅跌用這個，不是用 amplitude_pct——後者只是
+        # 當天最高最低的震盪幅度，沒有正負號）。open24h 缺漏或是 0 時給 None，
+        # 前端遇到 None 就不上色，不會亂猜方向。
+        change_pct = None
+        try:
+            open24h = float(t.get("open24h", ""))
+            if open24h > 0:
+                change_pct = round((last - open24h) / open24h * 100.0, 2)
+        except (TypeError, ValueError):
+            change_pct = None
+
         parsed.append({
             "instId": inst_id,
             "name": inst_id.replace("-SWAP", ""),
             "price": last,
             "vol_usdt": vol_usdt,
             "amplitude_pct": round(amplitude_pct, 2),
+            "change_pct": change_pct,
             "asset_class": asset_class(inst_id),
             "product_type": product_type,
         })
@@ -206,6 +219,21 @@ if __name__ == "__main__":
     spot_parsed = parse_instruments(spot_tickers, product_type="spot")
     check("spot parsing keeps only the spot pair", [c["instId"] for c in spot_parsed], ["BTC-USDT"])
     check("spot parsing tags product_type='spot'", spot_parsed[0]["product_type"], "spot")
+
+    # 7) change_pct：24h 漲跌幅（有方向性，畫面上綠漲紅跌要用這個，不是 amplitude_pct）
+    change_tickers = [
+        {"instId": "UP-USDT-SWAP", "last": "110.0", "volCcy24h": "60000000",
+         "high24h": "112.0", "low24h": "95.0", "open24h": "100.0"},   # 漲 +10%
+        {"instId": "DOWN-USDT-SWAP", "last": "90.0", "volCcy24h": "60000000",
+         "high24h": "105.0", "low24h": "88.0", "open24h": "100.0"},   # 跌 -10%
+        {"instId": "NOOPEN-USDT-SWAP", "last": "100.0", "volCcy24h": "60000000",
+         "high24h": "101.0", "low24h": "99.0"},                        # 沒有 open24h 欄位
+    ]
+    change_parsed = {c["instId"]: c for c in parse_instruments(change_tickers)}
+    check("change_pct computed correctly for a gain", change_parsed["UP-USDT-SWAP"]["change_pct"], 10.0)
+    check("change_pct computed correctly for a loss", change_parsed["DOWN-USDT-SWAP"]["change_pct"], -10.0)
+    check("change_pct is None when open24h is missing (no guessing direction)",
+          change_parsed["NOOPEN-USDT-SWAP"]["change_pct"], None)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

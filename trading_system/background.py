@@ -171,6 +171,7 @@ async def analyze_one_instrument(
         "take_profit_2": tech["take_profit_2"] if tech else None,
         "vol_usdt": item["vol_usdt"],
         "amplitude_pct": item["amplitude_pct"],
+        "change_pct": item.get("change_pct"),
         "signal_type": tech["signal"] if tech else None,
         "ai_sentiment": sentiment["sentiment"],
         "news_headline": sentiment.get("headline"),
