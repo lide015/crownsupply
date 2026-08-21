@@ -10,9 +10,28 @@ logger = logging.getLogger("okx_client")
 OKX_TICKERS_URL = "https://www.okx.com/api/v5/market/tickers"
 OKX_CANDLES_URL = "https://www.okx.com/api/v5/market/candles"
 
+# OKX 於 2026 年上線「股票永續合約」（Stock Perpetuals / Equity Perpetual Swaps），
+# USDT 計價、24/7 交易，涵蓋 Magnificent 7 等指標股。只用來在畫面上標示資產類別，
+# 不影響篩選邏輯——篩選一律只看成交額/振幅，不分加密貨幣或股票。
+# 這份清單是目前已由多方新聞來源確認的品項；OKX 之後可能繼續擴充，若畫面上出現
+# 沒被標到「📈 股票永續」的新股票商品，把它的代碼加進這裡即可。
+KNOWN_STOCK_TICKERS = {
+    "TSLA", "AAPL", "NVDA", "GOOGL", "GOOG", "MSFT", "AMZN", "META",
+}
+
+
+def asset_class(inst_id: str) -> str:
+    """回傳 "stock" 或 "crypto"，純粹用於畫面標籤，不影響任何篩選/訊號邏輯。"""
+    base = inst_id.split("-")[0].upper()
+    base = base[1:] if base.startswith("X") and base[1:] in KNOWN_STOCK_TICKERS else base
+    return "stock" if base in KNOWN_STOCK_TICKERS else "crypto"
+
 
 async def fetch_swap_tickers(client: httpx.AsyncClient) -> list[dict]:
-    """抓取 OKX 所有 USDT 本位永續合約（SWAP）的 24h ticker 快照。"""
+    """抓取 OKX 所有 USDT 本位永續合約（SWAP）的 24h ticker 快照。
+    這裡不分加密貨幣或股票永續合約——兩者目前都掛在同一個 instType=SWAP 底下，
+    只要商品 instId 符合 -USDT-SWAP 後綴，就會一起進到 screen_active_instruments()
+    的篩選池，用同一套成交額/振幅門檻、同一套 20 EMA + 盒子策略。"""
     resp = await client.get(OKX_TICKERS_URL, params={"instType": "SWAP"})
     resp.raise_for_status()
     data = resp.json()
@@ -57,6 +76,7 @@ def screen_active_instruments(
                 "price": last,
                 "vol_usdt": vol_usdt,
                 "amplitude_pct": round(amplitude_pct, 2),
+                "asset_class": asset_class(inst_id),
             })
     candidates.sort(key=lambda c: c["amplitude_pct"], reverse=True)
     return candidates[:top_n]
@@ -126,6 +146,12 @@ if __name__ == "__main__":
     extra = [{"instId": "GOLD-USD-SWAP", "last": "2000", "volCcy24h": "60000000", "high24h": "2100", "low24h": "2000"}]
     result3 = screen_active_instruments(extra, min_vol_usdt=50_000_000, min_amplitude_pct=1.0, extra_keywords=("GOLD",))
     check("extra_keywords includes GOLD instrument", [c["instId"] for c in result3], ["GOLD-USD-SWAP"])
+
+    # 4) asset_class 標籤：股票永續合約 vs 加密貨幣
+    check("asset_class TSLA-USDT-SWAP -> stock", asset_class("TSLA-USDT-SWAP"), "stock")
+    check("asset_class BTC-USDT-SWAP -> crypto", asset_class("BTC-USDT-SWAP"), "crypto")
+    check("asset_class XTSLA-USDT-SWAP -> stock (X 前綴也認得)", asset_class("XTSLA-USDT-SWAP"), "stock")
+    check("screen_active_instruments tags asset_class", result[0]["asset_class"], "crypto")
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

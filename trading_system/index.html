@@ -33,6 +33,22 @@
 
 <main class="max-w-7xl mx-auto p-6 space-y-6">
 
+  <details class="bg-gray-900 border border-gray-800 rounded-xl shadow-lg group">
+    <summary class="cursor-pointer select-none px-5 py-4 flex items-center justify-between text-gray-300 font-semibold">
+      <span class="flex items-center"><span class="mr-2">📚</span> 新手教學：這些數字是什麼意思？</span>
+      <span class="text-xs text-gray-500 group-open:hidden">點開展開</span>
+    </summary>
+    <div class="px-5 pb-5 space-y-3 text-sm text-gray-400 leading-relaxed border-t border-gray-800 pt-4">
+      <p><b class="text-indigo-400">20 EMA（20 週期指數移動平均線）</b>：把最近 20 根 K 線的收盤價取一個「越近期權重越高」的平均，用來判斷短線趨勢方向。價格在 EMA 之上通常視為偏多、之下視為偏空——這也是本系統「只做多不做空 / 只做空不做多」的判斷依據，不會兩邊都猜。</p>
+      <p><b class="text-indigo-400">盤整盒子（Box）</b>：價格在一段時間內上下小幅震盪，用最近 15 根已收盤 K 線的最高點與最低點框出一個區間。當某根 K 線的收盤價「站穩」盒子外面（不是影線碰到，是實體收盤價突破），才視為有效突破，避免插針假訊號。</p>
+      <p><b class="text-indigo-400">停損（Stop-Loss）</b>：這筆交易願意承受的最大虧損價位，固定設在盒子的中線。一旦價格跌破/漲破停損，代表原本的技術面假設不成立了，應該出場，不要心存僥倖。</p>
+      <p><b class="text-indigo-400">停利1 / 停利2（Take-Profit）</b>：用「風報比」（reward : risk）算出來的目標價——risk 是「進場價到停損價」的距離，停利1＝risk × 1.5 倍、停利2＝risk × 2 倍（皆可在 `.env` 調整）。常見做法是價格到停利1先減碼一半、剩下留到停利2，讓獲利部位有機會跟上更大的走勢。</p>
+      <p><b class="text-indigo-400">AI 新聞情緒</b>：抓即時財經新聞頭條，讓 AI 判斷市場整體氣氛是利多（BULLISH）、利空（BEARISH）還是中性（NEUTRAL）。</p>
+      <p><b class="text-indigo-400">多空共振</b>：技術面訊號（突破/跌破）跟 AI 新聞情緒方向一致時，才標記「強烈做多/做空」；如果技術面突破了但新聞情緒明確反向，會標記「潛在假突破，觀望」——這是系統刻意設計的煞車機制，避免逆著大方向硬做技術面訊號。</p>
+      <p class="text-yellow-500/80">⚠️ 以上全部是規則式技術分析的參考資訊，不是投資建議，過去的訊號不保證未來獲利，進場前務必自己再三確認。</p>
+    </div>
+  </details>
+
   <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-md font-semibold text-gray-300 flex items-center">
@@ -118,7 +134,12 @@ function renderDashboard(data) {
     card.className = `bg-gray-900 border ${style.border} rounded-xl p-5 shadow-md flex flex-col justify-between space-y-4`;
     card.innerHTML = `
       <div class="flex justify-between items-center gap-2">
-        <span class="text-lg font-bold tracking-wide text-white">${sig.name}</span>
+        <span class="flex items-center gap-2">
+          <span class="text-lg font-bold tracking-wide text-white">${sig.name}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400 whitespace-nowrap">
+            ${sig.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
+          </span>
+        </span>
         <span class="px-2.5 py-1 text-xs rounded ${style.badge} whitespace-nowrap">${sig.action}</span>
       </div>
       <div class="grid grid-cols-2 gap-2 text-xs font-mono bg-gray-950 p-3 rounded-lg border border-gray-800">

@@ -108,6 +108,35 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 **多空共振**（`brain.py`）：技術面訊號跟 AI 新聞情緒同向 → 標記「強烈做多/做空」；技術面突破但
 AI 新聞情緒明確反向 → 標記「潛在假突破，觀望」並不建議進場；AI 新聞中性或未啟用 → 顯示純技術面訊號。
 
+## 股票永續合約（Stock Perpetuals）支援狀況
+
+OKX 已於 2026 年上線股票永續合約（TSLA/AAPL/NVDA/GOOGL/MSFT/AMZN/META 等，USDT 計價、
+24/7 交易，形式跟加密貨幣永續合約一樣）。`screen_active_instruments()` 本身**不分資產
+類別**，只要商品 `instId` 符合 `*-USDT-SWAP` 且達到成交額/振幅門檻就會一起入選、套用
+同一套 20 EMA + 盒子策略——如果 OKX 把股票永續也掛在同一個 `instType=SWAP` 底下，
+理論上不需要額外開發就會自動出現在監控清單，畫面上會標「📈 股票永續」跟加密貨幣的
+「🪙 加密貨幣」區分開來（見 `okx_client.KNOWN_STOCK_TICKERS` / `asset_class()`）。
+
+這件事目前**還沒有實際對 API 驗證過**（開發環境的網路政策擋掉了 okx.com，連不上）。
+建議你在能連上 OKX 的機器上跑一次：
+
+```powershell
+# PowerShell
+(Invoke-RestMethod "https://www.okx.com/api/v5/market/tickers?instType=SWAP").data |
+  Where-Object { $_.instId -match "TSLA|AAPL|NVDA|GOOGL|MSFT|AMZN|META" } |
+  Select-Object instId, last
+```
+
+```bash
+# curl（Mac/Linux 或 Windows 的 WSL/Git Bash）
+curl -s "https://www.okx.com/api/v5/market/tickers?instType=SWAP" | \
+  grep -oE '"instId":"[^"]*(TSLA|AAPL|NVDA|GOOGL|MSFT|AMZN|META)[^"]*"'
+```
+
+跑出來如果看到類似 `TSLA-USDT-SWAP` 的結果，代表現有程式碼不用改就能撈到；如果命名
+格式不一樣（例如帶了其他前綴/後綴），把實際看到的代碼告訴我，我再調整
+`asset_class()` 的比對規則，或直接透過 `.env` 的 `EXTRA_INSTRUMENT_KEYWORDS` 手動納入。
+
 ## 跟 `backend/`（節流晨報）的關係
 
 完全獨立，兩者可以同時或分別運行，不共用程式碼、不共用資料庫、不共用連接埠（節流晨報用

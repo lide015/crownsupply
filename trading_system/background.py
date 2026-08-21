@@ -62,6 +62,7 @@ async def _refresh_signals(client: httpx.AsyncClient):
         signals.append({
             "name": item["name"],
             "instId": inst_id,
+            "asset_class": item["asset_class"],
             "price": tech["price"] if tech else item["price"],
             "ema": tech["ema"] if tech else None,
             "box_high": tech["box_high"] if tech else None,
