@@ -1,7 +1,8 @@
 # 投資理財知識宇宙（Investment Knowledge Universe）
 
 遊戲化的交易/投資知識學習平台——知識卡以視覺化知識圖呈現、搭配等級/XP/任務解鎖機制與
-AI 教練問答。目前狀態：**資料庫 schema 與第一批種子內容已部署完成，前端尚未開發**。
+AI 辯論空間。目前狀態：**資料庫、前端（卡片＋知識圖兩種檢視）、AI 辯論都已完成並可用；
+只有「使用者登入」還沒接（見下方 Next Steps），所以等級/XP/任務進度暫時不會被記錄**。
 
 跟 repo 裡的 `backend/`（節流晨報）是完全獨立的專案。**前端已經整合進 `trading_system/`**
 ——同一個網站的「📚 知識宇宙」分頁（見 `trading_system/index.html`），不是另外的獨立頁面；
@@ -49,56 +50,62 @@ Anon/publishable key 設計上就是給前端直接使用的公開金鑰，不�
 
 ```
 knowledge_universe/
-├─ schema.sql               # 完整資料庫結構（已部署，來源見上）
-├─ seed_knowledge_nodes.sql  # 第一批 17 張原創知識卡 + 8 條關聯 + 5 個任務（已部署）
-├─ .env.example               # SUPABASE_URL / SUPABASE_ANON_KEY 範本，供之後的前端使用
+├─ schema.sql                  # 完整資料庫結構（已部署，來源見上）
+├─ seed_knowledge_nodes.sql     # 第一批 17 張原創知識卡 + 8 條關聯 + 5 個任務（已部署）
+├─ seed_knowledge_nodes_2.sql    # 第二批 13 張原創知識卡 + 12 條關聯 + 3 個任務（已部署）
+├─ .env.example                   # SUPABASE_URL / SUPABASE_ANON_KEY 範本，供之後的前端使用
 └─ README.md
 ```
 
 ## 已部署的種子內容
 
-17 張知識卡，橫跨 schema 定義的 5 個分類：
+累計 **30 張知識卡**，橫跨 schema 定義的 5 個分類：
 
 | 分類 | 卡片 |
 |---|---|
-| 技術面 (technical) | 均線與趨勢判斷、盤整區間與突破交易、裸K/Price Action、中樞與背馳（結構分析）、多週期分析 |
-| 基本面 (fundamental) | 財報三表基礎、護城河與競爭優勢、成長股選股框架、指數化投資與持續買進 |
-| 籌碼面 (chips) | 三大法人籌碼觀察、融資融券與借券、股權分散表與大戶動向 |
-| 情緒面 (sentiment) | 恐懼貪婪與逆勢思維、交易心理與紀律、黑天鵝與尾部風險 |
-| 總經面 (macro) | 常用總經領先/落後指標、利率循環與資產價格 |
+| 技術面 (technical) | 均線與趨勢判斷、盤整區間與突破交易、裸K/Price Action、中樞與背馳、多週期分析、RSI/MACD 震盪指標、布林通道、支撐與壓力位 |
+| 基本面 (fundamental) | 財報三表基礎、護城河與競爭優勢、成長股選股框架、指數化投資、估值倍數、盈餘品質與現金流量、股息投資與殖利率 |
+| 籌碼面 (chips) | 三大法人籌碼觀察、融資融券與借券、股權分散表與大戶動向、選擇權 Put/Call 比率、期貨未平倉量 |
+| 情緒面 (sentiment) | 恐懼貪婪與逆勢思維、交易心理與紀律、黑天鵝與尾部風險、FOMO 與損失趨避、群眾心理與從眾效應、確認偏誤 |
+| 總經面 (macro) | 常用總經領先/落後指標、利率循環與資產價格、通膨與 CPI、殖利率曲線與衰退訊號 |
 
-多數卡片 `level_requirement=1`、`unlock_status='available'`（一開始就能看）；少數較進階的
-（中樞背馳、成長股選股框架、融資融券、黑天鵝、利率循環）設成 `level_requirement=2`、
-`unlock_status='locked'`，用來實際體現 schema 設計的等級解鎖機制——這幾張要等前端做出
-升級邏輯後才會真的解鎖，目前用 SQL 直接查還是看得到內容。
+多數卡片 `level_requirement=1`、`unlock_status='available'`（一開始就能看）；較進階的十張
+設成 `level_requirement=2`、`unlock_status='locked'`，體現 schema 設計的等級解鎖機制——
+目前前端沒有真的登入/等級判斷（見 Next Steps），鎖頭只是畫面上的示意，內容仍點得開。
 
-8 條 `knowledge_edges` 把幾張卡連成初步的知識脈絡（例如「均線判斷方向」→「盒子突破找進場
-時機」→「有訊號後紀律決定能不能執行」），5 個 `missions` 對應到其中 5 張卡片。
+20 條 `knowledge_edges` 把知識卡連成脈絡（例如「均線判斷方向」→「盒子突破找進場時機」→
+「有訊號後紀律決定能不能執行」），8 個 `missions` 對應到其中 8 張卡片。
 
 ## 已完成的前端（在 `trading_system/index.html` 裡）
 
-- 分類篩選（全部/技術面/基本面/籌碼面/情緒面/總經面）+ 卡片格狀列表。
-- 點卡片開詳情彈窗：核心原理、案例、常見錯誤、延伸概念（依 `knowledge_edges` 雙向找關聯卡）。
+- **兩種檢視**：🗂️ 卡片格狀列表，或 🗺️ 知識地圖（用 `position_x`/`position_y` 畫成 SVG
+  節點+連線圖，`knowledge_edges` 畫成連線，依分類上色，點節點一樣開詳情彈窗）——右上角
+  切換鈕即時互換，不用重新整理頁面。
+- 分類篩選（全部/技術面/基本面/籌碼面/情緒面/總經面），兩種檢視都吃這個篩選。
+- 詳情彈窗：核心原理、案例、常見錯誤、延伸概念（依 `knowledge_edges` 雙向找關聯卡）。
+- **🥊 AI 辯論空間**（詳情彈窗下半部）：針對這張知識卡跟 AI 多輪來回辯論，不是單次問答——
+  你的論點有道理 AI 會承認，講不通 AI 會指出問題在哪。無狀態設計：對話只存在瀏覽器分頁
+  記憶體，重新整理就清空，不會寫進 `ai_coach_sessions`（那張表的 RLS 需要真正登入才能寫，
+  見下方 Next Steps）。單輪辯論上限 16 則訊息（8 個來回），避免無限累積燒 AI token；
+  後端邏輯在 `trading_system/ai_coach.py`，走跟 `news_client.py` 一樣的 Anthropic/OpenAI
+  呼叫方式，沒金鑰時優雅顯示提示，不會讓頁面掛掉。
 - 任務列表，每個任務可連回對應的知識卡。
-- `unlock_status='locked'` 的卡片會顯示 🔒 等級門檻，但內容仍可點開查看——因為使用者系統
-  還沒接（見下），沒有真的登入/等級可以判斷，鎖頭目前只是示意 schema 設計的解鎖機制。
 
-尚未在此沙盒環境完整驗證（`supabase.co` 被開發環境的網路政策擋掉，同一份限制也擋了
-`okx.com`／`cdn.tailwindcss.com`）：用無頭瀏覽器確認過分頁切換的 JS 邏輯正確、
-`GET /api/v1/config` 正常回傳、Supabase 連線失敗時會被妥善攔截顯示錯誤訊息而不是整頁掛掉，
-但實際 Supabase 資料抓取要等你在自己電腦上開瀏覽器測試才能完整確認。Supabase 的
-PostgREST API 預設對所有來源開放 CORS，且已經用 MCP 工具直接查過資料庫確認資料存在、
-RLS policy 正確允許公開讀取，所以理論上沒有問題，只是沒辦法在這裡端到端跑一次。
+用無頭瀏覽器完整驗證過（這個開發環境連不到 `supabase.co`，用假資料模擬 Supabase 回傳來測，
+邏輯本身沒有網路依賴）：卡片/地圖檢視切換、篩選、彈窗、辯論送出成功與失敗兩種路徑（含
+失敗時正確把使用者那則訊息退回、不留半截對話）、多輪對話正確累積歷史。實際 Supabase 資料
+抓取跟真正呼叫 AI 金鑰，需要你在自己電腦上開瀏覽器測試才能完整確認——Supabase 的 REST API
+已經用 MCP 工具直接查過資料庫確認資料存在、RLS policy 正確允許公開讀取，理論上沒問題。
 
 ## 還沒做的事（Next Steps）
 
-1. **知識圖視覺化**：目前是卡片格狀列表，不是原本設想的節點+連線視覺化圖（`position_x`/
-   `position_y` 已經存在資料庫裡，可以之後拿來畫真正的圖）。
-2. **AI 教練**（`ai_coach_sessions`）：需要接 LLM API（可以參考 `trading_system/news_client.py`
-   接 Anthropic Claude API 的寫法），把使用者提問、選中的知識卡、AI 回答、弱點分析都寫進這張表。
-3. **使用者系統**：schema 已經預留 `auth.users` 關聯與 RLS policy，但還沒有實際串接
-   Supabase Auth 的登入流程，所以等級/XP/任務完成度目前都不會真的被記錄。
-4. **更多知識卡**：目前 17 張只涵蓋 Drive 書單所代表概念的一小部分，之後要擴充一樣要走
+1. **使用者系統**：schema 已經預留 `auth.users` 關聯與 RLS policy，但還沒有實際串接
+   Supabase Auth 的登入流程，所以等級/XP/任務完成度、AI 辯論紀錄目前都不會真的被記錄下來。
+   一個可以考慮、不用自己刻登入頁面的選項是 Supabase 的「匿名登入」（Anonymous Sign-ins）
+   ——訪客一進站就自動拿到一個 `auth.uid()`，滿足現有 RLS policy，不需要任何登入表單；
+   但那是 Dashboard 層級的 Auth Provider 設定，目前可用的 Supabase 工具查不到、也改不了，
+   需要你自己到 Supabase Dashboard 開啟。
+2. **更多知識卡**：30 張仍只涵蓋 Drive 書單所代表概念的一部分，之後要擴充一樣要走
    「原創改寫、不摘錄」的方針。
-5. **`dingyao-tw` 的 RLS 缺口**：獨立於這個知識平台之外，但仍然是待處理的安全問題，
+3. **`dingyao-tw` 的 RLS 缺口**：獨立於這個知識平台之外，但仍然是待處理的安全問題，
    需要你自己確認那個專案的用途與存取設計。

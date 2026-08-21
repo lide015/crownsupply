@@ -19,9 +19,20 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-from . import background, config, db
+from . import ai_coach, background, config, db
 from .state import STATE
+
+
+class CoachMessage(BaseModel):
+    role: str
+    content: str
+
+
+class CoachRequest(BaseModel):
+    node: dict
+    history: list[CoachMessage]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("app")
@@ -116,6 +127,15 @@ async def analyze():
             STATE.is_analyzing = False
 
     return _dashboard_payload()
+
+
+@app.post("/api/v1/coach")
+async def coach(req: CoachRequest):
+    """AI 辯論空間：每次呼叫都要帶完整對話歷史（無狀態，見 ai_coach.py 說明），不會存進
+    任何資料庫。回傳 {"reply": str|None, "error": str|None}。"""
+    assert _http_client is not None
+    history = [{"role": m.role, "content": m.content} for m in req.history]
+    return await ai_coach.debate_turn(_http_client, req.node, history)
 
 
 @app.get("/", response_class=HTMLResponse)

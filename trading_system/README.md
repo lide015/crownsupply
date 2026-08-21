@@ -6,9 +6,12 @@
 
 打開 `http://127.0.0.1:8000` 後，右上角有兩個分頁：
 - **🎯 當沖訊號**：原本的當沖訊號儀表板（見下方各節）。
-- **📚 知識宇宙**：知識卡瀏覽（依技術面/基本面/籌碼面/情緒面/總經面篩選、點卡片看詳情、
-  任務列表），直接用瀏覽器打 Supabase REST API 讀取，不用另外啟動伺服器，只需要這個
-  FastAPI app 透過 `/api/v1/config` 把 Supabase URL／anon key 交給前端。
+- **📚 知識宇宙**：知識卡瀏覽，卡片格狀列表／🗺️ 知識地圖（SVG 節點+連線圖）兩種檢視可切換，
+  依技術面/基本面/籌碼面/情緒面/總經面篩選、點卡片看詳情、任務列表、還有 **🥊 AI 辯論空間**
+  （針對這張卡跟 AI 多輪來回辯論，不是單次問答，詳見下方「AI 辯論空間」一節）。知識卡資料
+  直接用瀏覽器打 Supabase REST API 讀取，不用另外啟動伺服器，只需要這個 FastAPI app 透過
+  `/api/v1/config` 把 Supabase URL／anon key 交給前端；辯論則是打這個 app 自己的
+  `/api/v1/coach` 端點。
 
 > ⚠️ **這是訊號監控工具，不是自動化交易系統。** 全程不使用任何交易所 API 金鑰、不下單、
 > 不動用真實資金。所有訊號僅供研究參考，不構成投資建議。若之後要接上真正的自動化下單，
@@ -26,6 +29,7 @@ trading_system/
 ├─ brain.py               # 多空共振：技術面 + AI 情緒融合成最終建議（純函式，內建自測）
 ├─ outcome_tracker.py      # 訊號結果模擬 + 失效原因判斷（純規則，零 AI 成本，內建自測）
 ├─ strategy_tuner.py        # 勝率偏低時自動調高篩選門檻（純函式，內建自測）
+├─ ai_coach.py                # AI 辯論空間：多輪對話，走 Anthropic/OpenAI（內建自測）
 ├─ db.py                     # SQLite：訊號歷史 + 自動優化後的參數，跨重啟持續累積
 ├─ state.py                   # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
 ├─ index.html                # 網頁前端：🎯當沖訊號／📚知識宇宙 兩個分頁的單一 SPA
@@ -99,6 +103,7 @@ python -m trading_system.brain        # 多空共振融合邏輯自測
 python -m trading_system.news_client  # JSON 解析（LLM 回覆容錯）自測
 python -m trading_system.outcome_tracker  # 訊號結果模擬 + 失效原因判斷自測
 python -m trading_system.strategy_tuner   # 自動優化門檻的判斷邏輯自測
+python -m trading_system.ai_coach         # 辯論歷史驗證 + system prompt 組裝自測
 ```
 
 ## AI 新聞情緒 — 如何啟用
@@ -135,6 +140,25 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/dashboard` | GET | 讀取「上一次」分析結果的快取，不觸發新分析、不打任何外部 API |
 | `/api/v1/analyze` | POST | 觸發一輪全新分析（OKX 篩選＋K線＋AI 新聞情緒），跑完回傳結果；上一輪還沒跑完時回 `409` |
 | `/api/v1/health` | GET | 存活檢查 + 上次更新時間 + 上次錯誤訊息 |
+| `/api/v1/config` | GET | 給「知識宇宙」分頁的 Supabase URL／anon key（公開金鑰，非機密） |
+| `/api/v1/coach` | POST | AI 辯論空間一輪對話。body：`{"node": {...知識卡}, "history": [{"role","content"}, ...]}`，回傳 `{"reply", "error"}` |
+
+## AI 辯論空間
+
+「知識宇宙」分頁的每張知識卡詳情彈窗下半部，可以針對這張卡的內容跟 AI 多輪來回辯論——
+不是單次問答，AI 扮演一個「有觀點、但講得通就會被說服」的教練角色：你的論點有道理會明確
+承認，有邏輯漏洞或跟核心原理矛盾會指出來。
+
+**無狀態設計**：前端在瀏覽器分頁的記憶體裡保存這輪對話歷史（`debateHistory` 陣列），每次
+送出都把完整歷史一起傳給 `/api/v1/coach`，後端不存任何東西、也不寫進 Supabase 的
+`ai_coach_sessions` 表——那張表的 RLS policy 要求 `auth.uid()` 對得上 `user_id`，這個專案
+還沒接使用者登入，匿名呼叫本來就寫不進去（見 `knowledge_universe/README.md`）。重新整理
+頁面、關掉彈窗再打開同一張卡，對話就會清空重來。
+
+**用量控制**：單輪辯論上限 16 則訊息（`ai_coach.MAX_HISTORY_MESSAGES`，8 個來回）——每辯論
+一次都要把整段歷史重新送給 AI，愈辯論愈長、這一次呼叫的 token 成本愈高，設上限強制「這輪
+該收斂了」，畫面上會提示改按「重新開始」，不會無限累積燒 token。跟 AI 新聞情緒一樣，沒設定
+`ANTHROPIC_API_KEY`（或 `AI_PROVIDER=none`）時會顯示明確提示訊息，不會讓頁面壞掉。
 
 ## 訊號結果追蹤與自動優化（零 AI 成本）
 

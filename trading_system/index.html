@@ -123,7 +123,17 @@
 
     <div id="kn-status" class="text-sm text-gray-500">正在連線知識庫…</div>
 
-    <div id="kn-filters" class="hidden flex flex-wrap gap-2"></div>
+    <div id="kn-toolbar" class="hidden flex flex-wrap items-center justify-between gap-3">
+      <div id="kn-filters" class="flex flex-wrap gap-2"></div>
+      <div class="flex items-center gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
+        <button id="kn-view-graph-btn" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">🗺️ 地圖檢視</button>
+        <button id="kn-view-cards-btn" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">🗂️ 卡片檢視</button>
+      </div>
+    </div>
+
+    <div id="kn-graph-wrap" class="hidden overflow-auto border border-gray-800 rounded-xl bg-gray-950">
+      <svg id="kn-graph-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
 
     <section id="kn-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></section>
 
@@ -139,7 +149,7 @@
 
 <!-- 知識卡詳情彈窗 -->
 <div id="kn-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-  <div class="bg-gray-900 border border-gray-800 rounded-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 space-y-4">
+  <div class="bg-gray-900 border border-gray-800 rounded-xl max-w-3xl w-full max-h-[88vh] overflow-y-auto p-6 space-y-5">
     <div class="flex items-start justify-between gap-4">
       <div>
         <span id="kn-modal-category" class="text-xs px-2 py-0.5 rounded-full border"></span>
@@ -164,6 +174,26 @@
         <div class="text-indigo-400 font-semibold mb-1">延伸概念</div>
         <div id="kn-modal-related" class="flex flex-wrap gap-2"></div>
       </div>
+    </div>
+
+    <div class="border-t border-gray-800 pt-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <h4 class="text-sm font-semibold text-gray-300 flex items-center"><span class="mr-2">🥊</span> AI 辯論空間</h4>
+        <button id="kn-debate-reset" class="text-xs text-gray-500 hover:text-gray-300">重新開始</button>
+      </div>
+      <p class="text-xs text-gray-500 leading-relaxed">
+        對這個概念有不同看法就提出來，AI 會像真人辯論一樣有觀點——你講得通它會承認，講不通會指出問題在哪。
+        對話只留在這個分頁，重新整理就清空，不會存檔（還沒接使用者登入）。
+      </p>
+      <div id="kn-debate-thread" class="space-y-2 max-h-64 overflow-y-auto"></div>
+      <div id="kn-debate-error" class="hidden text-xs text-red-400 bg-red-950/30 border border-red-900 rounded-lg p-2"></div>
+      <form id="kn-debate-form" class="flex items-end gap-2">
+        <textarea id="kn-debate-input" rows="2" maxlength="500" placeholder="輸入你的論點或問題…"
+          class="flex-1 bg-gray-950 border border-gray-800 rounded-lg p-2 text-sm text-gray-200 resize-none focus:outline-none focus:border-indigo-600"></textarea>
+        <button id="kn-debate-send" type="submit"
+          class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold
+                 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">送出</button>
+      </form>
     </div>
   </div>
 </div>
@@ -393,14 +423,15 @@ loadLastResult();
 /* 不用額外的 SDK；anon key 是公開金鑰，設計上就是給前端直接用的。         */
 /* ---------------------------------------------------------------- */
 const CATEGORY_META = {
-  technical:   { label: "技術面", color: "text-blue-300 border-blue-700 bg-blue-950/40" },
-  fundamental: { label: "基本面", color: "text-emerald-300 border-emerald-700 bg-emerald-950/40" },
-  chips:       { label: "籌碼面", color: "text-purple-300 border-purple-700 bg-purple-950/40" },
-  sentiment:   { label: "情緒面", color: "text-rose-300 border-rose-700 bg-rose-950/40" },
-  macro:       { label: "總經面", color: "text-amber-300 border-amber-700 bg-amber-950/40" },
+  technical:   { label: "技術面", color: "text-blue-300 border-blue-700 bg-blue-950/40", fill: "fill-blue-950", stroke: "stroke-blue-600", text: "fill-blue-200" },
+  fundamental: { label: "基本面", color: "text-emerald-300 border-emerald-700 bg-emerald-950/40", fill: "fill-emerald-950", stroke: "stroke-emerald-600", text: "fill-emerald-200" },
+  chips:       { label: "籌碼面", color: "text-purple-300 border-purple-700 bg-purple-950/40", fill: "fill-purple-950", stroke: "stroke-purple-600", text: "fill-purple-200" },
+  sentiment:   { label: "情緒面", color: "text-rose-300 border-rose-700 bg-rose-950/40", fill: "fill-rose-950", stroke: "stroke-rose-600", text: "fill-rose-200" },
+  macro:       { label: "總經面", color: "text-amber-300 border-amber-700 bg-amber-950/40", fill: "fill-amber-950", stroke: "stroke-amber-600", text: "fill-amber-200" },
 };
+const DEFAULT_CATEGORY_META = { label: "", color: "text-gray-300 border-gray-700", fill: "fill-gray-900", stroke: "stroke-gray-600", text: "fill-gray-300" };
 
-let knowledgeState = { nodes: [], edges: [], missions: [], activeCategory: "all" };
+let knowledgeState = { nodes: [], edges: [], missions: [], activeCategory: "all", view: "cards" };
 
 async function fetchSupabase(supabaseUrl, anonKey, table, query) {
   const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${query}`, {
@@ -422,11 +453,12 @@ async function loadKnowledgeUniverse() {
       fetchSupabase(supabase_url, supabase_anon_key, "knowledge_edges", "select=*"),
       fetchSupabase(supabase_url, supabase_anon_key, "missions", "select=*"),
     ]);
-    knowledgeState = { nodes, edges, missions, activeCategory: "all" };
+    knowledgeState = { nodes, edges, missions, activeCategory: "all", view: "cards" };
 
     statusEl.classList.add("hidden");
+    document.getElementById("kn-toolbar").classList.remove("hidden");
     renderKnowledgeFilters();
-    renderKnowledgeGrid();
+    setKnowledgeView("cards");
     renderMissions();
   } catch (err) {
     console.error("知識宇宙讀取失敗：", err);
@@ -452,9 +484,90 @@ function renderKnowledgeFilters() {
     btn.addEventListener("click", () => {
       knowledgeState.activeCategory = cat;
       renderKnowledgeFilters();
-      renderKnowledgeGrid();
+      renderKnowledgeView();
     });
     wrap.appendChild(btn);
+  }
+}
+
+function renderKnowledgeView() {
+  if (knowledgeState.view === "graph") {
+    renderKnowledgeGraph();
+  } else {
+    renderKnowledgeGrid();
+  }
+}
+
+function setKnowledgeView(view) {
+  knowledgeState.view = view;
+  const graphBtn = document.getElementById("kn-view-graph-btn");
+  const cardsBtn = document.getElementById("kn-view-cards-btn");
+  const activeCls = "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors bg-indigo-600 text-white";
+  const inactiveCls = "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors text-gray-400 hover:text-gray-200";
+  graphBtn.className = view === "graph" ? activeCls : inactiveCls;
+  cardsBtn.className = view === "cards" ? activeCls : inactiveCls;
+  document.getElementById("kn-graph-wrap").classList.toggle("hidden", view !== "graph");
+  document.getElementById("kn-grid").classList.toggle("hidden", view !== "cards");
+  renderKnowledgeView();
+}
+
+document.getElementById("kn-view-graph-btn").addEventListener("click", () => setKnowledgeView("graph"));
+document.getElementById("kn-view-cards-btn").addEventListener("click", () => setKnowledgeView("cards"));
+
+const GRAPH_NODE_W = 150;
+const GRAPH_NODE_H = 64;
+const GRAPH_PADDING = 60;
+
+function renderKnowledgeGraph() {
+  const svg = document.getElementById("kn-graph-svg");
+  const nodes = knowledgeState.nodes.filter(
+    (n) => knowledgeState.activeCategory === "all" || n.category === knowledgeState.activeCategory
+  );
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  const edges = knowledgeState.edges.filter((e) => nodeIds.has(e.source_node_id) && nodeIds.has(e.target_node_id));
+
+  if (nodes.length === 0) {
+    svg.innerHTML = "";
+    svg.setAttribute("width", "100%");
+    svg.setAttribute("height", "120");
+    return;
+  }
+
+  const maxX = Math.max(...nodes.map((n) => n.position_x)) + GRAPH_NODE_W + GRAPH_PADDING;
+  const maxY = Math.max(...nodes.map((n) => n.position_y)) + GRAPH_NODE_H + GRAPH_PADDING;
+  svg.setAttribute("width", String(maxX));
+  svg.setAttribute("height", String(maxY));
+  svg.setAttribute("viewBox", `0 0 ${maxX} ${maxY}`);
+
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const parts = [];
+
+  for (const e of edges) {
+    const a = byId[e.source_node_id], b = byId[e.target_node_id];
+    const ax = a.position_x + GRAPH_NODE_W / 2, ay = a.position_y + GRAPH_NODE_H / 2;
+    const bx = b.position_x + GRAPH_NODE_W / 2, by = b.position_y + GRAPH_NODE_H / 2;
+    parts.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" class="stroke-gray-700" stroke-width="1.5" />`);
+  }
+
+  for (const n of nodes) {
+    const meta = CATEGORY_META[n.category] || DEFAULT_CATEGORY_META;
+    const locked = n.unlock_status === "locked";
+    const x = n.position_x, y = n.position_y;
+    const title = n.title.length > 14 ? n.title.slice(0, 13) + "…" : n.title;
+    parts.push(`
+      <g class="kn-graph-node" data-id="${n.id}" style="cursor:pointer">
+        <rect x="${x}" y="${y}" width="${GRAPH_NODE_W}" height="${GRAPH_NODE_H}" rx="10"
+              class="${meta.fill} ${meta.stroke}" stroke-width="1.5" ${locked ? 'stroke-dasharray="4 3"' : ""} />
+        <text x="${x + GRAPH_NODE_W / 2}" y="${y + GRAPH_NODE_H / 2 - 6}" text-anchor="middle"
+              class="${meta.text}" font-size="12" font-weight="600">${locked ? "🔒 " : ""}${title}</text>
+        <text x="${x + GRAPH_NODE_W / 2}" y="${y + GRAPH_NODE_H / 2 + 12}" text-anchor="middle"
+              class="fill-gray-500" font-size="10">${meta.label}</text>
+      </g>`);
+  }
+
+  svg.innerHTML = parts.join("");
+  for (const g of svg.querySelectorAll(".kn-graph-node")) {
+    g.addEventListener("click", () => openKnowledgeModal(g.dataset.id));
   }
 }
 
@@ -547,8 +660,98 @@ function openKnowledgeModal(nodeId) {
     relatedWrap.classList.add("hidden");
   }
 
+  resetDebate(node);
   document.getElementById("kn-modal").classList.remove("hidden");
 }
+
+/* ---------------------------------------------------------------- */
+/* AI 辯論空間 —— 多輪、無狀態（歷史只存在這個分頁的記憶體，不會存檔）    */
+/* ---------------------------------------------------------------- */
+let debateNode = null;
+let debateHistory = [];
+let debateBusy = false;
+
+function resetDebate(node) {
+  debateNode = node;
+  debateHistory = [];
+  debateBusy = false;
+  document.getElementById("kn-debate-error").classList.add("hidden");
+  document.getElementById("kn-debate-input").value = "";
+  renderDebateThread();
+}
+
+function renderDebateThread() {
+  const thread = document.getElementById("kn-debate-thread");
+  thread.innerHTML = "";
+  if (debateHistory.length === 0) {
+    thread.innerHTML = `<div class="text-xs text-gray-600 italic">還沒有對話，說說你的想法吧。</div>`;
+    return;
+  }
+  for (const m of debateHistory) {
+    const isUser = m.role === "user";
+    const bubble = document.createElement("div");
+    bubble.className = isUser ? "flex justify-end" : "flex justify-start";
+    bubble.innerHTML = `<div class="max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed ${
+      isUser ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-200"
+    }">${isUser ? "" : '<span class="text-indigo-400 font-semibold">🥊 教練　</span>'}${m.content}</div>`;
+    thread.appendChild(bubble);
+  }
+  thread.scrollTop = thread.scrollHeight;
+}
+
+async function sendDebateTurn(e) {
+  e.preventDefault();
+  if (debateBusy || !debateNode) return;
+  const input = document.getElementById("kn-debate-input");
+  const text = input.value.trim();
+  if (!text) return;
+  if (debateHistory.length >= 16) {
+    document.getElementById("kn-debate-error").textContent = "這輪辯論有點長了，按上面「重新開始」開新的討論。";
+    document.getElementById("kn-debate-error").classList.remove("hidden");
+    return;
+  }
+
+  debateHistory.push({ role: "user", content: text });
+  input.value = "";
+  renderDebateThread();
+
+  debateBusy = true;
+  document.getElementById("kn-debate-send").disabled = true;
+  document.getElementById("kn-debate-error").classList.add("hidden");
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/coach`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ node: debateNode, history: debateHistory }),
+    });
+    const body = await res.json();
+    if (body.error) {
+      document.getElementById("kn-debate-error").textContent = body.error;
+      document.getElementById("kn-debate-error").classList.remove("hidden");
+      debateHistory.pop(); // 失敗就把剛剛那則使用者發言退回去，不留半截對話
+    } else {
+      debateHistory.push({ role: "assistant", content: body.reply });
+    }
+  } catch (err) {
+    document.getElementById("kn-debate-error").textContent = `無法連上後端：${err}`;
+    document.getElementById("kn-debate-error").classList.remove("hidden");
+    debateHistory.pop();
+  } finally {
+    debateBusy = false;
+    document.getElementById("kn-debate-send").disabled = false;
+    renderDebateThread();
+  }
+}
+
+document.getElementById("kn-debate-form").addEventListener("submit", sendDebateTurn);
+document.getElementById("kn-debate-reset").addEventListener("click", () => resetDebate(debateNode));
+document.getElementById("kn-debate-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById("kn-debate-form").requestSubmit();
+  }
+});
 
 function closeKnowledgeModal() {
   document.getElementById("kn-modal").classList.add("hidden");
