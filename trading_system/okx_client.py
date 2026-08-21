@@ -27,24 +27,42 @@ def asset_class(inst_id: str) -> str:
     return "stock" if base in KNOWN_STOCK_TICKERS else "crypto"
 
 
-async def fetch_swap_tickers(client: httpx.AsyncClient) -> list[dict]:
-    """抓取 OKX 所有 USDT 本位永續合約（SWAP）的 24h ticker 快照。
-    這裡不分加密貨幣或股票永續合約——兩者目前都掛在同一個 instType=SWAP 底下，
-    只要商品 instId 符合 -USDT-SWAP 後綴，就會一起進到 screen_active_instruments()
-    的篩選池，用同一套成交額/振幅門檻、同一套 20 EMA + 盒子策略。"""
-    resp = await client.get(OKX_TICKERS_URL, params={"instType": "SWAP"})
+async def _fetch_tickers(client: httpx.AsyncClient, inst_type: str) -> list[dict]:
+    resp = await client.get(OKX_TICKERS_URL, params={"instType": inst_type})
     resp.raise_for_status()
     data = resp.json()
     if data.get("code") != "0":
-        raise ValueError(f"OKX tickers API error: {data.get('msg')}")
+        raise ValueError(f"OKX tickers API error ({inst_type}): {data.get('msg')}")
     return data.get("data", [])
 
 
-def parse_instruments(tickers: list[dict], extra_keywords: tuple = ()) -> list[dict]:
+async def fetch_swap_tickers(client: httpx.AsyncClient) -> list[dict]:
+    """抓取 OKX 所有 USDT 本位永續合約（SWAP）的 24h ticker 快照——本系統的當沖策略
+    （20 EMA + 盒子突破，搭配風報比停損停利）預設就是設計給這種可以做多可以做空、
+    有槓桿概念的商品。這裡不分加密貨幣或股票永續合約——兩者目前都掛在同一個
+    instType=SWAP 底下，只要商品 instId 符合 -USDT-SWAP 後綴，就會一起進到
+    screen_active_instruments() 的篩選池，用同一套成交額/振幅門檻、同一套策略。"""
+    return await _fetch_tickers(client, "SWAP")
+
+
+async def fetch_spot_tickers(client: httpx.AsyncClient) -> list[dict]:
+    """抓取 OKX 所有 USDT 現貨交易對的 24h ticker 快照。現貨只能做多、沒有槓桿/爆倉概念，
+    目前**不會**自動進入篩選/自動分析池（`screen_active_instruments` 只吃 SWAP）——
+    只出現在「全部商品總覽」讓你瀏覽/搜尋，想看技術分析可以點「🔍 分析」單獨查一檔
+    （`analyze_one_instrument` 對 instId 沒有預設立場，現貨一樣算得出 K 線訊號，只是
+    停損停利在現貨語境下沒有真正的槓桿保證金意義，看的時候要記得這個差異）。"""
+    return await _fetch_tickers(client, "SPOT")
+
+
+def parse_instruments(tickers: list[dict], extra_keywords: tuple = (), product_type: str = "swap") -> list[dict]:
     """把 OKX ticker 原始資料解析成標準格式，**不套用任何流動性/振幅門檻、不截斷筆數**——
     給「全部商品總覽」用，讓使用者看得到 OKX 上全部（通常 200~300+ 檔）合約的基本報價，
     不是只看得到自動篩選出來的那幾檔。`screen_active_instruments()` 在這份完整清單上
     再套門檻篩選，兩者共用同一份解析邏輯，門檻邏輯只寫一次。
+
+    product_type: "swap"（永續合約，instId 形如 BTC-USDT-SWAP）或 "spot"（現貨，
+    instId 形如 BTC-USDT，沒有 -SWAP 後綴）——回傳的每筆資料都會標上這個欄位，
+    給前端「合約/現貨」分類篩選用，兩種格式不會互相誤判。
 
     注意：OKX ticker 的 `volCcy24h` 欄位本身就是以計價貨幣（USDT 本位合約即 USDT）計算的
     24h 成交額，不需要再乘上最新價——用 `vol24h`（張數/幣數）乘價格會重複換算、算出錯誤數字。
@@ -52,9 +70,12 @@ def parse_instruments(tickers: list[dict], extra_keywords: tuple = ()) -> list[d
     parsed = []
     for t in tickers:
         inst_id = t.get("instId", "")
-        is_crypto_perp = inst_id.endswith("-USDT-SWAP")
+        if product_type == "spot":
+            is_valid = inst_id.endswith("-USDT") and not inst_id.endswith("-SWAP")
+        else:
+            is_valid = inst_id.endswith("-USDT-SWAP")
         is_extra = any(kw in inst_id for kw in extra_keywords)
-        if not (is_crypto_perp or is_extra):
+        if not (is_valid or is_extra):
             continue
         try:
             last = float(t["last"])
@@ -73,6 +94,7 @@ def parse_instruments(tickers: list[dict], extra_keywords: tuple = ()) -> list[d
             "vol_usdt": vol_usdt,
             "amplitude_pct": round(amplitude_pct, 2),
             "asset_class": asset_class(inst_id),
+            "product_type": product_type,
         })
     return parsed
 
@@ -173,6 +195,17 @@ if __name__ == "__main__":
           "BTC-USD-SWAP" not in [c["instId"] for c in all_parsed], True)
     check("screen_active_instruments is a strict subset of parse_instruments",
           set(c["instId"] for c in result).issubset(set(c["instId"] for c in all_parsed)), True)
+    check("parse_instruments tags product_type='swap' by default", all_parsed[0]["product_type"], "swap")
+
+    # 6) parse_instruments(product_type="spot")：現貨 instId（沒有 -SWAP 後綴）才算數，
+    # 永續合約的 instId 反而要被排除，兩種格式不能互相誤判。
+    spot_tickers = [
+        {"instId": "BTC-USDT", "last": "100.0", "volCcy24h": "80000000", "high24h": "106.0", "low24h": "100.0"},
+        {"instId": "ETH-USDT-SWAP", "last": "50.0", "volCcy24h": "80000000", "high24h": "52.0", "low24h": "50.0"},
+    ]
+    spot_parsed = parse_instruments(spot_tickers, product_type="spot")
+    check("spot parsing keeps only the spot pair", [c["instId"] for c in spot_parsed], ["BTC-USDT"])
+    check("spot parsing tags product_type='spot'", spot_parsed[0]["product_type"], "spot")
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

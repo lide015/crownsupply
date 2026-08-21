@@ -44,10 +44,12 @@ SENTIMENT_PROMPT = (
 MULTI_SENTIMENT_PROMPT_HEADER = (
     "你是加密貨幣/股票新聞分析師。以下先給「整體市場」新聞標題，再給每個標的各自搜尋到的\n"
     "專屬新聞標題（可能是空的）。請針對「整體市場」和「每一個標的」分別判斷 BULLISH（利多）、\n"
-    "BEARISH（利空）、NEUTRAL（中性/無明確方向），並用一句話（繁體中文）說明理由——標的的\n"
-    "理由要具體指出關聯到哪一則專屬新聞，不要只重複「整體市場情緒」這種空話。如果某個標的\n"
-    "完全沒有查到專屬新聞，該標的的 sentiment 請直接沿用整體市場判斷，reason 老實註明\n"
-    "「沒有找到該標的專屬新聞，套用整體市場情緒」，不要編造不存在的新聞。\n\n"
+    "BEARISH（利空）、NEUTRAL（中性/無明確方向），並用一句話（繁體中文，**limit 40 字以內**）\n"
+    "說明理由——標的的理由要具體指出關聯到哪一則專屬新聞，不要只重複「整體市場情緒」這種\n"
+    "空話。如果某個標的完全沒有查到專屬新聞，該標的的 sentiment 請直接沿用整體市場判斷，\n"
+    "reason 老實註明「沿用整體市場情緒」，不要編造不存在的新聞。\n"
+    "**輸出格式要求：緊湊的單行 JSON，不要縮排、不要換行、不要 markdown code fence**，\n"
+    "理由控制在 40 字以內是為了避免輸出被截斷。\n\n"
     "只回傳嚴格 JSON，不要任何其他文字，格式如下（<instId> 要跟輸入的標的清單完全一致）：\n"
     '{"market": {"sentiment": "BULLISH|BEARISH|NEUTRAL", "reason": "一句話理由"}, '
     '"instruments": {"<instId>": {"sentiment": "BULLISH|BEARISH|NEUTRAL", "reason": "一句話理由"}, ...}}\n\n'
@@ -133,17 +135,38 @@ def _build_multi_prompt(market_headlines: list[str], instrument_headlines: dict)
     return "".join(parts)
 
 
-def _parse_multi_sentiment_json(text: str) -> dict | None:
-    """回傳 {"market": {"sentiment","reason"}, "instruments": {inst_id: {"sentiment","reason"}}}，
-    market 格式不對就整包回傳 None；單一標的格式不對只排除那一檔，不影響其他標的跟 market
-    （呼叫端對缺席的標的會 fallback 套用 market 的判斷，見 get_market_and_instrument_sentiment）。"""
-    match = re.search(r"\{.*\}", text, re.DOTALL)
+def _salvage_market_only(text: str) -> dict | None:
+    """完整 JSON 解析失敗時的退路：AI 回覆通常先寫 "market" 欄位、後面才逐一列出各標的，
+    如果輸出中途被截斷（例如標的數量一多、超出 max_tokens），"market" 這個子物件本身
+    往往還是完整的（沒有巢狀結構，只有 sentiment/reason 兩個字串），單獨撈出來解析，
+    至少保住整體市場的判斷不要整包 None——退回「查不到這檔專屬新聞」比整個中性化更準確。"""
+    match = re.search(r'"market"\s*:\s*(\{[^{}]*\})', text, re.DOTALL)
     if not match:
         return None
     try:
-        parsed = json.loads(match.group(0))
+        market_raw = json.loads(match.group(1))
     except ValueError:
         return None
+    sentiment = str(market_raw.get("sentiment", "")).upper()
+    if sentiment not in ("BULLISH", "BEARISH", "NEUTRAL"):
+        return None
+    return {"market": {"sentiment": sentiment, "reason": str(market_raw.get("reason", ""))[:300]}, "instruments": {}}
+
+
+def _parse_multi_sentiment_json(text: str) -> dict | None:
+    """回傳 {"market": {"sentiment","reason"}, "instruments": {inst_id: {"sentiment","reason"}}}，
+    market 格式不對就整包回傳 None；單一標的格式不對只排除那一檔，不影響其他標的跟 market
+    （呼叫端對缺席的標的會 fallback 套用 market 的判斷，見 get_market_and_instrument_sentiment）。
+
+    完整解析失敗時（常見原因是輸出被截斷，見 _salvage_market_only 說明）會退一步試著至少
+    搶救出 market 欄位，而不是整包放棄、把每一檔都變成沒有理由的中性。"""
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        return _salvage_market_only(text)
+    try:
+        parsed = json.loads(match.group(0))
+    except ValueError:
+        return _salvage_market_only(text)
 
     market_raw = parsed.get("market")
     if not isinstance(market_raw, dict):
@@ -307,7 +330,9 @@ async def get_market_and_instrument_sentiment(client: httpx.AsyncClient, instrum
         return {"market": fallback, "by_instrument": {i["instId"]: fallback for i in instruments}}
 
     prompt = _build_multi_prompt(market_headlines, instrument_headlines)
-    max_tokens = min(250 + 120 * len(instruments), 2000)
+    # 每個標的的 JSON 條目（含 key、標點、40 字中文理由）實際觀察起來比原本抓的還要長，
+    # 太緊的預算會讓輸出中途被截斷、變成無法解析的 JSON——寧可預留寬裕一點的用量。
+    max_tokens = min(500 + 250 * len(instruments), 4000)
 
     try:
         if config.AI_PROVIDER == "openai":
@@ -421,6 +446,16 @@ if __name__ == "__main__":
     # 9) _parse_multi_sentiment_json：沒有 instruments 欄位也不該整包失敗，回傳空 dict
     market_only = _parse_multi_sentiment_json('{"market": {"sentiment": "NEUTRAL", "reason": "無明確方向"}}')
     check("multi parse missing instruments -> empty dict", market_only["instruments"], {})
+
+    # 10) 輸出被截斷（超出 max_tokens 中途斷掉）時，_parse_multi_sentiment_json 應該退一步
+    # 搶救出完整的 market 欄位，而不是整包放棄——這是實際觀察到的真實失敗模式修正。
+    truncated = '{"market": {"sentiment": "BULLISH", "reason": "ETF 資金流入帶動大盤偏多"}, "instruments": {"BTC-USDT-SWAP": {"sentiment": "BULL'
+    salvaged = _parse_multi_sentiment_json(truncated)
+    check("truncated response salvages market sentiment", salvaged is not None and salvaged["market"]["sentiment"], "BULLISH")
+    check("truncated response gives up on partial instruments (safer than guessing)", salvaged["instruments"], {})
+
+    # 11) 徹底亂七八糟、market 也救不回來的情況 -> 老實回傳 None
+    check("total garbage -> None", _parse_multi_sentiment_json("完全不是 JSON 的一段話"), None)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

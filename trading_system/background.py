@@ -161,6 +161,7 @@ async def analyze_one_instrument(
         "name": item["name"],
         "instId": inst_id,
         "asset_class": item["asset_class"],
+        "product_type": item.get("product_type", "swap"),
         "price": tech["price"] if tech else item["price"],
         "ema": tech["ema"] if tech else None,
         "box_high": tech["box_high"] if tech else None,
@@ -213,9 +214,20 @@ async def _refresh_signals(client: httpx.AsyncClient):
     STATE.recent_resolved = db.get_recent_resolved(20)
 
     tickers = await okx_client.fetch_swap_tickers(client)
-    # OKX 上「全部」商品的基本報價（不套門檻、不截斷）——零額外 API 成本，這份資料本來就在
-    # 這一次 tickers 回應裡，只是之前直接丟掉了。給前端「全部商品總覽」瀏覽/篩選/搜尋用。
-    STATE.all_instruments = okx_client.parse_instruments(tickers, config.EXTRA_INSTRUMENT_KEYWORDS)
+    # OKX 上「全部」永續合約的基本報價（不套門檻、不截斷）——零額外 API 成本，這份資料本來
+    # 就在這一次 tickers 回應裡，只是之前直接丟掉了。給前端「全部商品總覽」瀏覽/篩選/搜尋用。
+    all_instruments = okx_client.parse_instruments(tickers, config.EXTRA_INSTRUMENT_KEYWORDS, product_type="swap")
+
+    # 現貨（SPOT）另外抓一次——多一次免費公開 API 呼叫，只用來充實「全部商品總覽」的瀏覽
+    # 清單，**不會**自動進入篩選/深度分析池（自動分析只吃永續合約，見 fetch_spot_tickers
+    # 說明）；抓不到就靜靜跳過，不影響其他任何功能。
+    try:
+        spot_tickers = await okx_client.fetch_spot_tickers(client)
+        all_instruments += okx_client.parse_instruments(spot_tickers, product_type="spot")
+    except Exception as exc:  # noqa: BLE001 — 現貨清單只是附加瀏覽功能，失敗不影響主要分析
+        logger.warning("spot ticker fetch failed: %s", exc)
+
+    STATE.all_instruments = all_instruments
     monitored = okx_client.screen_active_instruments(
         tickers,
         min_vol_usdt=config.MIN_VOL_USDT,

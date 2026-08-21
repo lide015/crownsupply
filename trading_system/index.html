@@ -221,11 +221,18 @@
         點右邊「🔍 分析」——只針對那一檔多打一次資料，不會重新分析全部商品，結果會出現在上方訊號面板。
       </p>
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div id="all-instruments-filters" class="flex flex-wrap gap-2"></div>
+        <div class="flex flex-wrap items-center gap-3">
+          <div id="all-instruments-filters" class="flex flex-wrap gap-2"></div>
+          <div id="all-instruments-product-filters" class="flex flex-wrap gap-2"></div>
+        </div>
         <input id="all-instruments-search" type="text" placeholder="🔍 搜尋代號或名稱（例如 ETH）"
           class="w-full sm:w-64 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
                  placeholder-gray-600 focus:outline-none focus:border-indigo-600" />
       </div>
+      <p class="text-[11px] text-gray-600 leading-relaxed">
+        ⚡ 合約（永續合約，可做多可做空）才會被「立即分析」自動選中做技術分析；💰 現貨（只能做多、沒有槓桿/爆倉概念）
+        只出現在這份總覽，想看技術分析一樣可以點「🔍 分析」單獨查。
+      </p>
       <div id="all-instruments-wrap" class="overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[60vh]">
         <table class="w-full text-xs">
           <thead class="sticky top-0 bg-gray-900 text-gray-500">
@@ -557,6 +564,7 @@ function renderSignalsList() {
           <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400 whitespace-nowrap">
             ${sig.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
           </span>
+          ${sig.product_type === "spot" ? `<span class="text-[10px] px-1.5 py-0.5 rounded border border-amber-800 text-amber-500 whitespace-nowrap">💰 現貨</span>` : ""}
         </span>
         <span class="px-2.5 py-1 text-xs rounded ${style.badge} whitespace-nowrap">${sig.action}</span>
       </div>
@@ -590,12 +598,12 @@ function renderSignalsList() {
 /* ---------------------------------------------------------------- */
 /* 全部商品總覽（不套門檻，OKX 這輪抓到的全部合約）                          */
 /* ---------------------------------------------------------------- */
-const allInstrumentsFilter = { assetClass: "all", search: "" };
+const allInstrumentsFilter = { assetClass: "all", productType: "all", search: "" };
 
 function renderAllInstrumentsFilters() {
   const wrap = document.getElementById("all-instruments-filters");
   const options = [
-    { key: "all", label: "全部" },
+    { key: "all", label: "全部分類" },
     { key: "crypto", label: "🪙 加密貨幣" },
     { key: "stock", label: "📈 股票永續" },
   ];
@@ -615,6 +623,29 @@ function renderAllInstrumentsFilters() {
     });
     wrap.appendChild(btn);
   }
+
+  const productWrap = document.getElementById("all-instruments-product-filters");
+  const productOptions = [
+    { key: "all", label: "全部類型" },
+    { key: "swap", label: "⚡ 合約" },
+    { key: "spot", label: "💰 現貨" },
+  ];
+  productWrap.innerHTML = "";
+  for (const opt of productOptions) {
+    const btn = document.createElement("button");
+    btn.textContent = opt.label;
+    btn.className =
+      "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors " +
+      (opt.key === allInstrumentsFilter.productType
+        ? "bg-teal-600 border-teal-500 text-white"
+        : "border-gray-700 text-gray-400 hover:text-gray-200");
+    btn.addEventListener("click", () => {
+      allInstrumentsFilter.productType = opt.key;
+      renderAllInstrumentsFilters();
+      renderAllInstrumentsList();
+    });
+    productWrap.appendChild(btn);
+  }
 }
 
 function renderAllInstrumentsList() {
@@ -631,6 +662,7 @@ function renderAllInstrumentsList() {
   const q = allInstrumentsFilter.search.trim().toUpperCase();
   const filtered = all.filter((inst) => {
     if (allInstrumentsFilter.assetClass !== "all" && inst.asset_class !== allInstrumentsFilter.assetClass) return false;
+    if (allInstrumentsFilter.productType !== "all" && inst.product_type !== allInstrumentsFilter.productType) return false;
     if (q && !inst.name.toUpperCase().includes(q) && !inst.instId.toUpperCase().includes(q)) return false;
     return true;
   });
@@ -650,9 +682,14 @@ function renderAllInstrumentsList() {
     const isAnalyzed = analyzedIds.has(inst.instId);
     tr.innerHTML = `
       <td class="px-3 py-2 text-white font-semibold whitespace-nowrap">${inst.name}</td>
-      <td class="px-3 py-2 whitespace-nowrap">
+      <td class="px-3 py-2 whitespace-nowrap space-x-1">
         <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400">
           ${inst.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
+        </span>
+        <span class="text-[10px] px-1.5 py-0.5 rounded border ${
+          inst.product_type === "spot" ? "border-amber-800 text-amber-500" : "border-teal-800 text-teal-400"
+        }">
+          ${inst.product_type === "spot" ? "💰 現貨" : "⚡ 合約"}
         </span>
       </td>
       <td class="px-3 py-2 text-right font-mono text-gray-300">${fmt(inst.price)}</td>
