@@ -7,14 +7,20 @@ state.STATE。刻意**不是**背景排程——沒有 while True + sleep 的自
 1. 回頭檢查之前產生、還沒結算的訊號後來是中停利還是停損（純看 OKX 歷史 K 線，零 AI 成本）。
 2. 停損時用 outcome_tracker 的純規則判斷可能的失效原因（零 AI 成本）。
 3. 累積夠多已驗證訊號後，勝率偏低就透過 strategy_tuner 自動調高篩選門檻（見該模組說明）。
+4. 重複利用已經抓好的 K 線算市場平均 RSI、山寨季代理指標（見 market_pulse.py），額外
+   打一次免費公開的恐懼貪婪指數 API——零 AI 成本。
+5. 抓每檔商品的合約未平倉量（OI），跟上次分析週期比較出變化幅度（見 oi_tracker.py），
+   當「推薦強度榜」籌碼面維度的資料來源（見 ranking.py）。
 """
 import logging
 import time
 
 import httpx
 
-from . import brain, config, db, news_client, okx_client, outcome_tracker, strategy, strategy_tuner
+from . import brain, config, db, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, ranking, strategy, strategy_tuner
 from .state import STATE
+
+BTC_INST_ID = "BTC-USDT-SWAP"  # 山寨季代理指標的比較基準（見 market_pulse.py 說明）
 
 logger = logging.getLogger("background")
 
@@ -87,6 +93,44 @@ def _maybe_record_new_signal(item: dict, tech: dict, candles: list, fused: dict,
     })
 
 
+async def _fetch_oi_delta(client: httpx.AsyncClient, inst_id: str, now_ms: int) -> dict:
+    """抓這檔商品目前的未平倉量，跟上次分析週期比較出變化幅度，並把這次的值存回去當
+    下次的基準（見 oi_tracker.py / db.py 的 oi_snapshot 表）。任何一步失敗都回傳中性
+    結果，不讓這個附加指標拖垮整輪訊號分析。"""
+    try:
+        current = await oi_tracker.fetch_open_interest(client, inst_id)
+    except Exception as exc:  # noqa: BLE001 — OI 只是附加指標，失敗不影響主要訊號
+        logger.warning("OI fetch failed for %s: %s", inst_id, exc)
+        return {"oi_change_pct": None, "label": "資料不足", "is_surge": False}
+    if current is None:
+        return {"oi_change_pct": None, "label": "資料不足", "is_surge": False}
+
+    delta = oi_tracker.compute_oi_delta(current["oi_ccy"], db.get_previous_oi(inst_id))
+    db.set_oi_snapshot(inst_id, current["oi"], current["oi_ccy"], now_ms)
+    return delta
+
+
+def _pct_change(candles: list[dict]) -> float | None:
+    if len(candles) < 2 or candles[0]["c"] <= 0:
+        return None
+    return (candles[-1]["c"] - candles[0]["c"]) / candles[0]["c"] * 100.0
+
+
+async def _fetch_btc_pct_change(client: httpx.AsyncClient, already_fetched: dict) -> float | None:
+    """山寨季代理指標的 BTC 基準報酬率（見 market_pulse.py 說明）。監控清單裡剛好有 BTC
+    就直接重複利用那份資料，沒有才額外打一次免費公開的 K 線 API。"""
+    if BTC_INST_ID in already_fetched:
+        return already_fetched[BTC_INST_ID]
+    try:
+        candles = await okx_client.fetch_confirmed_candles(
+            client, BTC_INST_ID, bar=config.CANDLE_BAR, limit=config.CANDLE_LIMIT
+        )
+    except Exception as exc:  # noqa: BLE001 — 山寨季只是附加指標，抓不到就老實回報「資料不足」
+        logger.warning("BTC baseline candle fetch failed: %s", exc)
+        return None
+    return _pct_change(candles)
+
+
 async def _refresh_signals(client: httpx.AsyncClient):
     now_ms = int(time.time() * 1000)
 
@@ -127,6 +171,8 @@ async def _refresh_signals(client: httpx.AsyncClient):
     }
 
     signals = []
+    rsi_values = []
+    pct_changes_by_inst = {}
     for item in monitored:
         inst_id = item["instId"]
         try:
@@ -144,6 +190,15 @@ async def _refresh_signals(client: httpx.AsyncClient):
             logger.warning("signal calc failed for %s: %s", inst_id, exc)
             continue
 
+        # 市場情緒儀表板用的附加資料：重複利用這裡已經抓好的 K 線，不額外多打 API。
+        rsi = market_pulse.compute_rsi([c["c"] for c in candles])
+        if rsi is not None:
+            rsi_values.append(rsi)
+        pct_changes_by_inst[inst_id] = _pct_change(candles)
+
+        # 推薦強度榜「籌碼面」維度用的附加資料（見 ranking.py / oi_tracker.py）。
+        oi_delta = await _fetch_oi_delta(client, inst_id, now_ms)
+
         fused = brain.fuse(tech, sentiment)
         signals.append({
             "name": item["name"],
@@ -158,6 +213,11 @@ async def _refresh_signals(client: httpx.AsyncClient):
             "take_profit_2": tech["take_profit_2"] if tech else None,
             "vol_usdt": item["vol_usdt"],
             "amplitude_pct": item["amplitude_pct"],
+            "signal_type": tech["signal"] if tech else None,
+            "ai_sentiment": sentiment["sentiment"],
+            "rsi": rsi,
+            "oi_change_pct": oi_delta["oi_change_pct"],
+            "oi_label": oi_delta["label"],
             **fused,
         })
 
@@ -170,6 +230,21 @@ async def _refresh_signals(client: httpx.AsyncClient):
     STATE.signals = signals
     STATE.last_update = time.strftime("%Y-%m-%d %H:%M:%S")
     STATE.has_run = True
+
+    # --- 市場情緒儀表板：平均 RSI、山寨季代理指標、恐懼貪婪指數（見 market_pulse.py） ---
+    rsi_stats = market_pulse.average_rsi(rsi_values)
+    btc_pct_change = await _fetch_btc_pct_change(client, pct_changes_by_inst)
+    alt_pct_changes = [v for k, v in pct_changes_by_inst.items() if k != BTC_INST_ID and v is not None]
+    altseason = market_pulse.compute_altseason_proxy(alt_pct_changes, btc_pct_change)
+    fear_greed = await market_pulse.fetch_fear_greed_index(client)
+    STATE.market_pulse = {"rsi": rsi_stats, "altseason": altseason, "fear_greed": fear_greed}
+
+    # --- 推薦強度榜：只對有實際多空方向的訊號評分排名（見 ranking.py） ---
+    scored = [
+        {**s, **ranking.score_signal(s, config.MIN_VOL_USDT, effective_min_amplitude)}
+        for s in signals if s.get("signal_type") in ("long", "short")
+    ]
+    STATE.ranking = ranking.rank_signals(scored, top_n=config.RANKING_TOP_N)
 
 
 async def refresh_cycle(client: httpx.AsyncClient):

@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai_coach, background, config, db
+from . import ai_coach, background, config, db, position_sizing
 from .state import STATE
 
 
@@ -33,6 +33,16 @@ class CoachMessage(BaseModel):
 class CoachRequest(BaseModel):
     node: dict
     history: list[CoachMessage]
+
+
+class PositionSizeRequest(BaseModel):
+    account_balance: float
+    risk_pct: float
+    entry_price: float
+    stop_loss_price: float
+    leverage_cap: float | None = None
+    take_profit_1: float | None = None
+    take_profit_2: float | None = None
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("app")
@@ -89,6 +99,8 @@ def _dashboard_payload() -> dict:
         "recent_resolved": STATE.recent_resolved,
         "tuning_note": STATE.tuning_note,
         "effective_min_amplitude_pct": STATE.effective_min_amplitude_pct,
+        "market_pulse": STATE.market_pulse,
+        "ranking": STATE.ranking,
         "disclaimer": "僅供訊號監控參考，非投資建議；本系統不執行任何自動化下單，也不會自動在背景分析。",
     }
 
@@ -127,6 +139,30 @@ async def analyze():
             STATE.is_analyzing = False
 
     return _dashboard_payload()
+
+
+@app.post("/api/v1/position-size")
+async def position_size(req: PositionSizeRequest):
+    """🧮 倉位計算機：純本地計算，不打任何外部 API、零成本，可以放心即時呼叫（前端用
+    debounce 節流只是為了操作體驗，不是因為這個端點有任何用量疑慮）。公式只寫一份在
+    position_sizing.py，前後端不會各寫一份、日後改一邊忘記改另一邊而兜不起來。"""
+    result = position_sizing.calc_position_size(
+        req.account_balance, req.risk_pct, req.entry_price, req.stop_loss_price, req.leverage_cap
+    )
+    if result is None:
+        return JSONResponse(
+            {"ok": False, "message": "輸入不合理：資金/風險%/價格需為正數，且進場價不能等於停損價。"},
+            status_code=400,
+        )
+    if req.take_profit_1 is not None:
+        result["reward_at_tp1"] = position_sizing.calc_reward_at_target(
+            result["position_size"], req.entry_price, req.take_profit_1
+        )
+    if req.take_profit_2 is not None:
+        result["reward_at_tp2"] = position_sizing.calc_reward_at_target(
+            result["position_size"], req.entry_price, req.take_profit_2
+        )
+    return {"ok": True, **result}
 
 
 @app.post("/api/v1/coach")

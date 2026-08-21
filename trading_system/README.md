@@ -30,6 +30,10 @@ trading_system/
 ├─ outcome_tracker.py      # 訊號結果模擬 + 失效原因判斷（純規則，零 AI 成本，內建自測）
 ├─ strategy_tuner.py        # 勝率偏低時自動調高篩選門檻（純函式，內建自測）
 ├─ ai_coach.py                # AI 辯論空間：多輪對話，走 Anthropic/OpenAI（內建自測）
+├─ position_sizing.py          # 🧮 倉位計算機：資金/風險%/進場停損價 → 建議部位大小（純函式，內建自測）
+├─ ranking.py                    # 📊 推薦強度榜：技術/籌碼/情緒/量能四維度評分排名（純函式，內建自測）
+├─ market_pulse.py                # 🌡️ 市場情緒：平均 RSI、山寨季代理指標、恐懼貪婪指數（內建自測）
+├─ oi_tracker.py                    # 合約未平倉量（OI）追蹤，當「籌碼面」替代指標（純函式，內建自測）
 ├─ db.py                     # SQLite：訊號歷史 + 自動優化後的參數，跨重啟持續累積
 ├─ state.py                   # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
 ├─ index.html                # 網頁前端：🎯當沖訊號／📚知識宇宙 兩個分頁的單一 SPA
@@ -104,6 +108,10 @@ python -m trading_system.news_client  # JSON 解析（LLM 回覆容錯）自測
 python -m trading_system.outcome_tracker  # 訊號結果模擬 + 失效原因判斷自測
 python -m trading_system.strategy_tuner   # 自動優化門檻的判斷邏輯自測
 python -m trading_system.ai_coach         # 辯論歷史驗證 + system prompt 組裝自測
+python -m trading_system.position_sizing  # 倉位計算機公式自測
+python -m trading_system.ranking          # 推薦強度榜四維度評分自測
+python -m trading_system.market_pulse     # RSI / 山寨季代理指標自測
+python -m trading_system.oi_tracker       # OI 變化判斷自測
 ```
 
 ## AI 新聞情緒 — 如何啟用
@@ -132,6 +140,7 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `EMA_PERIOD` / `BOX_LOOKBACK` | 20 / 15 | 20 EMA 週期、盒子回看根數 |
 | `CANDLE_BAR` | 5m | K 線週期 |
 | `TP1_RR` / `TP2_RR` | 1.5 / 2.0 | 停利風報比（reward:risk）；risk = │進場價 − 停損價│ |
+| `RANKING_TOP_N` | 5 | 📊 推薦強度榜做多/做空各顯示前幾名 |
 
 ## API
 
@@ -142,6 +151,50 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/health` | GET | 存活檢查 + 上次更新時間 + 上次錯誤訊息 |
 | `/api/v1/config` | GET | 給「知識宇宙」分頁的 Supabase URL／anon key（公開金鑰，非機密） |
 | `/api/v1/coach` | POST | AI 辯論空間一輪對話。body：`{"node": {...知識卡}, "history": [{"role","content"}, ...]}`，回傳 `{"reply", "error"}` |
+| `/api/v1/position-size` | POST | 🧮 倉位計算機，純本地計算、零外部 API 成本。body：`{"account_balance","risk_pct","entry_price","stop_loss_price","leverage_cap"?,"take_profit_1"?,"take_profit_2"?}` |
+
+`/api/v1/dashboard`、`/api/v1/analyze` 的回傳現在還多了 `market_pulse`（市場情緒儀表板資料）
+跟 `ranking`（推薦強度榜資料），見下一節。
+
+## 🧮 倉位計算機、📊 推薦強度榜、🌡️ 市場情緒儀表板
+
+三個新功能，靈感來自使用者提供的市場數據 App 截圖參考（DATAHUNTER 等）。刻意只用系統
+本來就有、零額外 AI 成本的資料算出來，**不生造假的籌碼/基本面數字**，也**不做真正的鏈上
+大戶錢包監控**（見下方「誠實範圍說明」）。
+
+**🧮 倉位計算機**：帳戶資金 × 單筆風險% ÷ │進場價 − 停損價│ ＝ 建議部位大小，公式只寫一份
+在 `position_sizing.py`（`POST /api/v1/position-size`），前端 debounce 300ms 即時試算，
+也可以直接點任一訊號卡片的「🧮 用此訊號試算倉位」按鈕帶入該訊號的進場/停損/停利價。純
+本地計算，不打任何外部 API，隨便試算都不會有用量疑慮。
+
+**📊 推薦強度榜**：把每檔有方向的訊號拆成四個維度、各 0~100 分（`ranking.py`）：
+- **技術面**：突破盒子的幅度 + 站上/跌破 20 EMA 的動能距離。
+- **籌碼面**：合約市場未平倉量（OI）變化幅度，見下方 OI 追蹤說明。
+- **情緒面**：AI 新聞情緒是否跟這個方向共振（跟 `brain.fuse()` 同一套判斷）。
+- **量能面**：24h 成交額／振幅超過篩選門檻多少。
+
+四個維度加權平均成總分，做多/做空各自依總分排序，`RANKING_TOP_N`（預設 5）可在 `.env` 調整。
+
+**🌡️ 市場情緒儀表板**：
+- **市場平均 RSI**：重複利用本輪已經抓好的 K 線算 Wilder's RSI，逐檔算完取平均，零額外 API 呼叫。
+- **恐懼貪婪指數**：打 [alternative.me](https://alternative.me/crypto/fear-and-greed-index/) 的免費公開 API（不需金鑰），失敗會優雅降級顯示「無法取得」，不影響其他訊號。
+- **山寨季代理指標**：見下方誠實範圍說明。
+
+### ⚠️ 誠實範圍說明：這不是真正的鏈上大戶錢包監控
+
+使用者參考的截圖裡有「大戶錢包監控」「巨鯨雷達」等功能，那是在追蹤特定錢包地址的鏈上資金
+流向，需要額外的鏈上資料商（例如 Nansen／Arkham／Etherscan Pro），目前**沒有**接、也不在
+免費公開 API 範圍內。這裡做的「籌碼面」維度跟 OI 儀表板，用的是 OKX 公開的合約未平倉量
+（`oi_tracker.py`，`GET /api/v5/public/open-interest`）——OI 在價格持平時大幅變化，代表
+有大額資金正在建倉/平倉（不論多空），是業界常見、對散戶也公開透明的替代解讀方式，但終究
+是「合約未平倉量」，不是「錢包持倉」，兩者不能劃上等號。每次分析會把當下 OI 存進 SQLite
+（`db.py` 的 `oi_snapshot` 表）當下次比較的基準，第一次看到某檔商品沒有基準值時如實顯示
+「尚無基準值」，不會亂猜方向。
+
+山寨季代理指標同理：業界常見定義（如 blockchaincenter.net）是「前 50 大幣種過去 90 天漲幅
+贏過 BTC 的比例 > 75%」，這裡沒有另外接那個資料源，而是直接用本系統當下監控的商品清單
+（`TOP_N`，預設 6 檔），在**同一段 K 線窗口**跟 BTC 比報酬率——樣本數少、窗口遠短於 90 天，
+只能當「短線氛圍」的粗略參考，畫面上會清楚標註這個差異，不會包裝成正式指數。
 
 ## AI 辯論空間
 

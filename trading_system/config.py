@@ -49,6 +49,9 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 # 沒有背景排程、沒有自動輪詢——分析只在使用者按下「立即分析」時才觸發一輪，
 # 用量由點擊次數決定，不需要額外的節流間隔設定。
 
+# ---- 推薦強度榜（見 ranking.py） ----
+RANKING_TOP_N = int(os.getenv("RANKING_TOP_N", "5"))  # 做多/做空各顯示前幾名
+
 # ---- 訊號結果追蹤與自動優化（見 db.py / outcome_tracker.py / strategy_tuner.py） ----
 # 每次分析時回頭檢查未結算訊號要抓多少根已收盤 K 線（OKX /market/candles 單次上限 300）
 RESOLUTION_LOOKBACK_CANDLES = int(os.getenv("RESOLUTION_LOOKBACK_CANDLES", "300"))

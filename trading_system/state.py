@@ -22,6 +22,14 @@ class SystemState:
         self.recent_resolved: list[dict] = []
         self.tuning_note: str | None = None  # 這一輪如果剛好觸發自動優化，放調整理由；沒有就 None
         self.effective_min_amplitude_pct: float = 0.0  # 目前實際生效的振幅門檻（可能已被自動優化調整過）
+        # 市場情緒儀表板（見 market_pulse.py）：平均 RSI、山寨季代理指標、恐懼貪婪指數
+        self.market_pulse: dict = {
+            "rsi": {"avg_rsi": None, "label": "尚未分析", "sample_size": 0},
+            "altseason": {"pct_outperforming_btc": None, "label": "尚未分析", "sample_size": 0},
+            "fear_greed": None,
+        }
+        # 推薦強度榜（見 ranking.py）：做多/做空各自依四維度總分排序
+        self.ranking: dict = {"long": [], "short": []}
 
 
 STATE = SystemState()

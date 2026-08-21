@@ -77,6 +77,33 @@
       </div>
     </section>
 
+    <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
+      <h2 class="text-base font-semibold text-gray-300 flex items-center mb-3">
+        <span class="mr-2">🌡️</span> 市場情緒儀表板
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
+        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+          <div class="text-xs text-gray-500 mb-1">市場平均 RSI</div>
+          <div id="pulse-rsi-value" class="text-2xl font-bold font-mono text-gray-200">—</div>
+          <div id="pulse-rsi-label" class="text-xs text-gray-500 mt-1">尚未分析</div>
+        </div>
+        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+          <div class="text-xs text-gray-500 mb-1">恐懼貪婪指數</div>
+          <div id="pulse-feargreed-value" class="text-2xl font-bold font-mono text-gray-200">—</div>
+          <div id="pulse-feargreed-label" class="text-xs text-gray-500 mt-1">尚未分析</div>
+        </div>
+        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+          <div class="text-xs text-gray-500 mb-1">山寨季代理指標</div>
+          <div id="pulse-altseason-value" class="text-2xl font-bold font-mono text-gray-200">—</div>
+          <div id="pulse-altseason-label" class="text-xs text-gray-500 mt-1">尚未分析</div>
+        </div>
+      </div>
+      <p class="text-[11px] text-gray-600 mt-3 leading-relaxed">
+        ⚠️ 山寨季代理指標不是業界常見「前 50 大幣種 90 天報酬率」的正式定義，而是用本系統當下監控的商品清單，
+        在跟訊號判斷相同的短窗口跟 BTC 比報酬率——樣本數少、窗口短，只能當短線氛圍的粗略參考，不是正式指數。
+      </p>
+    </section>
+
     <div id="tuning-banner" class="hidden bg-indigo-950/40 border border-indigo-800/60 text-indigo-300 text-xs px-4 py-3 rounded-lg">
       ⚙️ <span id="tuning-note"></span>
     </div>
@@ -96,6 +123,69 @@
       </p>
       <div id="resolved-list" class="hidden space-y-2"></div>
     </section>
+
+    <section class="space-y-3">
+      <h2 class="text-base font-semibold text-gray-300 flex items-center">
+        <span class="mr-2">📊</span> 推薦強度榜（技術面／籌碼面／情緒面／量能面 四維度評分）
+      </h2>
+      <p class="text-xs text-gray-500 leading-relaxed">
+        「籌碼面」用合約未平倉量（OI）變化幅度當替代指標，<b>不是</b>真正的鏈上大戶錢包監控——
+        OKX 公開 API 沒有那種資料，見下方倉位計算機上方說明。四個維度都是零額外 AI 成本、重複利用本輪已抓好的資料算出來的。
+      </p>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-gray-900 border border-green-800/60 rounded-xl p-4">
+          <h3 class="text-sm font-bold text-green-400 mb-3">🟢 做多推薦</h3>
+          <div id="ranking-long" class="space-y-3">
+            <div class="text-xs text-gray-500">尚無符合條件的做多訊號</div>
+          </div>
+        </div>
+        <div class="bg-gray-900 border border-red-800/60 rounded-xl p-4">
+          <h3 class="text-sm font-bold text-red-400 mb-3">🔴 做空推薦</h3>
+          <div id="ranking-short" class="space-y-3">
+            <div class="text-xs text-gray-500">尚無符合條件的做空訊號</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <details id="calc-details" class="bg-gray-900 border border-gray-800 rounded-xl shadow-lg group">
+      <summary class="cursor-pointer select-none px-5 py-4 flex items-center justify-between text-gray-300 font-semibold">
+        <span class="flex items-center"><span class="mr-2">🧮</span> 倉位計算機</span>
+        <span class="text-xs text-gray-500 group-open:hidden">點開展開</span>
+      </summary>
+      <div class="px-5 pb-5 space-y-4 border-t border-gray-800 pt-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-gray-400">
+          <label class="block">帳戶資金 (USDT)
+            <input id="calc-balance" type="number" value="10000" min="0" step="any"
+              class="mt-1 w-full bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-gray-100 font-mono" />
+          </label>
+          <label class="block">單筆風險 (%)
+            <input id="calc-risk-pct" type="number" value="1" min="0" step="0.1"
+              class="mt-1 w-full bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-gray-100 font-mono" />
+          </label>
+          <label class="block">最大槓桿（可留空）
+            <input id="calc-leverage" type="number" min="0" step="any" placeholder="例如 10"
+              class="mt-1 w-full bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-gray-100 font-mono" />
+          </label>
+          <label class="block">進場價
+            <input id="calc-entry" type="number" step="any"
+              class="mt-1 w-full bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-gray-100 font-mono" />
+          </label>
+          <label class="block">停損價
+            <input id="calc-stop" type="number" step="any"
+              class="mt-1 w-full bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-gray-100 font-mono" />
+          </label>
+          <label class="block">停利價（可留空）
+            <input id="calc-target" type="number" step="any"
+              class="mt-1 w-full bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-gray-100 font-mono" />
+          </label>
+        </div>
+        <div id="calc-result" class="bg-gray-950 border border-gray-800 rounded-lg p-3 text-xs font-mono text-gray-500 leading-relaxed">
+          填入進場價／停損價後會自動試算，也可以直接點下方任一訊號卡片的「🧮 用此訊號試算倉位」帶入數字。
+        </div>
+        <p class="text-[11px] text-gray-600 leading-relaxed">⚠️ 純數學試算（風險金額 ÷ 進場停損價差 ＝ 建議部位大小），不是投資建議；本系統不會拿這個結果自動下單。</p>
+      </div>
+    </details>
 
     <section class="space-y-3">
       <h2 class="text-base font-semibold text-gray-300 flex items-center">
@@ -321,6 +411,8 @@ function renderDashboard(data) {
   renderTuningBanner(data.tuning_note);
   renderWinRate(data.win_rate_stats);
   renderResolvedList(data.recent_resolved);
+  renderMarketPulse(data.market_pulse);
+  renderRankingBoard(data.ranking);
 
   const container = document.getElementById("signals-container");
   container.innerHTML = "";
@@ -368,12 +460,144 @@ function renderDashboard(data) {
         <div class="text-gray-400">停利1 <span class="text-green-400 block font-bold">${fmt(sig.take_profit_1)}</span></div>
         <div class="text-gray-400">停利2 <span class="text-green-300 block font-bold">${fmt(sig.take_profit_2)}</span></div>
       </div>
-      <div class="text-xs text-gray-500 font-mono">24h 振幅：${fmt(sig.amplitude_pct, 2)}%</div>
+      <div class="text-xs text-gray-500 font-mono">24h 振幅：${fmt(sig.amplitude_pct, 2)}%${sig.oi_label ? `　OI：${sig.oi_label}` : ""}</div>
       <div class="text-xs text-gray-400 bg-gray-950/50 p-2.5 rounded border border-gray-800/60 leading-relaxed">
         <span class="font-semibold text-indigo-400">大腦研判：</span>${sig.reason}
-      </div>`;
+      </div>
+      ${sig.signal_type ? `<button class="calc-fill-btn w-full text-xs px-3 py-1.5 rounded-lg border border-indigo-800 text-indigo-400 hover:bg-indigo-950/40 transition-colors">🧮 用此訊號試算倉位</button>` : ""}`;
+    if (sig.signal_type) {
+      card.querySelector(".calc-fill-btn").addEventListener("click", () => fillCalcFromSignal(sig));
+    }
     container.appendChild(card);
   }
+}
+
+/* ---------------------------------------------------------------- */
+/* 市場情緒儀表板                                                       */
+/* ---------------------------------------------------------------- */
+function renderMarketPulse(pulse) {
+  if (!pulse) return;
+  const rsi = pulse.rsi || {};
+  document.getElementById("pulse-rsi-value").textContent = rsi.avg_rsi != null ? rsi.avg_rsi.toFixed(1) : "—";
+  document.getElementById("pulse-rsi-label").textContent = rsi.label ? `${rsi.label}（樣本 ${rsi.sample_size} 檔）` : "尚未分析";
+
+  const fg = pulse.fear_greed;
+  document.getElementById("pulse-feargreed-value").textContent = fg ? fg.value : "—";
+  document.getElementById("pulse-feargreed-label").textContent = fg ? fg.label : "無法取得（外部 API 暫時無回應，不影響其他訊號）";
+
+  const alt = pulse.altseason || {};
+  document.getElementById("pulse-altseason-value").textContent = alt.pct_outperforming_btc != null ? `${alt.pct_outperforming_btc}%` : "—";
+  document.getElementById("pulse-altseason-label").textContent = alt.label ? `${alt.label}（樣本 ${alt.sample_size} 檔）` : "尚未分析";
+}
+
+/* ---------------------------------------------------------------- */
+/* 推薦強度榜                                                          */
+/* ---------------------------------------------------------------- */
+const DIM_LABELS = { technical: "技術面", chips: "籌碼面", sentiment: "情緒面", volume: "量能面" };
+
+function strengthBarHtml(label, value) {
+  const v = Math.max(0, Math.min(100, value));
+  const color = v >= 70 ? "bg-green-500" : v >= 40 ? "bg-yellow-500" : "bg-red-500";
+  return `
+    <div class="flex items-center gap-2 text-[11px]">
+      <span class="w-10 text-gray-500 shrink-0">${label}</span>
+      <div class="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+        <div class="h-full ${color}" style="width:${v}%"></div>
+      </div>
+      <span class="w-7 text-right text-gray-400 font-mono">${v.toFixed(0)}</span>
+    </div>`;
+}
+
+function renderRankingCard(item) {
+  const dimsHtml = Object.entries(item.dimensions).map(([k, v]) => strengthBarHtml(DIM_LABELS[k] || k, v)).join("");
+  const overallCls = item.overall >= 70 ? "text-green-400" : item.overall >= 40 ? "text-yellow-400" : "text-red-400";
+  return `
+    <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-bold text-white">${item.name}</span>
+        <span class="text-sm font-mono font-bold ${overallCls}">${item.overall.toFixed(1)}</span>
+      </div>
+      ${dimsHtml}
+    </div>`;
+}
+
+function renderRankingBoard(ranking) {
+  const longEl = document.getElementById("ranking-long");
+  const shortEl = document.getElementById("ranking-short");
+  longEl.innerHTML = (ranking && ranking.long && ranking.long.length)
+    ? ranking.long.map(renderRankingCard).join("")
+    : `<div class="text-xs text-gray-500">尚無符合條件的做多訊號</div>`;
+  shortEl.innerHTML = (ranking && ranking.short && ranking.short.length)
+    ? ranking.short.map(renderRankingCard).join("")
+    : `<div class="text-xs text-gray-500">尚無符合條件的做空訊號</div>`;
+}
+
+/* ---------------------------------------------------------------- */
+/* 倉位計算機（純本地計算，POST /api/v1/position-size，公式只在後端寫一份）    */
+/* ---------------------------------------------------------------- */
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+}
+
+async function runPositionCalc() {
+  const resultEl = document.getElementById("calc-result");
+  const balance = parseFloat(document.getElementById("calc-balance").value);
+  const riskPct = parseFloat(document.getElementById("calc-risk-pct").value);
+  const entry = parseFloat(document.getElementById("calc-entry").value);
+  const stop = parseFloat(document.getElementById("calc-stop").value);
+  const leverageRaw = document.getElementById("calc-leverage").value;
+  const targetRaw = document.getElementById("calc-target").value;
+
+  if (!balance || !riskPct || !entry || !stop) {
+    resultEl.textContent = "填入進場價／停損價後會自動試算，也可以直接點下方任一訊號卡片的「🧮 用此訊號試算倉位」帶入數字。";
+    return;
+  }
+
+  const body = { account_balance: balance, risk_pct: riskPct, entry_price: entry, stop_loss_price: stop };
+  if (leverageRaw) body.leverage_cap = parseFloat(leverageRaw);
+  if (targetRaw) body.take_profit_1 = parseFloat(targetRaw);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/position-size`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      resultEl.innerHTML = `<span class="text-red-400">${data.message || "計算失敗，請確認輸入的數字。"}</span>`;
+      return;
+    }
+    resultEl.innerHTML = `
+      風險金額：<span class="text-white">${data.risk_amount.toLocaleString()} USDT</span>
+      建議部位：<span class="text-indigo-400">${data.position_size.toLocaleString(undefined, { maximumFractionDigits: 6 })} 單位</span>
+      （約 <span class="text-white">${data.position_notional.toLocaleString()} USDT</span>）<br/>
+      停損距離：${data.stop_distance_pct}%
+      ${data.required_margin_at_max_leverage != null ? `　所需保證金：<span class="text-white">${data.required_margin_at_max_leverage.toLocaleString()} USDT</span>（隱含槓桿 ${data.implied_leverage}x）` : ""}
+      ${data.reward_at_tp1 != null ? `<br/>到達停利價的預估獲利：<span class="text-green-400">${data.reward_at_tp1.toLocaleString()} USDT</span>` : ""}
+    `;
+  } catch (err) {
+    resultEl.innerHTML = `<span class="text-red-400">無法連上後端：${err}</span>`;
+  }
+}
+
+const debouncedCalc = debounce(runPositionCalc, 300);
+["calc-balance", "calc-risk-pct", "calc-leverage", "calc-entry", "calc-stop", "calc-target"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", debouncedCalc);
+});
+
+function fillCalcFromSignal(sig) {
+  const details = document.getElementById("calc-details");
+  details.open = true;
+  document.getElementById("calc-entry").value = sig.price ?? "";
+  document.getElementById("calc-stop").value = sig.stop_loss ?? "";
+  document.getElementById("calc-target").value = sig.take_profit_1 ?? "";
+  details.scrollIntoView({ behavior: "smooth", block: "start" });
+  runPositionCalc();
 }
 
 // 頁面載入時只讀「上一次」分析結果（如果有），不會觸發新的分析、不打任何外部 API。

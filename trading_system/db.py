@@ -42,6 +42,16 @@ CREATE TABLE IF NOT EXISTS strategy_params (
   updated_at INTEGER NOT NULL,
   reason TEXT
 );
+
+-- 每檔商品只留「最近一次」的未平倉量快照（見 oi_tracker.py），用來跟這一輪比較算出
+-- 變化幅度。不留歷史序列——OI 儀表板只需要「跟上次分析週期比起來變化多少」，不需要
+-- 長期時間序列，用 UPSERT 保持這張表只有 TOP_N 等級的少量列數。
+CREATE TABLE IF NOT EXISTS oi_snapshot (
+  inst_id TEXT PRIMARY KEY,
+  oi REAL NOT NULL,
+  oi_ccy REAL NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 """
 
 
@@ -161,6 +171,31 @@ def set_param(key: str, value: float, updated_at: int, reason: str):
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, "
             "reason = excluded.reason",
             (key, value, updated_at, reason),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_previous_oi(inst_id: str) -> float | None:
+    """回傳上一輪分析記下的未平倉量（換算成標的幣種數量），沒有紀錄就回傳 None
+    （oi_tracker.compute_oi_delta 看到 None 會回傳「尚無基準值」而不是亂猜方向）。"""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT oi_ccy FROM oi_snapshot WHERE inst_id = ?", (inst_id,)).fetchone()
+        return float(row["oi_ccy"]) if row else None
+    finally:
+        conn.close()
+
+
+def set_oi_snapshot(inst_id: str, oi: float, oi_ccy: float, updated_at: int):
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO oi_snapshot (inst_id, oi, oi_ccy, updated_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(inst_id) DO UPDATE SET oi = excluded.oi, oi_ccy = excluded.oi_ccy, "
+            "updated_at = excluded.updated_at",
+            (inst_id, oi, oi_ccy, updated_at),
         )
         conn.commit()
     finally:
