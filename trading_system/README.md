@@ -1,0 +1,99 @@
+# 加密貨幣當沖訊號大腦（獨立全端專案）
+
+動態量化選幣 ＋ AI 總經新聞情緒 ＋ 20 EMA/盤整盒子技術面訊號的獨立監控平台。跟 repo 根目錄
+的 `backend/`（節流晨報）是**完全獨立的專案**，互不依賴、互不影響，可以各自單獨啟動。
+
+> ⚠️ **這是訊號監控工具，不是自動化交易系統。** 全程不使用任何交易所 API 金鑰、不下單、
+> 不動用真實資金。所有訊號僅供研究參考，不構成投資建議。若之後要接上真正的自動化下單，
+> 需要另外評估金鑰保管、風控上限、模擬盤驗證等安全機制——目前刻意不包含。
+
+## 架構
+
+```
+trading_system/
+├─ app.py            # FastAPI 進入點：REST API + 掛載 index.html + 啟動背景迴圈
+├─ background.py      # 背景重新整理迴圈：OKX 篩選 → K線 → 技術訊號 → 融合 AI 新聞情緒
+├─ okx_client.py       # OKX public REST：商品篩選（screen_active_instruments）+ K線抓取
+├─ strategy.py          # 技術面大腦：20 EMA + 盤整盒子突破（純函式，內建自測）
+├─ news_client.py        # AI 新聞大腦：抓 RSS 頭條 → LLM 判斷多空情緒（Anthropic/OpenAI）
+├─ brain.py               # 多空共振：技術面 + AI 情緒融合成最終建議（純函式，內建自測）
+├─ state.py                # 行程內記憶體狀態（單一背景迴圈寫、REST 端點讀）
+├─ index.html                # 獨立網頁前端（暗黑交易儀表板，每 10 秒輪詢一次）
+├─ requirements.txt           # fastapi / uvicorn / httpx / pandas
+└─ .env.example                # 環境變數範本
+```
+
+## 啟動方式
+
+```bash
+cd trading_system
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+cp .env.example .env        # 沒有 AI 金鑰也能跑，見下方「AI 新聞情緒」
+# 用編輯器打開 .env 視需要調整門檻/金鑰
+
+cd ..                       # 回到 repo 根目錄，因為模組用相對匯入（trading_system 套件）
+uvicorn trading_system.app:app --host 127.0.0.1 --port 8000
+```
+
+打開瀏覽器 `http://127.0.0.1:8000` 即可看到儀表板（後端直接把 `index.html` 掛在 `/`）。
+也可以不啟動網頁伺服器服務前端，直接雙擊 `trading_system/index.html` 用瀏覽器打開——
+後端 CORS 全開放，一樣能連上 `http://127.0.0.1:8000/api/v1/dashboard`。
+
+## 自測（不需要網路，也不需要 AI 金鑰）
+
+```bash
+python -m trading_system.okx_client   # 商品篩選邏輯自測
+python -m trading_system.strategy     # 20 EMA + 盒子突破訊號自測
+python -m trading_system.brain        # 多空共振融合邏輯自測
+python -m trading_system.news_client  # JSON 解析（LLM 回覆容錯）自測
+```
+
+## AI 新聞情緒 — 如何啟用
+
+預設 `AI_PROVIDER=anthropic`。沒填金鑰時系統不會出錯，只是新聞情緒固定回傳 `NEUTRAL`
+並在 `news_reason` 附上提示，技術面訊號仍照常運作（面板上會顯示「技術面做多/做空（未經新聞驗證）」）。
+
+**建立 Anthropic（Claude）API 金鑰：** https://console.anthropic.com/settings/keys
+1. 用你的帳號登入 Anthropic Console。
+2. 左側選單「API Keys」→「Create Key」，複製產生的金鑰（只會顯示一次）。
+3. 貼進 `trading_system/.env` 的 `ANTHROPIC_API_KEY=`。
+4. 重新啟動 `uvicorn`，等下一輪背景更新（預設最多 10 分鐘，見 `NEWS_REFRESH_SECONDS`）即可看到真實的 AI 新聞判讀。
+
+也支援 OpenAI 當替代方案：把 `.env` 的 `AI_PROVIDER` 改成 `openai`，並在
+https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
+
+`.env` 已加進根目錄 `.gitignore`（`trading_system/.env`），金鑰不會被 commit 進版本控制。
+
+## 商品篩選門檻（`.env` 可調）
+
+| 變數 | 預設 | 說明 |
+|---|---|---|
+| `MIN_VOL_USDT` | 50,000,000 | 24h 成交額門檻（USDT），過濾流動性不足的商品 |
+| `MIN_AMPLITUDE_PCT` | 3.0 | 24h 振幅門檻（%），過濾波動太小、扣手續費後沒利潤空間的商品 |
+| `TOP_N` | 6 | 最終精選監控幾檔（依振幅由高到低排序） |
+| `EMA_PERIOD` / `BOX_LOOKBACK` | 20 / 15 | 20 EMA 週期、盒子回看根數 |
+| `CANDLE_BAR` | 5m | K 線週期 |
+| `REFRESH_SECONDS` | 30 | 背景重算商品篩選＋技術訊號的間隔（秒） |
+| `NEWS_REFRESH_SECONDS` | 600 | 背景重新呼叫 AI 新聞情緒的間隔（秒），避免每次前端輪詢都燒 token |
+
+## 訊號邏輯
+
+**技術面**（`strategy.py`）：跟 20 EMA 的相對位置決定只做多或只做空；最近 `BOX_LOOKBACK`
+根已收盤 K 線的高低點框出「盤整盒子」；當前這根**已收盤**（非正在走的那根，避免插針假突破——
+見 `okx_client.fetch_confirmed_candles` 的說明）K 線實體突破盒子且同向站上/跌破 EMA 才觸發訊號。
+停損固定設在盒子中線。
+
+**AI 新聞情緒**（`news_client.py`）：抓 CoinDesk／CoinTelegraph 公開 RSS 頭條，丟給 LLM 判斷
+整體市場是利多/利空/中性。
+
+**多空共振**（`brain.py`）：技術面訊號跟 AI 新聞情緒同向 → 標記「強烈做多/做空」；技術面突破但
+AI 新聞情緒明確反向 → 標記「潛在假突破，觀望」並不建議進場；AI 新聞中性或未啟用 → 顯示純技術面訊號。
+
+## 跟 `backend/`（節流晨報）的關係
+
+完全獨立，兩者可以同時或分別運行，不共用程式碼、不共用資料庫、不共用連接埠（節流晨報用
+`8788`，這個專案預設用 `8000`）。節流晨報刻意維持「零 AI／零 token」的設計原則；這個專案
+是另一條路線的實驗（會呼叫 AI、需要 API 金鑰），所以獨立成自己的資料夾，不動節流晨報既有程式碼。
