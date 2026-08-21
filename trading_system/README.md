@@ -26,9 +26,32 @@ trading_system/
 ├─ brain.py               # 多空共振：技術面 + AI 情緒融合成最終建議（純函式，內建自測）
 ├─ state.py                # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
 ├─ index.html                # 網頁前端：🎯當沖訊號／📚知識宇宙 兩個分頁的單一 SPA
+├─ static/tailwind.css        # 編譯好的樣式表（已 commit，見下方「前端樣式」），伺服器直接掛載 /static
+├─ package.json                # 只用來跑 Tailwind CLI 編譯 static/tailwind.css，非必要不用裝
 ├─ requirements.txt           # fastapi / uvicorn / httpx / pandas / python-dotenv
 └─ .env.example                # 環境變數範本
 ```
+
+### 前端樣式：不依賴任何外部 CDN
+
+`index.html` 原本用 `<script src="https://cdn.tailwindcss.com">`——這是 Tailwind 官方文件
+自己都寫明「僅供原型測試，不建議正式使用」的執行期 JIT 編譯器：每次打開頁面都要連網抓
+這個 script、在瀏覽器裡即時編譯樣式。網路環境較嚴（公司防火牆、部分地區）連不上這個 CDN，
+整頁會完全沒有樣式（這不是假設——這個專案的開發環境就完全連不上它，也連不上 `okx.com`）。
+
+現在改成用 Tailwind CLI 預先編譯出 `static/tailwind.css`（已經 commit 進 repo，一般啟動
+伺服器不需要 Node.js，直接能跑）。如果你改了 `index.html` 裡用到的 class（新增/修改樣式），
+需要重新編譯：
+
+```bash
+cd trading_system
+npm install    # 只裝 tailwindcss 這一個 devDependency
+npm run build:css
+```
+
+`node_modules/` 已加進 `.gitignore`，不會被 commit；`static/tailwind.css`（編譯產物）跟
+`package.json`／`package-lock.json`／`tailwind.config.js`（編譯設定）都會被 commit，這樣
+別人 clone 下來不用裝 Node 也能直接跑，只有要改樣式的人才需要。
 
 `config.py` 另外存了 `SUPABASE_URL` / `SUPABASE_ANON_KEY`（預設值指向已部署好的
 `investment-knowledge-universe` 專案，anon key 是公開金鑰、給前端直接用沒有資安疑慮）。

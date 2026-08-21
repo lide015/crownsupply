@@ -1,0 +1,11 @@
+{
+  "name": "trading-system-frontend-build",
+  "private": true,
+  "description": "只是用來跑 Tailwind CLI 產生 static/tailwind.css 的最小 package.json，不是完整前端專案，不需要 npm install 其他任何東西。",
+  "scripts": {
+    "build:css": "tailwindcss -i ./tailwind.input.css -o ./static/tailwind.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}

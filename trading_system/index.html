@@ -4,7 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>交易大腦｜當沖訊號 + 知識宇宙</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>" />
+<link rel="stylesheet" href="/static/tailwind.css" />
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans min-h-screen">
 
@@ -63,7 +64,7 @@
 
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-md font-semibold text-gray-300 flex items-center">
+        <h2 class="text-base font-semibold text-gray-300 flex items-center">
           <span class="mr-2">📰</span> AI 即時新聞情緒大腦
         </h2>
         <span id="ai-sentiment" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400">
@@ -77,7 +78,7 @@
     </section>
 
     <section class="space-y-3">
-      <h2 class="text-md font-semibold text-gray-300 flex items-center">
+      <h2 class="text-base font-semibold text-gray-300 flex items-center">
         <span class="mr-2">🎯</span> 多空雙向訊號面板（5 分鐘 K 線・20 EMA + 盤整盒子突破）
       </h2>
       <div id="signals-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -107,7 +108,7 @@
     <section id="kn-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></section>
 
     <section id="kn-missions-section" class="hidden space-y-3">
-      <h2 class="text-md font-semibold text-gray-300 flex items-center">
+      <h2 class="text-base font-semibold text-gray-300 flex items-center">
         <span class="mr-2">🏁</span> 任務（Missions）
       </h2>
       <div id="kn-missions" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
@@ -465,11 +466,17 @@ function openKnowledgeModal(nodeId) {
   document.getElementById("kn-modal").classList.remove("hidden");
 }
 
-document.getElementById("kn-modal-close").addEventListener("click", () => {
+function closeKnowledgeModal() {
   document.getElementById("kn-modal").classList.add("hidden");
-});
+}
+document.getElementById("kn-modal-close").addEventListener("click", closeKnowledgeModal);
 document.getElementById("kn-modal").addEventListener("click", (e) => {
-  if (e.target.id === "kn-modal") document.getElementById("kn-modal").classList.add("hidden");
+  if (e.target.id === "kn-modal") closeKnowledgeModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !document.getElementById("kn-modal").classList.contains("hidden")) {
+    closeKnowledgeModal();
+  }
 });
 </script>
 </body>

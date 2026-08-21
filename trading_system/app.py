@@ -18,6 +18,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import background, config
 from .state import STATE
@@ -26,6 +27,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("app")
 
 INDEX_HTML = Path(__file__).resolve().parent / "index.html"
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 _http_client: httpx.AsyncClient | None = None
 _analyze_lock = asyncio.Lock()
@@ -52,6 +54,12 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+if STATIC_DIR.is_dir():
+    # 自己編譯好的 Tailwind CSS（見 README「前端樣式」），不再依賴 cdn.tailwindcss.com——
+    # 那個 CDN 版本是 Tailwind 官方自己都說「僅供原型測試」的執行期 JIT script，會在頁面
+    # 載入當下才連網編譯樣式，網路較嚴（防火牆/某些地區）連不上就整頁沒有樣式。
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 def _dashboard_payload() -> dict:
