@@ -7,18 +7,18 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>" />
 <link rel="stylesheet" href="/static/tailwind.css" />
 </head>
-<body class="bg-gray-950 text-gray-100 font-sans min-h-screen">
+<body class="bg-gray-950 text-gray-100 font-sans min-h-screen bg-[radial-gradient(ellipse_90%_45%_at_50%_-10%,rgba(245,158,11,0.10),rgba(3,7,18,0)_70%)] bg-fixed">
 
-<header class="border-b border-gray-800 bg-gray-900 px-6 py-4 flex flex-wrap justify-between items-center gap-3">
+<header class="sticky top-0 z-20 border-b border-amber-900/30 bg-gradient-to-b from-gray-900 to-gray-950/95 backdrop-blur px-6 py-4 flex flex-wrap justify-between items-center gap-3 shadow-[0_2px_20px_rgba(0,0,0,0.4)]">
   <div class="flex items-center space-x-3">
-    <span class="text-2xl">🧠</span>
-    <h1 class="text-xl font-bold tracking-wider text-indigo-400">交易大腦</h1>
+    <span class="text-2xl drop-shadow-[0_0_6px_rgba(245,158,11,0.5)]">🧠</span>
+    <h1 class="text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-amber-300">交易大腦</h1>
   </div>
-  <nav class="flex items-center gap-1 bg-gray-950 border border-gray-800 rounded-lg p-1">
-    <button id="tab-btn-signals" class="tab-btn px-3 py-1.5 rounded-md text-sm font-semibold transition-colors">
+  <nav class="flex items-center gap-1 bg-gray-950 border border-amber-900/30 rounded-full p-1">
+    <button id="tab-btn-signals" class="tab-btn px-4 py-1.5 rounded-full text-sm font-semibold transition-colors">
       🎯 當沖訊號
     </button>
-    <button id="tab-btn-knowledge" class="tab-btn px-3 py-1.5 rounded-md text-sm font-semibold transition-colors">
+    <button id="tab-btn-knowledge" class="tab-btn px-4 py-1.5 rounded-full text-sm font-semibold transition-colors">
       📚 知識宇宙
     </button>
   </nav>
@@ -32,14 +32,15 @@
     訊號僅供參考，<b>不會自動下單、不動用任何真實資金</b>；所有內容非投資建議。
   </div>
 
-  <main class="max-w-7xl mx-auto p-6 space-y-6">
+  <main class="max-w-7xl mx-auto p-6 space-y-7">
 
     <div class="flex flex-wrap items-center justify-between gap-3 bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
       <span class="text-sm text-gray-400">
-        上次分析：<span id="last-update" class="text-indigo-300 font-mono">尚未分析</span>
+        上次分析：<span id="last-update" class="text-amber-300 font-mono">尚未分析</span>
       </span>
       <button id="analyze-btn"
-        class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold
+        class="px-4 py-2 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 hover:from-amber-300 hover:to-amber-500
+               text-gray-950 text-sm font-bold shadow-[0_0_18px_rgba(245,158,11,0.35)]
                transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
         <span id="analyze-btn-icon">🔍</span>
         <span id="analyze-btn-label">立即分析</span>
@@ -52,19 +53,19 @@
         <span class="text-xs text-gray-500 group-open:hidden">點開展開</span>
       </summary>
       <div class="px-5 pb-5 space-y-3 text-sm text-gray-400 leading-relaxed border-t border-gray-800 pt-4">
-        <p><b class="text-indigo-400">20 EMA（20 週期指數移動平均線）</b>：把最近 20 根 K 線的收盤價取一個「越近期權重越高」的平均，用來判斷短線趨勢方向。價格在 EMA 之上通常視為偏多、之下視為偏空——這也是本系統「只做多不做空 / 只做空不做多」的判斷依據，不會兩邊都猜。</p>
-        <p><b class="text-indigo-400">盤整盒子（Box）</b>：價格在一段時間內上下小幅震盪，用最近 15 根已收盤 K 線的最高點與最低點框出一個區間。當某根 K 線的收盤價「站穩」盒子外面（不是影線碰到，是實體收盤價突破），才視為有效突破，避免插針假訊號。</p>
-        <p><b class="text-indigo-400">停損（Stop-Loss）</b>：這筆交易願意承受的最大虧損價位，固定設在盒子的中線。一旦價格跌破/漲破停損，代表原本的技術面假設不成立了，應該出場，不要心存僥倖。</p>
-        <p><b class="text-indigo-400">停利1 / 停利2（Take-Profit）</b>：用「風報比」（reward : risk）算出來的目標價——risk 是「進場價到停損價」的距離，停利1＝risk × 1.5 倍、停利2＝risk × 2 倍（皆可在 `.env` 調整）。常見做法是價格到停利1先減碼一半、剩下留到停利2，讓獲利部位有機會跟上更大的走勢。</p>
-        <p><b class="text-indigo-400">AI 新聞情緒</b>：抓即時財經新聞頭條，讓 AI 判斷市場整體氣氛是利多（BULLISH）、利空（BEARISH）還是中性（NEUTRAL）。</p>
-        <p><b class="text-indigo-400">多空共振</b>：技術面訊號（突破/跌破）跟 AI 新聞情緒方向一致時，才標記「強烈做多/做空」；如果技術面突破了但新聞情緒明確反向，會標記「潛在假突破，觀望」——這是系統刻意設計的煞車機制，避免逆著大方向硬做技術面訊號。</p>
+        <p><b class="text-amber-400">20 EMA（20 週期指數移動平均線）</b>：把最近 20 根 K 線的收盤價取一個「越近期權重越高」的平均，用來判斷短線趨勢方向。價格在 EMA 之上通常視為偏多、之下視為偏空——這也是本系統「只做多不做空 / 只做空不做多」的判斷依據，不會兩邊都猜。</p>
+        <p><b class="text-amber-400">盤整盒子（Box）</b>：價格在一段時間內上下小幅震盪，用最近 15 根已收盤 K 線的最高點與最低點框出一個區間。當某根 K 線的收盤價「站穩」盒子外面（不是影線碰到，是實體收盤價突破），才視為有效突破，避免插針假訊號。</p>
+        <p><b class="text-amber-400">停損（Stop-Loss）</b>：這筆交易願意承受的最大虧損價位，固定設在盒子的中線。一旦價格跌破/漲破停損，代表原本的技術面假設不成立了，應該出場，不要心存僥倖。</p>
+        <p><b class="text-amber-400">停利1 / 停利2（Take-Profit）</b>：用「風報比」（reward : risk）算出來的目標價——risk 是「進場價到停損價」的距離，停利1＝risk × 1.5 倍、停利2＝risk × 2 倍（皆可在 `.env` 調整）。常見做法是價格到停利1先減碼一半、剩下留到停利2，讓獲利部位有機會跟上更大的走勢。</p>
+        <p><b class="text-amber-400">AI 新聞情緒</b>：抓即時財經新聞頭條，讓 AI 判斷市場整體氣氛是利多（BULLISH）、利空（BEARISH）還是中性（NEUTRAL）。</p>
+        <p><b class="text-amber-400">多空共振</b>：技術面訊號（突破/跌破）跟 AI 新聞情緒方向一致時，才標記「強烈做多/做空」；如果技術面突破了但新聞情緒明確反向，會標記「潛在假突破，觀望」——這是系統刻意設計的煞車機制，避免逆著大方向硬做技術面訊號。</p>
         <p class="text-yellow-500/80">⚠️ 以上全部是規則式技術分析的參考資訊，不是投資建議，過去的訊號不保證未來獲利，進場前務必自己再三確認。</p>
       </div>
     </details>
 
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-base font-semibold text-gray-300 flex items-center">
+        <h2 class="text-base font-semibold text-gray-200 flex items-center border-l-2 border-amber-500/70 pl-3">
           <span class="mr-2">📰</span> AI 即時新聞情緒大腦（整體市場）
         </h2>
         <span id="ai-sentiment" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400">
@@ -82,24 +83,36 @@
     </section>
 
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
-      <h2 class="text-base font-semibold text-gray-300 flex items-center mb-3">
+      <h2 class="text-base font-semibold text-gray-200 flex items-center mb-4 border-l-2 border-amber-500/70 pl-3">
         <span class="mr-2">🌡️</span> 市場情緒儀表板
       </h2>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
-        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
-          <div class="text-xs text-gray-500 mb-1">市場平均 RSI</div>
-          <div id="pulse-rsi-value" class="text-2xl font-bold font-mono text-gray-200">—</div>
-          <div id="pulse-rsi-label" class="text-xs text-gray-500 mt-1">尚未分析</div>
+        <div class="bg-gray-950 border border-gray-800 rounded-lg p-4 flex flex-col items-center">
+          <div class="text-xs text-gray-500 mb-2">市場平均 RSI</div>
+          <div id="pulse-rsi-ring" class="relative w-20 h-20 rounded-full flex items-center justify-center transition-[background] duration-500" style="background:conic-gradient(#374151 0deg 360deg)">
+            <div class="absolute inset-[5px] bg-gray-950 rounded-full flex items-center justify-center">
+              <span id="pulse-rsi-value" class="text-lg font-bold font-mono text-gray-200">—</span>
+            </div>
+          </div>
+          <div id="pulse-rsi-label" class="text-xs text-gray-500 mt-2">尚未分析</div>
         </div>
-        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
-          <div class="text-xs text-gray-500 mb-1">恐懼貪婪指數</div>
-          <div id="pulse-feargreed-value" class="text-2xl font-bold font-mono text-gray-200">—</div>
-          <div id="pulse-feargreed-label" class="text-xs text-gray-500 mt-1">尚未分析</div>
+        <div class="bg-gray-950 border border-gray-800 rounded-lg p-4 flex flex-col items-center">
+          <div class="text-xs text-gray-500 mb-2">恐懼貪婪指數</div>
+          <div id="pulse-feargreed-ring" class="relative w-20 h-20 rounded-full flex items-center justify-center transition-[background] duration-500" style="background:conic-gradient(#374151 0deg 360deg)">
+            <div class="absolute inset-[5px] bg-gray-950 rounded-full flex items-center justify-center">
+              <span id="pulse-feargreed-value" class="text-lg font-bold font-mono text-gray-200">—</span>
+            </div>
+          </div>
+          <div id="pulse-feargreed-label" class="text-xs text-gray-500 mt-2">尚未分析</div>
         </div>
-        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
-          <div class="text-xs text-gray-500 mb-1">山寨季代理指標</div>
-          <div id="pulse-altseason-value" class="text-2xl font-bold font-mono text-gray-200">—</div>
-          <div id="pulse-altseason-label" class="text-xs text-gray-500 mt-1">尚未分析</div>
+        <div class="bg-gray-950 border border-gray-800 rounded-lg p-4 flex flex-col items-center">
+          <div class="text-xs text-gray-500 mb-2">山寨季代理指標</div>
+          <div id="pulse-altseason-ring" class="relative w-20 h-20 rounded-full flex items-center justify-center transition-[background] duration-500" style="background:conic-gradient(#374151 0deg 360deg)">
+            <div class="absolute inset-[5px] bg-gray-950 rounded-full flex items-center justify-center">
+              <span id="pulse-altseason-value" class="text-lg font-bold font-mono text-gray-200">—</span>
+            </div>
+          </div>
+          <div id="pulse-altseason-label" class="text-xs text-gray-500 mt-2">尚未分析</div>
         </div>
       </div>
       <p class="text-[11px] text-gray-600 mt-3 leading-relaxed">
@@ -108,13 +121,13 @@
       </p>
     </section>
 
-    <div id="tuning-banner" class="hidden bg-indigo-950/40 border border-indigo-800/60 text-indigo-300 text-xs px-4 py-3 rounded-lg">
+    <div id="tuning-banner" class="hidden bg-amber-950/30 border border-amber-800/50 text-amber-300 text-xs px-4 py-3 rounded-lg">
       ⚙️ <span id="tuning-note"></span>
     </div>
 
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg space-y-3">
       <div class="flex items-center justify-between">
-        <h2 class="text-base font-semibold text-gray-300 flex items-center">
+        <h2 class="text-base font-semibold text-gray-200 flex items-center border-l-2 border-amber-500/70 pl-3">
           <span class="mr-2">📊</span> 訊號結果追蹤（零 AI 成本，純規則判斷）
         </h2>
         <span id="win-rate-badge" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400">
@@ -129,7 +142,7 @@
     </section>
 
     <section class="space-y-3">
-      <h2 class="text-base font-semibold text-gray-300 flex items-center">
+      <h2 class="text-base font-semibold text-gray-200 flex items-center border-l-2 border-amber-500/70 pl-3">
         <span class="mr-2">📊</span> 推薦強度榜（技術面／籌碼面／情緒面／量能面 四維度評分）
       </h2>
       <p class="text-xs text-gray-500 leading-relaxed">
@@ -192,20 +205,20 @@
     </details>
 
     <section class="space-y-3">
-      <h2 class="text-base font-semibold text-gray-300 flex items-center">
+      <h2 class="text-base font-semibold text-gray-200 flex items-center border-l-2 border-amber-500/70 pl-3">
         <span class="mr-2">🎯</span> 多空雙向訊號面板（5 分鐘 K 線・20 EMA + 盤整盒子突破）
       </h2>
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div id="signals-filters" class="flex flex-wrap gap-2"></div>
         <input id="signals-search" type="text" placeholder="🔍 搜尋代號或名稱（例如 BTC）"
           class="w-full sm:w-64 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
-                 placeholder-gray-600 focus:outline-none focus:border-indigo-600" />
+                 placeholder-gray-600 focus:outline-none focus:border-amber-600" />
       </div>
       <p class="text-[11px] text-gray-600 leading-relaxed">
         這裡的篩選/搜尋只作用在<b>目前已完整分析</b>的商品（自動篩選出的 <span id="signals-count-hint">0</span> 檔
         ＋你自己從下方「全部商品總覽」點開分析過的）。想看完整清單、挑別的商品來分析，往下拉。
       </p>
-      <div id="signals-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div id="signals-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 text-center text-gray-500 col-span-full">
           尚未分析。按上方「🔍 立即分析」開始篩選 OKX 活躍合約並計算訊號。
         </div>
@@ -213,7 +226,7 @@
     </section>
 
     <section class="space-y-3">
-      <h2 class="text-base font-semibold text-gray-300 flex items-center">
+      <h2 class="text-base font-semibold text-gray-200 flex items-center border-l-2 border-amber-500/70 pl-3">
         <span class="mr-2">📋</span> 全部商品總覽（<span id="all-instruments-count">0</span> 檔）
       </h2>
       <p class="text-xs text-gray-500 leading-relaxed">
@@ -227,7 +240,7 @@
         </div>
         <input id="all-instruments-search" type="text" placeholder="🔍 搜尋代號或名稱（例如 ETH）"
           class="w-full sm:w-64 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
-                 placeholder-gray-600 focus:outline-none focus:border-indigo-600" />
+                 placeholder-gray-600 focus:outline-none focus:border-amber-600" />
       </div>
       <p class="text-[11px] text-gray-600 leading-relaxed">
         ⚡ 合約（永續合約，可做多可做空）才會被「立即分析」自動選中做技術分析；💰 現貨（只能做多、沒有槓桿/爆倉概念）
@@ -258,12 +271,12 @@
 <!-- ==================== 知識宇宙分頁 ==================== -->
 <div id="tab-knowledge" class="hidden">
 
-  <div class="bg-indigo-950/40 border-b border-indigo-800/60 text-indigo-300 text-xs px-6 py-2">
+  <div class="bg-amber-950/30 border-b border-amber-800/50 text-amber-300 text-xs px-6 py-2">
     📚 每張知識卡都是原創撰寫的通用交易/投資概念說明，不摘錄任何書籍原文。等級/XP/任務進度是
-    <span class="text-indigo-200 font-semibold">系統設計預覽</span>（尚未接使用者登入），鎖頭圖示僅示意解鎖機制，內容一樣點得開。
+    <span class="text-amber-200 font-semibold">系統設計預覽</span>（尚未接使用者登入），鎖頭圖示僅示意解鎖機制，內容一樣點得開。
   </div>
 
-  <main class="max-w-7xl mx-auto p-6 space-y-6">
+  <main class="max-w-7xl mx-auto p-6 space-y-7">
 
     <div id="kn-status" class="text-sm text-gray-500">正在連線知識庫…</div>
 
@@ -272,7 +285,7 @@
       <div class="flex flex-wrap items-center gap-3">
         <input id="kn-search" type="text" placeholder="🔍 搜尋知識卡標題"
           class="w-full sm:w-56 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
-                 placeholder-gray-600 focus:outline-none focus:border-indigo-600" />
+                 placeholder-gray-600 focus:outline-none focus:border-amber-600" />
         <div class="flex items-center gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
           <button id="kn-view-graph-btn" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">🗺️ 地圖檢視</button>
           <button id="kn-view-cards-btn" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">🗂️ 卡片檢視</button>
@@ -290,7 +303,7 @@
     <section id="kn-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></section>
 
     <section id="kn-missions-section" class="hidden space-y-3">
-      <h2 class="text-base font-semibold text-gray-300 flex items-center">
+      <h2 class="text-base font-semibold text-gray-200 flex items-center border-l-2 border-amber-500/70 pl-3">
         <span class="mr-2">🏁</span> 任務（Missions）
       </h2>
       <div id="kn-missions" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
@@ -311,11 +324,11 @@
     </div>
     <div class="space-y-3 text-sm text-gray-300 leading-relaxed">
       <div>
-        <div class="text-indigo-400 font-semibold mb-1">核心原理</div>
+        <div class="text-amber-400 font-semibold mb-1">核心原理</div>
         <p id="kn-modal-principle"></p>
       </div>
       <div>
-        <div class="text-indigo-400 font-semibold mb-1">案例</div>
+        <div class="text-amber-400 font-semibold mb-1">案例</div>
         <p id="kn-modal-case"></p>
       </div>
       <div>
@@ -323,7 +336,7 @@
         <ul id="kn-modal-mistakes" class="list-disc list-inside space-y-1 text-gray-400"></ul>
       </div>
       <div id="kn-modal-related-wrap" class="hidden">
-        <div class="text-indigo-400 font-semibold mb-1">延伸概念</div>
+        <div class="text-amber-400 font-semibold mb-1">延伸概念</div>
         <div id="kn-modal-related" class="flex flex-wrap gap-2"></div>
       </div>
     </div>
@@ -341,9 +354,9 @@
       <div id="kn-debate-error" class="hidden text-xs text-red-400 bg-red-950/30 border border-red-900 rounded-lg p-2"></div>
       <form id="kn-debate-form" class="flex items-end gap-2">
         <textarea id="kn-debate-input" rows="2" maxlength="500" placeholder="輸入你的論點或問題…"
-          class="flex-1 bg-gray-950 border border-gray-800 rounded-lg p-2 text-sm text-gray-200 resize-none focus:outline-none focus:border-indigo-600"></textarea>
+          class="flex-1 bg-gray-950 border border-gray-800 rounded-lg p-2 text-sm text-gray-200 resize-none focus:outline-none focus:border-amber-600"></textarea>
         <button id="kn-debate-send" type="submit"
-          class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold
+          class="px-4 py-2 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-gray-950 text-sm font-bold
                  transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">送出</button>
       </form>
     </div>
@@ -367,8 +380,8 @@ function activateTab(name) {
     const isActive = key === name;
     document.getElementById(t.panel).classList.toggle("hidden", !isActive);
     document.getElementById(t.btn).className =
-      "tab-btn px-3 py-1.5 rounded-md text-sm font-semibold transition-colors " +
-      (isActive ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-gray-200");
+      "tab-btn px-4 py-1.5 rounded-full text-sm font-semibold transition-colors " +
+      (isActive ? "bg-amber-500 text-gray-950 shadow-[0_0_12px_rgba(245,158,11,0.45)]" : "text-gray-400 hover:text-gray-200");
   }
   if (name === "knowledge" && !knowledgeLoaded) {
     knowledgeLoaded = true;
@@ -384,10 +397,10 @@ activateTab("signals");
 /* 當沖訊號分頁                                                        */
 /* ---------------------------------------------------------------- */
 const colorStyles = {
-  green:  { border: "border-green-600 bg-gradient-to-b from-gray-900 to-green-950/20", badge: "bg-green-500 text-gray-950 font-bold" },
-  red:    { border: "border-red-600 bg-gradient-to-b from-gray-900 to-red-950/20",     badge: "bg-red-500 text-white font-bold" },
+  green:  { border: "border-green-600 bg-gradient-to-b from-gray-900 to-green-950/20 shadow-[0_0_20px_-6px_rgba(34,197,94,0.35)]", badge: "bg-green-500 text-gray-950 font-bold" },
+  red:    { border: "border-red-600 bg-gradient-to-b from-gray-900 to-red-950/20 shadow-[0_0_20px_-6px_rgba(239,68,68,0.35)]",     badge: "bg-red-500 text-white font-bold" },
   yellow: { border: "border-yellow-600",                                                badge: "bg-yellow-600 text-gray-950 font-bold" },
-  blue:   { border: "border-indigo-600",                                                badge: "bg-indigo-600 text-white font-bold" },
+  blue:   { border: "border-blue-600",                                                  badge: "bg-blue-600 text-white font-bold" },
   gray:   { border: "border-gray-800",                                                  badge: "bg-gray-800 text-gray-300" },
 };
 
@@ -505,7 +518,7 @@ function renderSignalsFilters() {
     btn.className =
       "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors " +
       (opt.key === signalsFilter.assetClass
-        ? "bg-indigo-600 border-indigo-500 text-white"
+        ? "bg-amber-500 border-amber-400 text-gray-950"
         : "border-gray-700 text-gray-400 hover:text-gray-200");
     btn.addEventListener("click", () => {
       signalsFilter.assetClass = opt.key;
@@ -558,19 +571,21 @@ function renderSignalsList() {
     const card = document.createElement("div");
     card.className = `bg-gray-900 border ${style.border} rounded-xl p-5 shadow-md flex flex-col justify-between space-y-4`;
     card.innerHTML = `
-      <div class="flex justify-between items-center gap-2">
-        <span class="flex items-center gap-2">
-          <span class="text-lg font-bold tracking-wide text-white">${sig.name}</span>
-          <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400 whitespace-nowrap">
-            ${sig.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
+      <div class="flex justify-between items-start gap-2">
+        <span class="flex flex-col gap-1.5">
+          <span class="flex items-center gap-2 flex-wrap">
+            <span class="text-lg font-bold tracking-wide text-white">${sig.name}</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400 whitespace-nowrap">
+              ${sig.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
+            </span>
+            ${sig.product_type === "spot" ? `<span class="text-[10px] px-1.5 py-0.5 rounded border border-amber-800 text-amber-500 whitespace-nowrap">💰 現貨</span>` : ""}
           </span>
-          ${sig.product_type === "spot" ? `<span class="text-[10px] px-1.5 py-0.5 rounded border border-amber-800 text-amber-500 whitespace-nowrap">💰 現貨</span>` : ""}
+          <span class="text-2xl font-mono font-bold text-white leading-none">${fmt(sig.price)}</span>
         </span>
-        <span class="px-2.5 py-1 text-xs rounded ${style.badge} whitespace-nowrap">${sig.action}</span>
+        <span class="px-3 py-1.5 text-xs font-bold rounded-full ${style.badge} whitespace-nowrap shadow-sm">${sig.action}</span>
       </div>
-      <div class="grid grid-cols-2 gap-2 text-xs font-mono bg-gray-950 p-3 rounded-lg border border-gray-800">
-        <div class="text-gray-400">最新價格 <span class="text-white block">${fmt(sig.price)}</span></div>
-        <div class="text-gray-400">20 EMA <span class="text-indigo-400 block">${fmt(sig.ema)}</span></div>
+      <div class="grid grid-cols-3 gap-2 text-xs font-mono bg-gray-950 p-3 rounded-lg border border-gray-800">
+        <div class="text-gray-400">20 EMA <span class="text-amber-400 block">${fmt(sig.ema)}</span></div>
         <div class="text-gray-400">盒子高點 <span class="text-green-400 block">${fmt(sig.box_high)}</span></div>
         <div class="text-gray-400">盒子低點 <span class="text-red-400 block">${fmt(sig.box_low)}</span></div>
       </div>
@@ -581,13 +596,13 @@ function renderSignalsList() {
       </div>
       <div class="text-xs text-gray-500 font-mono">24h 振幅：${fmt(sig.amplitude_pct, 2)}%${sig.oi_label ? `　OI：${sig.oi_label}` : ""}</div>
       <div class="text-xs text-gray-400 bg-gray-950/50 p-2.5 rounded border border-gray-800/60 leading-relaxed">
-        <span class="font-semibold text-indigo-400">大腦研判：</span>${sig.reason}
+        <span class="font-semibold text-amber-400">大腦研判：</span>${sig.reason}
       </div>
       ${sig.news_headline ? `<div class="text-xs text-gray-500 bg-gray-950/30 p-2.5 rounded border border-gray-800/40 leading-relaxed">
         <span class="font-semibold text-gray-400">📰 ${sig.name} 相關新聞：</span>${sig.news_headline}
         ${sig.news_reason ? `<div class="text-gray-600 mt-1">${sig.news_reason}</div>` : ""}
       </div>` : ""}
-      ${sig.signal_type ? `<button class="calc-fill-btn w-full text-xs px-3 py-1.5 rounded-lg border border-indigo-800 text-indigo-400 hover:bg-indigo-950/40 transition-colors">🧮 用此訊號試算倉位</button>` : ""}`;
+      ${sig.signal_type ? `<button class="calc-fill-btn w-full text-xs px-3 py-1.5 rounded-lg border border-amber-800 text-amber-400 hover:bg-amber-950/30 transition-colors">🧮 用此訊號試算倉位</button>` : ""}`;
     if (sig.signal_type) {
       card.querySelector(".calc-fill-btn").addEventListener("click", () => fillCalcFromSignal(sig));
     }
@@ -614,7 +629,7 @@ function renderAllInstrumentsFilters() {
     btn.className =
       "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors " +
       (opt.key === allInstrumentsFilter.assetClass
-        ? "bg-indigo-600 border-indigo-500 text-white"
+        ? "bg-amber-500 border-amber-400 text-gray-950"
         : "border-gray-700 text-gray-400 hover:text-gray-200");
     btn.addEventListener("click", () => {
       allInstrumentsFilter.assetClass = opt.key;
@@ -699,7 +714,7 @@ function renderAllInstrumentsList() {
         <button class="analyze-inst-btn px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors ${
           isAnalyzed
             ? "border-green-800 text-green-400 bg-green-950/30"
-            : "border-indigo-800 text-indigo-400 hover:bg-indigo-950/40"
+            : "border-amber-800 text-amber-400 hover:bg-amber-950/30"
         }">${isAnalyzed ? "✅ 已分析" : "🔍 分析"}</button>
       </td>`;
     tr.querySelector(".analyze-inst-btn").addEventListener("click", (e) => analyzeInstrumentOnDemand(inst.instId, e.target));
@@ -738,21 +753,57 @@ async function analyzeInstrumentOnDemand(instId, btn) {
 }
 
 /* ---------------------------------------------------------------- */
-/* 市場情緒儀表板                                                       */
+/* 市場情緒儀表板（甜甜圈儀表：仿照 DATAHUNTER 風格的圓環量表，純 CSS conic-gradient，  */
+/* 沒有引入任何圖表函式庫）                                                  */
 /* ---------------------------------------------------------------- */
+function setGaugeRing(ringId, pct, color) {
+  const ring = document.getElementById(ringId);
+  if (!ring) return;
+  if (pct == null) {
+    ring.style.background = "conic-gradient(#374151 0deg 360deg)";
+    return;
+  }
+  const clamped = Math.max(0, Math.min(100, pct));
+  const deg = (clamped / 100) * 360;
+  ring.style.background = `conic-gradient(${color} 0deg ${deg}deg, #374151 ${deg}deg 360deg)`;
+}
+
+function rsiGaugeColor(v) {
+  if (v >= 70) return "#ef4444";   // 超買：紅
+  if (v <= 30) return "#22c55e";   // 超賣：綠
+  return "#f59e0b";                 // 中性偏強偏弱：金
+}
+
+function fearGreedGaugeColor(v) {
+  if (v <= 25) return "#ef4444";   // 極度恐懼
+  if (v <= 45) return "#f97316";   // 恐懼
+  if (v <= 55) return "#f59e0b";   // 中性
+  if (v <= 75) return "#84cc16";   // 貪婪
+  return "#22c55e";                 // 極度貪婪
+}
+
+function altseasonGaugeColor(v) {
+  if (v >= 60) return "#22c55e";   // 偏山寨季
+  if (v >= 40) return "#f59e0b";   // 中性
+  return "#6b7280";                 // 偏 BTC 主導
+}
+
 function renderMarketPulse(pulse) {
   if (!pulse) return;
   const rsi = pulse.rsi || {};
   document.getElementById("pulse-rsi-value").textContent = rsi.avg_rsi != null ? rsi.avg_rsi.toFixed(1) : "—";
   document.getElementById("pulse-rsi-label").textContent = rsi.label ? `${rsi.label}（樣本 ${rsi.sample_size} 檔）` : "尚未分析";
+  setGaugeRing("pulse-rsi-ring", rsi.avg_rsi, rsi.avg_rsi != null ? rsiGaugeColor(rsi.avg_rsi) : "#374151");
 
   const fg = pulse.fear_greed;
   document.getElementById("pulse-feargreed-value").textContent = fg ? fg.value : "—";
   document.getElementById("pulse-feargreed-label").textContent = fg ? fg.label : "無法取得（外部 API 暫時無回應，不影響其他訊號）";
+  setGaugeRing("pulse-feargreed-ring", fg ? Number(fg.value) : null, fg ? fearGreedGaugeColor(Number(fg.value)) : "#374151");
 
   const alt = pulse.altseason || {};
   document.getElementById("pulse-altseason-value").textContent = alt.pct_outperforming_btc != null ? `${alt.pct_outperforming_btc}%` : "—";
   document.getElementById("pulse-altseason-label").textContent = alt.label ? `${alt.label}（樣本 ${alt.sample_size} 檔）` : "尚未分析";
+  setGaugeRing("pulse-altseason-ring", alt.pct_outperforming_btc, alt.pct_outperforming_btc != null ? altseasonGaugeColor(alt.pct_outperforming_btc) : "#374151");
 }
 
 /* ---------------------------------------------------------------- */
@@ -773,14 +824,19 @@ function strengthBarHtml(label, value) {
     </div>`;
 }
 
-function renderRankingCard(item) {
+const RANK_MEDALS = ["🥇", "🥈", "🥉"];
+
+function renderRankingCard(item, idx) {
   const dimsHtml = Object.entries(item.dimensions).map(([k, v]) => strengthBarHtml(DIM_LABELS[k] || k, v)).join("");
   const overallCls = item.overall >= 70 ? "text-green-400" : item.overall >= 40 ? "text-yellow-400" : "text-red-400";
+  const medal = RANK_MEDALS[idx];
   return `
-    <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 space-y-2">
+    <div class="bg-gray-950 border ${idx === 0 ? "border-amber-700/60" : "border-gray-800"} rounded-lg p-3 space-y-2">
       <div class="flex items-center justify-between">
-        <span class="text-sm font-bold text-white">${item.name}</span>
-        <span class="text-sm font-mono font-bold ${overallCls}">${item.overall.toFixed(1)}</span>
+        <span class="text-sm font-bold text-white flex items-center gap-1.5">
+          ${medal ? `<span class="text-base">${medal}</span>` : ""}${item.name}
+        </span>
+        <span class="text-base font-mono font-bold ${overallCls}">${item.overall.toFixed(1)}</span>
       </div>
       ${dimsHtml}
     </div>`;
@@ -839,7 +895,7 @@ async function runPositionCalc() {
     }
     resultEl.innerHTML = `
       風險金額：<span class="text-white">${data.risk_amount.toLocaleString()} USDT</span>
-      建議部位：<span class="text-indigo-400">${data.position_size.toLocaleString(undefined, { maximumFractionDigits: 6 })} 單位</span>
+      建議部位：<span class="text-amber-400">${data.position_size.toLocaleString(undefined, { maximumFractionDigits: 6 })} 單位</span>
       （約 <span class="text-white">${data.position_notional.toLocaleString()} USDT</span>）<br/>
       停損距離：${data.stop_distance_pct}%
       ${data.required_margin_at_max_leverage != null ? `　所需保證金：<span class="text-white">${data.required_margin_at_max_leverage.toLocaleString()} USDT</span>（隱含槓桿 ${data.implied_leverage}x）` : ""}
@@ -980,7 +1036,7 @@ function renderKnowledgeFilters() {
     btn.className =
       "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors " +
       (cat === knowledgeState.activeCategory
-        ? "bg-indigo-600 border-indigo-500 text-white"
+        ? "bg-amber-500 border-amber-400 text-gray-950"
         : "border-gray-700 text-gray-400 hover:text-gray-200");
     btn.addEventListener("click", () => {
       knowledgeState.activeCategory = cat;
@@ -1003,7 +1059,7 @@ function setKnowledgeView(view) {
   knowledgeState.view = view;
   const graphBtn = document.getElementById("kn-view-graph-btn");
   const cardsBtn = document.getElementById("kn-view-cards-btn");
-  const activeCls = "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors bg-indigo-600 text-white";
+  const activeCls = "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors bg-amber-500 text-gray-950";
   const inactiveCls = "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors text-gray-400 hover:text-gray-200";
   graphBtn.className = view === "graph" ? activeCls : inactiveCls;
   cardsBtn.className = view === "cards" ? activeCls : inactiveCls;
@@ -1093,12 +1149,12 @@ function renderKnowledgeGrid() {
     const locked = node.unlock_status === "locked";
     const card = document.createElement("div");
     card.className =
-      "bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3 cursor-pointer hover:border-indigo-600 transition-colors" +
+      "bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3 cursor-pointer hover:border-amber-600 transition-colors" +
       (locked ? " opacity-70" : "");
     card.innerHTML = `
       <div class="flex items-start justify-between gap-2">
         <span class="text-xs px-2 py-0.5 rounded-full border ${meta.color}">${meta.label}</span>
-        ${locked ? `<span class="text-xs text-gray-500">🔒 Lv.${node.level_requirement}</span>` : `<span class="text-xs text-indigo-400">+${node.xp_reward} XP</span>`}
+        ${locked ? `<span class="text-xs text-gray-500">🔒 Lv.${node.level_requirement}</span>` : `<span class="text-xs text-amber-400">+${node.xp_reward} XP</span>`}
       </div>
       <h3 class="text-white font-bold text-base leading-snug">${node.title}</h3>
       <p class="text-gray-400 text-sm leading-relaxed">${node.description}</p>`;
@@ -1120,11 +1176,11 @@ function renderMissions() {
     card.innerHTML = `
       <div class="flex items-center justify-between gap-2">
         <span class="text-xs px-2 py-0.5 rounded-full border ${meta.color}">${meta.label}</span>
-        <span class="text-xs text-indigo-400">+${m.reward_xp} XP · ${m.difficulty}</span>
+        <span class="text-xs text-amber-400">+${m.reward_xp} XP · ${m.difficulty}</span>
       </div>
       <h4 class="text-white font-semibold text-sm">${m.title}</h4>
       <p class="text-gray-400 text-xs leading-relaxed">${m.description}</p>
-      ${node ? `<button class="text-xs text-indigo-400 hover:underline" data-node="${node.id}">相關知識卡：${node.title} →</button>` : ""}`;
+      ${node ? `<button class="text-xs text-amber-400 hover:underline" data-node="${node.id}">相關知識卡：${node.title} →</button>` : ""}`;
     const linkBtn = card.querySelector("[data-node]");
     if (linkBtn) linkBtn.addEventListener("click", () => openKnowledgeModal(node.id));
     wrap.appendChild(card);
@@ -1163,7 +1219,7 @@ function openKnowledgeModal(nodeId) {
       if (!rn) continue;
       const btn = document.createElement("button");
       btn.textContent = rn.title;
-      btn.className = "text-xs px-2.5 py-1 rounded-full border border-gray-700 text-gray-300 hover:border-indigo-600 hover:text-indigo-300";
+      btn.className = "text-xs px-2.5 py-1 rounded-full border border-gray-700 text-gray-300 hover:border-amber-600 hover:text-amber-300";
       btn.addEventListener("click", () => openKnowledgeModal(rid));
       relatedEl.appendChild(btn);
     }
@@ -1203,8 +1259,8 @@ function renderDebateThread() {
     const bubble = document.createElement("div");
     bubble.className = isUser ? "flex justify-end" : "flex justify-start";
     bubble.innerHTML = `<div class="max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed ${
-      isUser ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-200"
-    }">${isUser ? "" : '<span class="text-indigo-400 font-semibold">🥊 教練　</span>'}${m.content}</div>`;
+      isUser ? "bg-amber-600 text-gray-950 font-medium" : "bg-gray-800 text-gray-200"
+    }">${isUser ? "" : '<span class="text-amber-400 font-semibold">🥊 教練　</span>'}${m.content}</div>`;
     thread.appendChild(bubble);
   }
   thread.scrollTop = thread.scrollHeight;
