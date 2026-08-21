@@ -14,7 +14,9 @@ COLOR_BLUE = "blue"
 
 def fuse(tech: dict | None, sentiment: dict) -> dict:
     """tech: strategy.compute_signal() 的回傳值（可能是 None）。
-    sentiment: news_client.get_market_sentiment() 的回傳值（一定有 "sentiment" 欄位）。
+    sentiment: 一個帶 "sentiment" 欄位的 dict——實際上是 news_client.get_market_and_instrument_sentiment()
+    裡「這一檔商品」對應的判讀結果（沒有專屬新聞時已 fallback 成整體市場判斷），也相容
+    get_market_sentiment() 的整體市場回傳值。
     回傳 {"action": str, "color": str, "reason": str}。"""
     if tech is None or tech.get("signal") is None:
         return {
