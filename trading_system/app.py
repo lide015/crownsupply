@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai_coach, background, config, db, news_client, position_sizing
+from . import ai_coach, background, config, db, news_client, okx_client, position_sizing, stock_fundamentals
 from .state import STATE
 
 
@@ -188,6 +188,41 @@ async def analyze_instrument(req: AnalyzeInstrumentRequest):
     # 併入目前的訊號清單：同一個 instId 已存在就覆蓋掉舊的，不會重複顯示兩張卡片。
     STATE.signals = [s for s in STATE.signals if s["instId"] != signal["instId"]] + [signal]
     return {"ok": True, "signal": signal}
+
+
+@app.get("/api/v1/instrument/{inst_id}")
+async def instrument_detail(inst_id: str):
+    """單一商品詳情頁：基本資料 + 事件時間軸，**不呼叫 AI、零額外成本**——只是把已經有的
+    資料（this 輪抓到的報價、如果已分析過的技術指標、資料庫裡這檔商品過去的訊號紀錄，
+    美股代幣再加公司基本面）整理成一份完整回應。想要真正的技術分析／AI 新聞情緒，
+    前端會在這個詳情頁裡另外提供「執行完整分析」按鈕去打 POST /api/v1/analyze-instrument
+    （那支才會真的呼叫一次 AI），瀏覽詳情頁本身不會平白多花一次 AI 額度。"""
+    item = next((i for i in STATE.all_instruments if i["instId"] == inst_id), None)
+    if item is None:
+        return JSONResponse(
+            {"ok": False, "message": "找不到這個商品——可能還沒按過「立即分析」抓取商品清單，或代號不存在。"},
+            status_code=404,
+        )
+
+    signal = next((s for s in STATE.signals if s["instId"] == inst_id), None)
+    history = db.get_signal_history_for(inst_id, limit=10)
+
+    fundamentals = None
+    ticker = okx_client.stock_ticker(inst_id)
+    if ticker and config.FINNHUB_API_KEY:
+        assert _http_client is not None
+        fundamentals = await stock_fundamentals.fetch_company_profile(
+            _http_client, ticker, config.FINNHUB_API_KEY
+        )
+
+    return {
+        "ok": True,
+        "basic": item,
+        "signal": signal,
+        "history": history,
+        "fundamentals": fundamentals,
+        "fundamentals_available": bool(config.FINNHUB_API_KEY),
+    }
 
 
 @app.post("/api/v1/position-size")

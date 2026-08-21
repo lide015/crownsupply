@@ -164,6 +164,7 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/dashboard` | GET | 讀取「上一次」分析結果的快取，不觸發新分析、不打任何外部 API |
 | `/api/v1/analyze` | POST | 觸發一輪全新分析（OKX 篩選＋K線＋AI 新聞情緒），跑完回傳結果；上一輪還沒跑完時回 `409` |
 | `/api/v1/analyze-instrument` | POST | 🔍 對「全部商品總覽」裡任一檔按需求做完整分析。body：`{"inst_id": "ETH-USDT-SWAP"}`，只針對這一檔多打一次資料（不重新分析全部商品），結果會併入 `signals`。商品不存在（還沒按過 `/analyze` 抓清單，或代號打錯）回 `404` |
+| `/api/v1/instrument/{inst_id}` | GET | 📄 單一商品詳情頁的資料：基本報價 + 已分析過的話帶技術指標 + 事件時間軸（這檔過去的訊號紀錄）+ 美股代幣的公司基本面。**零 AI 成本**，只讀已有資料，不會觸發新的技術分析或 AI 呼叫；商品不存在回 `404` |
 | `/api/v1/health` | GET | 存活檢查 + 上次更新時間 + 上次錯誤訊息 |
 | `/api/v1/config` | GET | 給「知識宇宙」分頁的 Supabase URL／anon key（公開金鑰，非機密） |
 | `/api/v1/coach` | POST | AI 辯論空間一輪對話。body：`{"node": {...知識卡}, "history": [{"role","content"}, ...]}`，回傳 `{"reply", "error"}` |
@@ -306,6 +307,25 @@ curl -s "https://www.okx.com/api/v5/market/tickers?instType=SWAP" | \
 跑出來如果看到類似 `TSLA-USDT-SWAP` 的結果，代表現有程式碼不用改就能撈到；如果命名
 格式不一樣（例如帶了其他前綴/後綴），把實際看到的代碼告訴我，我再調整
 `asset_class()` 的比對規則，或直接透過 `.env` 的 `EXTRA_INSTRUMENT_KEYWORDS` 手動納入。
+
+## 📄 單一商品詳情頁
+
+點任一訊號卡片的名稱／熱力圖色塊／「全部商品總覽」表格列的代號，會彈出這檔商品的
+詳情頁（`GET /api/v1/instrument/{inst_id}`），內容：
+
+- **基本資料**：24h 振幅／成交額，已分析過的話再加 RSI／OI 變化。
+- **公司基本面**（僅美股代幣）：公司名稱／產業別／交易所／市值／掛牌日期，來源是
+  [Finnhub](https://finnhub.io/register) 免費方案的 `/stock/profile2` 端點
+  （`stock_fundamentals.py`）。**需要自行申請免費 API key**，填進 `.env` 的
+  `FINNHUB_API_KEY`；沒填就不顯示這塊，不影響任何其他功能。
+- **技術分析結果**：這輪如果分析過，顯示 EMA／盒子高低點／停損停利／大腦研判。
+- **這檔的相關新聞**：這輪分析時抓到的、專屬這檔商品的新聞情緒。
+- **事件時間軸**：這檔商品在資料庫裡過去的訊號紀錄（不管有沒有結算），新到舊排序——
+  誠實地說，這是「本系統自己判斷過的訊號歷史」，不是真正的新聞事件或鏈上事件資料源。
+
+詳情頁本身**零 AI 成本**（只讀 `STATE`／資料庫既有資料 + 免費的 Finnhub 公司基本面查詢），
+只有按詳情頁裡的「🔍 執行完整技術＋AI分析」才會真的多打一次 `POST /api/v1/analyze-instrument`
+（等同「全部商品總覽」表格列的「🔍 分析」按鈕），瀏覽詳情頁本身不會平白多花額度。
 
 ## 跟 `backend/`（節流晨報）的關係
 

@@ -49,6 +49,11 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 # 沒有背景排程、沒有自動輪詢——分析只在使用者按下「立即分析」時才觸發一輪，
 # 用量由點擊次數決定，不需要額外的節流間隔設定。
 
+# ---- 美股代幣公司基本面（見 stock_fundamentals.py） ----
+# 免費申請：https://finnhub.io（免費方案額度足夠這種偶爾查詢的用法）。留空就不會顯示
+# 美股代幣的公司基本面那塊，商品報價／技術分析／AI 新聞情緒等其他功能完全不受影響。
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+
 # ---- 推薦強度榜（見 ranking.py） ----
 RANKING_TOP_N = int(os.getenv("RANKING_TOP_N", "5"))  # 做多/做空各顯示前幾名
 

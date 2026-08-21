@@ -374,6 +374,57 @@
   </div>
 </div>
 
+<!-- 單一商品詳情頁（點商品名稱／熱力圖色塊／總覽表格列開啟） -->
+<div id="inst-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+  <div class="bg-gray-900 border border-gray-800 rounded-xl max-w-2xl w-full max-h-[88vh] overflow-y-auto p-6 space-y-5">
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <h3 id="inst-modal-title" class="text-xl font-bold text-white truncate"></h3>
+          <span id="inst-modal-badges" class="flex items-center gap-1 shrink-0"></span>
+        </div>
+        <div id="inst-modal-price-line" class="mt-1.5 flex items-center gap-2"></div>
+      </div>
+      <button id="inst-modal-close" class="text-gray-500 hover:text-white text-2xl leading-none shrink-0">&times;</button>
+    </div>
+
+    <div id="inst-modal-loading" class="text-sm text-gray-500">載入中…</div>
+
+    <div id="inst-modal-body" class="hidden space-y-5">
+      <div>
+        <div class="text-amber-400 font-semibold mb-2 text-sm">📊 基本資料</div>
+        <div id="inst-modal-basic-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono bg-gray-950 p-3 rounded-lg border border-gray-800"></div>
+      </div>
+
+      <div id="inst-modal-fundamentals-wrap" class="hidden">
+        <div class="text-amber-400 font-semibold mb-2 text-sm">🏢 公司基本面</div>
+        <div id="inst-modal-fundamentals" class="bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs text-gray-300 space-y-1.5 leading-relaxed"></div>
+      </div>
+
+      <div id="inst-modal-technical-wrap" class="hidden">
+        <div class="text-amber-400 font-semibold mb-2 text-sm">🎯 技術分析結果</div>
+        <div id="inst-modal-technical" class="bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs space-y-2"></div>
+      </div>
+
+      <div id="inst-modal-news-wrap" class="hidden">
+        <div class="text-amber-400 font-semibold mb-2 text-sm">📰 這檔的相關新聞</div>
+        <div id="inst-modal-news" class="bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs"></div>
+      </div>
+
+      <div>
+        <div class="text-amber-400 font-semibold mb-2 text-sm">🕒 事件時間軸（本系統過去的訊號紀錄）</div>
+        <div id="inst-modal-history" class="space-y-2"></div>
+      </div>
+
+      <button id="inst-modal-analyze-btn"
+        class="w-full text-sm px-3 py-2 rounded-lg border border-amber-800 text-amber-400 hover:bg-amber-950/30
+               transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed">🔍 執行完整技術＋AI分析</button>
+      <p class="text-[11px] text-gray-600 leading-relaxed">⚠️ 上面「基本資料」跟「事件時間軸」都是已經有的資料，不會額外呼叫 AI；
+        只有按「執行完整技術＋AI分析」才會真的多打一次 AI 判斷這檔的新聞情緒。</p>
+    </div>
+  </div>
+</div>
+
 <script>
 const API_BASE = window.location.origin.startsWith("file") ? "http://127.0.0.1:8000" : window.location.origin;
 
@@ -474,6 +525,7 @@ const RESOLUTION_META = {
   hit_tp2: { label: "✅ 中停利2", cls: "text-green-300" },
   hit_sl:  { label: "❌ 觸及停損", cls: "text-red-400" },
   expired: { label: "⏱️ 追蹤逾期", cls: "text-gray-500" },
+  open:    { label: "🔵 追蹤中", cls: "text-blue-400" },
 };
 
 function renderResolvedList(rows) {
@@ -601,7 +653,7 @@ function renderSignalsList() {
       <div class="flex justify-between items-start gap-2">
         <span class="flex flex-col gap-1.5">
           <span class="flex items-center gap-2 flex-wrap">
-            <span class="text-lg font-bold tracking-wide text-white">${sig.name}</span>
+            <span class="sig-name-link text-lg font-bold tracking-wide text-white cursor-pointer hover:text-amber-400 hover:underline" title="點一下看這檔的詳情頁">${sig.name}</span>
             <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400 whitespace-nowrap">
               ${sig.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
             </span>
@@ -636,6 +688,7 @@ function renderSignalsList() {
     if (sig.signal_type) {
       card.querySelector(".calc-fill-btn").addEventListener("click", () => fillCalcFromSignal(sig));
     }
+    card.querySelector(".sig-name-link").addEventListener("click", () => openInstrumentModal(sig.instId));
     container.appendChild(card);
   }
 }
@@ -728,7 +781,7 @@ function renderAllInstrumentsList() {
     tr.className = "border-t border-gray-800 hover:bg-gray-900/50";
     const isAnalyzed = analyzedIds.has(inst.instId);
     tr.innerHTML = `
-      <td class="px-3 py-2 text-white font-semibold whitespace-nowrap">${inst.name}</td>
+      <td class="inst-name-cell px-3 py-2 text-white font-semibold whitespace-nowrap cursor-pointer hover:text-amber-400 hover:underline" title="點一下看這檔的詳情頁">${inst.name}</td>
       <td class="px-3 py-2 whitespace-nowrap space-x-1">
         <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400">
           ${inst.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
@@ -751,6 +804,7 @@ function renderAllInstrumentsList() {
         }">${isAnalyzed ? "✅ 已分析" : "🔍 分析"}</button>
       </td>`;
     tr.querySelector(".analyze-inst-btn").addEventListener("click", (e) => analyzeInstrumentOnDemand(inst.instId, e.target));
+    tr.querySelector(".inst-name-cell").addEventListener("click", () => openInstrumentModal(inst.instId));
     tbody.appendChild(tr);
   }
 }
@@ -799,7 +853,7 @@ function renderAllInstrumentsHeatmap() {
       "rounded-lg p-2.5 flex flex-col justify-between gap-1 border border-white/5 cursor-pointer " +
       "hover:border-amber-500/70 transition-colors";
     tile.style = heatColor(inst.change_pct);
-    tile.title = isAnalyzed ? "已完整分析過，點一下可以重新抓最新資料" : "點一下針對這檔商品打一次完整技術分析";
+    tile.title = "點一下看這檔的詳情頁（基本資料＋事件時間軸，不會呼叫 AI）";
     tile.innerHTML = `
       <div class="flex items-center justify-between gap-1">
         <span class="text-xs font-bold text-white truncate">${inst.name}</span>
@@ -807,7 +861,7 @@ function renderAllInstrumentsHeatmap() {
       </div>
       <span class="text-[11px] font-mono text-gray-100">${fmt(inst.price)}</span>
       <span class="text-xs font-bold">${changePctHtml(inst.change_pct)}</span>`;
-    tile.addEventListener("click", () => analyzeInstrumentFromHeatmap(inst.instId, tile));
+    tile.addEventListener("click", () => openInstrumentModal(inst.instId));
     grid.appendChild(tile);
   }
 }
@@ -826,6 +880,155 @@ function setAllInstrumentsView(view) {
 document.getElementById("all-instruments-view-list-btn").addEventListener("click", () => setAllInstrumentsView("list"));
 document.getElementById("all-instruments-view-heatmap-btn").addEventListener("click", () => setAllInstrumentsView("heatmap"));
 setAllInstrumentsView("list");
+
+/* ---------------------------------------------------------------- */
+/* 單一商品詳情頁（GET /api/v1/instrument/{instId}，零 AI 成本，純讀取已有資料）    */
+/* ---------------------------------------------------------------- */
+async function openInstrumentModal(instId) {
+  const modal = document.getElementById("inst-modal");
+  const loadingEl = document.getElementById("inst-modal-loading");
+  const bodyEl = document.getElementById("inst-modal-body");
+  modal.classList.remove("hidden");
+  loadingEl.classList.remove("hidden");
+  loadingEl.textContent = "載入中…";
+  bodyEl.classList.add("hidden");
+  document.getElementById("inst-modal-title").textContent = instId;
+  document.getElementById("inst-modal-badges").innerHTML = "";
+  document.getElementById("inst-modal-price-line").innerHTML = "";
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/instrument/${encodeURIComponent(instId)}`);
+    const body = await res.json();
+    if (!res.ok || !body.ok) {
+      loadingEl.textContent = body.message || "找不到這個商品的資料。";
+      return;
+    }
+    renderInstrumentModal(body);
+  } catch (err) {
+    loadingEl.textContent = `無法連上後端：${err}`;
+  }
+}
+
+function renderInstrumentModal(data) {
+  const { basic, signal, history, fundamentals, fundamentals_available } = data;
+  document.getElementById("inst-modal-loading").classList.add("hidden");
+  document.getElementById("inst-modal-body").classList.remove("hidden");
+
+  document.getElementById("inst-modal-title").textContent = basic.name;
+  document.getElementById("inst-modal-badges").innerHTML = `
+    <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400 whitespace-nowrap">
+      ${basic.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
+    </span>
+    <span class="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap ${
+      basic.product_type === "spot" ? "border-amber-800 text-amber-500" : "border-teal-800 text-teal-400"
+    }">${basic.product_type === "spot" ? "💰 現貨" : "⚡ 合約"}</span>`;
+  document.getElementById("inst-modal-price-line").innerHTML = `
+    <span class="text-2xl font-mono font-bold leading-none ${changePctTextCls(basic.change_pct)}">${fmt(basic.price)}</span>
+    ${changePctHtml(basic.change_pct)}`;
+
+  const basicItems = [
+    ["24h 振幅", `${fmt(basic.amplitude_pct, 2)}%`],
+    ["24h 成交額", fmt(basic.vol_usdt, 0)],
+  ];
+  if (signal) {
+    basicItems.push(["RSI", signal.rsi != null ? signal.rsi.toFixed(1) : "—"]);
+    basicItems.push(["OI 變化", signal.oi_label ? `<span class="${changePctTextCls(signal.oi_change_pct)}">${signal.oi_label}</span>` : "—"]);
+  }
+  document.getElementById("inst-modal-basic-grid").innerHTML = basicItems.map(([label, value]) =>
+    `<div class="text-gray-400">${label} <span class="text-white block">${value}</span></div>`
+  ).join("");
+
+  const newsWrap = document.getElementById("inst-modal-news-wrap");
+  if (signal && signal.news_headline) {
+    newsWrap.classList.remove("hidden");
+    document.getElementById("inst-modal-news").innerHTML = `
+      <span class="${sentimentClass[signal.ai_sentiment] || sentimentClass.NEUTRAL}">${signal.ai_sentiment}</span>
+      <p class="text-gray-300 mt-2 leading-relaxed">${signal.news_headline}</p>
+      ${signal.news_reason ? `<p class="text-gray-500 mt-1 leading-relaxed">${signal.news_reason}</p>` : ""}`;
+  } else {
+    newsWrap.classList.add("hidden");
+  }
+
+  const fundWrap = document.getElementById("inst-modal-fundamentals-wrap");
+  const fundEl = document.getElementById("inst-modal-fundamentals");
+  if (basic.asset_class === "stock") {
+    fundWrap.classList.remove("hidden");
+    if (fundamentals) {
+      fundEl.innerHTML = `
+        <div><span class="text-gray-500">公司名稱：</span>${fundamentals.name}</div>
+        ${fundamentals.industry ? `<div><span class="text-gray-500">產業別：</span>${fundamentals.industry}</div>` : ""}
+        ${fundamentals.exchange ? `<div><span class="text-gray-500">交易所：</span>${fundamentals.exchange}</div>` : ""}
+        ${fundamentals.market_cap_usd != null ? `<div><span class="text-gray-500">市值：</span>$${(fundamentals.market_cap_usd / 1e9).toFixed(1)}B</div>` : ""}
+        ${fundamentals.ipo_date ? `<div><span class="text-gray-500">掛牌日期：</span>${fundamentals.ipo_date}</div>` : ""}
+        ${fundamentals.website ? `<div><a href="${fundamentals.website}" target="_blank" rel="noopener noreferrer" class="text-amber-400 hover:underline">${fundamentals.website}</a></div>` : ""}`;
+    } else if (!fundamentals_available) {
+      fundEl.innerHTML = `<p class="text-gray-500">尚未設定 FINNHUB_API_KEY，看不到公司基本面（其他功能不受影響）。
+        免費申請：<a href="https://finnhub.io/register" target="_blank" rel="noopener noreferrer" class="text-amber-400 hover:underline">finnhub.io/register</a></p>`;
+    } else {
+      fundEl.innerHTML = `<p class="text-gray-500">這次沒查到公司基本面資料（外部資料源暫時無回應），稍後可以重新打開這個詳情頁再試一次。</p>`;
+    }
+  } else {
+    fundWrap.classList.add("hidden");
+  }
+
+  const techWrap = document.getElementById("inst-modal-technical-wrap");
+  if (signal && signal.signal_type) {
+    techWrap.classList.remove("hidden");
+    document.getElementById("inst-modal-technical").innerHTML = `
+      <div class="grid grid-cols-3 gap-2 font-mono">
+        <div class="text-gray-400">20 EMA <span class="text-amber-400 block">${fmt(signal.ema)}</span></div>
+        <div class="text-gray-400">盒子高點 <span class="text-green-400 block">${fmt(signal.box_high)}</span></div>
+        <div class="text-gray-400">盒子低點 <span class="text-red-400 block">${fmt(signal.box_low)}</span></div>
+      </div>
+      <div class="grid grid-cols-3 gap-2 font-mono">
+        <div class="text-gray-400">停損 <span class="text-red-400 block font-bold">${fmt(signal.stop_loss)}</span></div>
+        <div class="text-gray-400">停利1 <span class="text-green-400 block font-bold">${fmt(signal.take_profit_1)}</span></div>
+        <div class="text-gray-400">停利2 <span class="text-green-300 block font-bold">${fmt(signal.take_profit_2)}</span></div>
+      </div>
+      <div class="text-gray-400 leading-relaxed"><span class="font-semibold text-amber-400">大腦研判：</span>${signal.reason}</div>`;
+  } else {
+    techWrap.classList.add("hidden");
+  }
+
+  const historyEl = document.getElementById("inst-modal-history");
+  if (history && history.length) {
+    historyEl.innerHTML = history.map((h) => {
+      const meta = RESOLUTION_META[h.resolution] || { label: h.resolution, cls: "text-gray-400" };
+      return `<div class="bg-gray-950 border border-gray-800 rounded-lg p-2.5 text-xs flex items-center justify-between gap-2 flex-wrap">
+        <span class="text-gray-400">${fmtTime(h.created_at)}　${h.signal_type === "long" ? "🟢 做多" : "🔴 做空"}　進場 ${fmt(h.entry_price)}</span>
+        <span class="${meta.cls} font-semibold whitespace-nowrap">${meta.label}</span>
+      </div>`;
+    }).join("");
+  } else {
+    historyEl.innerHTML = `<div class="text-xs text-gray-600">這檔商品目前沒有訊號紀錄。</div>`;
+  }
+
+  const analyzeBtn = document.getElementById("inst-modal-analyze-btn");
+  analyzeBtn.disabled = false;
+  analyzeBtn.textContent = "🔍 執行完整技術＋AI分析";
+  analyzeBtn.onclick = () => analyzeInstrumentFromModal(basic.instId);
+}
+
+async function analyzeInstrumentFromModal(instId) {
+  const btn = document.getElementById("inst-modal-analyze-btn");
+  btn.disabled = true;
+  btn.textContent = "⏳ 分析中…";
+  try {
+    await _requestAnalyzeInstrument(instId);
+    await openInstrumentModal(instId); // 重新載入詳情頁，這次應該有技術分析結果了
+  } catch (err) {
+    alert(err.message);
+    btn.disabled = false;
+    btn.textContent = "🔍 執行完整技術＋AI分析";
+  }
+}
+
+document.getElementById("inst-modal-close").addEventListener("click", () => {
+  document.getElementById("inst-modal").classList.add("hidden");
+});
+document.getElementById("inst-modal").addEventListener("click", (e) => {
+  if (e.target.id === "inst-modal") document.getElementById("inst-modal").classList.add("hidden");
+});
 
 /* 列表的「🔍 分析」按鈕、熱力圖的色塊點擊，都是觸發同一支後端 API，只是 loading／
    還原狀態的畫面表現不同（按鈕換文字 vs. 色塊變半透明）——實際打 API＋更新資料的邏輯
@@ -864,20 +1067,6 @@ async function analyzeInstrumentOnDemand(instId, btn) {
     alert(err.message);
     btn.disabled = false;
     btn.textContent = originalText;
-  }
-}
-
-async function analyzeInstrumentFromHeatmap(instId, tileEl) {
-  if (tileEl.dataset.loading === "1") return;
-  tileEl.dataset.loading = "1";
-  tileEl.classList.add("opacity-40", "pointer-events-none");
-  try {
-    await _requestAnalyzeInstrument(instId);
-    // 成功的話 renderAllInstrumentsHeatmap() 會整塊重建，這個節點會被換掉，不用手動還原樣式。
-  } catch (err) {
-    alert(err.message);
-    tileEl.classList.remove("opacity-40", "pointer-events-none");
-    delete tileEl.dataset.loading;
   }
 }
 

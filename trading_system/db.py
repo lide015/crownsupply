@@ -154,6 +154,21 @@ def get_all_resolved_for_stats() -> list[dict]:
         conn.close()
 
 
+def get_signal_history_for(inst_id: str, limit: int = 10) -> list[dict]:
+    """給「單一商品詳情頁」的事件時間軸用：這檔商品過去觸發過的訊號（不管有沒有結算），
+    由新到舊排序。這是目前系統唯一持續累積的「這檔商品發生過什麼事」紀錄——沒有真正
+    的新聞事件或鏈上事件資料源，誠實地說就是「本系統自己判斷過的訊號歷史」。"""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM signal_history WHERE inst_id = ? ORDER BY created_at DESC LIMIT ?",
+            (inst_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 def get_param(key: str, default: float) -> float:
     conn = get_connection()
     try:
@@ -200,3 +215,65 @@ def set_oi_snapshot(inst_id: str, oi: float, oi_ccy: float, updated_at: int):
         conn.commit()
     finally:
         conn.close()
+
+
+if __name__ == "__main__":
+    import tempfile
+
+    _passed = 0
+    _total = 0
+
+    def check(name, actual, expected):
+        global _passed, _total
+        _total += 1
+        ok = actual == expected
+        print(f"[{'PASS' if ok else 'FAIL'}] {name}: got={actual} expected={expected}")
+        if ok:
+            _passed += 1
+
+    # 全部測試都指向一個暫時的 DB 檔案，不會碰到 data/trading_system.db 真正的資料。
+    with tempfile.TemporaryDirectory() as tmp:
+        DB_PATH = Path(tmp) / "test.db"  # noqa: F811 — 刻意覆蓋模組層級變數，測試用
+        globals()["DB_PATH"] = DB_PATH
+        init_db()
+
+        insert_signal({
+            "inst_id": "BTC-USDT-SWAP", "name": "BTC-USDT", "asset_class": "crypto",
+            "signal_type": "long", "created_at": 1000, "entry_price": 100.0,
+            "stop_loss": 95.0, "take_profit_1": 110.0, "take_profit_2": 120.0,
+            "ema": 98.0, "box_high": 101.0, "box_low": 99.0,
+            "ai_sentiment": "BULLISH", "action_label": "強烈做多", "color": "green",
+        })
+        insert_signal({
+            "inst_id": "BTC-USDT-SWAP", "name": "BTC-USDT", "asset_class": "crypto",
+            "signal_type": "short", "created_at": 2000, "entry_price": 105.0,
+            "stop_loss": 110.0, "take_profit_1": 95.0, "take_profit_2": 90.0,
+            "ema": 106.0, "box_high": 107.0, "box_low": 104.0,
+            "ai_sentiment": "NEUTRAL", "action_label": "做空", "color": "red",
+        })
+        insert_signal({
+            "inst_id": "ETH-USDT-SWAP", "name": "ETH-USDT", "asset_class": "crypto",
+            "signal_type": "long", "created_at": 1500, "entry_price": 50.0,
+            "stop_loss": 48.0, "take_profit_1": 54.0, "take_profit_2": 56.0,
+            "ema": 49.0, "box_high": 50.5, "box_low": 49.5,
+            "ai_sentiment": "BULLISH", "action_label": "強烈做多", "color": "green",
+        })
+
+        history = get_signal_history_for("BTC-USDT-SWAP")
+        check("get_signal_history_for only returns matching inst_id", len(history), 2)
+        check("get_signal_history_for orders newest first", history[0]["created_at"], 2000)
+
+        history_other = get_signal_history_for("ETH-USDT-SWAP")
+        check("get_signal_history_for isolates other instruments", len(history_other), 1)
+
+        history_limited = get_signal_history_for("BTC-USDT-SWAP", limit=1)
+        check("get_signal_history_for respects limit", len(history_limited), 1)
+
+        check("get_signal_history_for on unknown inst_id returns empty list",
+              get_signal_history_for("NOPE-USDT-SWAP"), [])
+
+    print(f"\n{_passed}/{_total} tests passed")
+    if _passed == _total:
+        print("PASS")
+    else:
+        raise SystemExit(1)

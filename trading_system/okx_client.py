@@ -27,6 +27,15 @@ def asset_class(inst_id: str) -> str:
     return "stock" if base in KNOWN_STOCK_TICKERS else "crypto"
 
 
+def stock_ticker(inst_id: str) -> str | None:
+    """從 instId 抽出乾淨的股票代號（例如 "XTSLA-USDT-SWAP" -> "TSLA"），給
+    stock_fundamentals.py 查公司基本面用。不是股票永續合約就回傳 None——加密貨幣沒有
+    「公司基本面」這回事，呼叫端看到 None 就不用查。"""
+    base = inst_id.split("-")[0].upper()
+    stripped = base[1:] if base.startswith("X") and base[1:] in KNOWN_STOCK_TICKERS else base
+    return stripped if stripped in KNOWN_STOCK_TICKERS else None
+
+
 async def _fetch_tickers(client: httpx.AsyncClient, inst_type: str) -> list[dict]:
     resp = await client.get(OKX_TICKERS_URL, params={"instType": inst_type})
     resp.raise_for_status()
@@ -199,6 +208,10 @@ if __name__ == "__main__":
     check("asset_class BTC-USDT-SWAP -> crypto", asset_class("BTC-USDT-SWAP"), "crypto")
     check("asset_class XTSLA-USDT-SWAP -> stock (X 前綴也認得)", asset_class("XTSLA-USDT-SWAP"), "stock")
     check("screen_active_instruments tags asset_class", result[0]["asset_class"], "crypto")
+
+    check("stock_ticker TSLA-USDT-SWAP -> TSLA", stock_ticker("TSLA-USDT-SWAP"), "TSLA")
+    check("stock_ticker XTSLA-USDT-SWAP -> TSLA (去掉 X 前綴)", stock_ticker("XTSLA-USDT-SWAP"), "TSLA")
+    check("stock_ticker BTC-USDT-SWAP -> None（加密貨幣沒有公司基本面）", stock_ticker("BTC-USDT-SWAP"), None)
 
     # 5) parse_instruments：不套門檻、不截斷，給「全部商品總覽」用
     all_parsed = parse_instruments(tickers)  # 沿用第 1 組資料，4 檔裡有 3 檔是合法 USDT 本位合約
