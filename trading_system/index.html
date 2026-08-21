@@ -126,9 +126,13 @@ function renderDashboard(data) {
         <div class="text-gray-400">20 EMA <span class="text-indigo-400 block">${fmt(sig.ema)}</span></div>
         <div class="text-gray-400">盒子高點 <span class="text-green-400 block">${fmt(sig.box_high)}</span></div>
         <div class="text-gray-400">盒子低點 <span class="text-red-400 block">${fmt(sig.box_low)}</span></div>
-        <div class="text-gray-400">建議停損 <span class="text-yellow-400 block">${fmt(sig.stop_loss)}</span></div>
-        <div class="text-gray-400">24h振幅 <span class="text-gray-200 block">${fmt(sig.amplitude_pct, 2)}%</span></div>
       </div>
+      <div class="grid grid-cols-3 gap-2 text-xs font-mono bg-gray-950 p-3 rounded-lg border border-gray-800">
+        <div class="text-gray-400">停損 <span class="text-red-400 block font-bold">${fmt(sig.stop_loss)}</span></div>
+        <div class="text-gray-400">停利1 <span class="text-green-400 block font-bold">${fmt(sig.take_profit_1)}</span></div>
+        <div class="text-gray-400">停利2 <span class="text-green-300 block font-bold">${fmt(sig.take_profit_2)}</span></div>
+      </div>
+      <div class="text-xs text-gray-500 font-mono">24h 振幅：${fmt(sig.amplitude_pct, 2)}%</div>
       <div class="text-xs text-gray-400 bg-gray-950/50 p-2.5 rounded border border-gray-800/60 leading-relaxed">
         <span class="font-semibold text-indigo-400">大腦研判：</span>${sig.reason}
       </div>`;

@@ -47,7 +47,13 @@ async def _refresh_signals(client: httpx.AsyncClient):
             candles = await okx_client.fetch_confirmed_candles(
                 client, inst_id, bar=config.CANDLE_BAR, limit=config.CANDLE_LIMIT
             )
-            tech = strategy.compute_signal(candles, ema_period=config.EMA_PERIOD, box_lookback=config.BOX_LOOKBACK)
+            tech = strategy.compute_signal(
+                candles,
+                ema_period=config.EMA_PERIOD,
+                box_lookback=config.BOX_LOOKBACK,
+                tp1_rr=config.TP1_RR,
+                tp2_rr=config.TP2_RR,
+            )
         except Exception as exc:  # noqa: BLE001 — 單一商品失敗不能拖垮整輪更新
             logger.warning("signal calc failed for %s: %s", inst_id, exc)
             continue
@@ -61,6 +67,8 @@ async def _refresh_signals(client: httpx.AsyncClient):
             "box_high": tech["box_high"] if tech else None,
             "box_low": tech["box_low"] if tech else None,
             "stop_loss": tech["stop_loss"] if tech else None,
+            "take_profit_1": tech["take_profit_1"] if tech else None,
+            "take_profit_2": tech["take_profit_2"] if tech else None,
             "vol_usdt": item["vol_usdt"],
             "amplitude_pct": item["amplitude_pct"],
             **fused,

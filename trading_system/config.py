@@ -25,6 +25,10 @@ EMA_PERIOD = int(os.getenv("EMA_PERIOD", "20"))
 BOX_LOOKBACK = int(os.getenv("BOX_LOOKBACK", "15"))
 CANDLE_BAR = os.getenv("CANDLE_BAR", "5m")
 CANDLE_LIMIT = int(os.getenv("CANDLE_LIMIT", "50"))
+# 停利以「風報比」(reward : risk) 算：risk = |進場價 - 停損價|。
+# TP1 較近、可先減碼；TP2 較遠、留給趨勢延續的部位。
+TP1_RR = float(os.getenv("TP1_RR", "1.5"))
+TP2_RR = float(os.getenv("TP2_RR", "2.0"))
 
 # ---- AI 新聞情緒大腦（見 news_client.py） ----
 # AI_PROVIDER: "anthropic" | "openai" | "none"（none = 完全停用 AI，訊號只看技術面）
