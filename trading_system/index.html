@@ -238,13 +238,20 @@
           <div id="all-instruments-filters" class="flex flex-wrap gap-2"></div>
           <div id="all-instruments-product-filters" class="flex flex-wrap gap-2"></div>
         </div>
-        <input id="all-instruments-search" type="text" placeholder="🔍 搜尋代號或名稱（例如 ETH）"
-          class="w-full sm:w-64 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
-                 placeholder-gray-600 focus:outline-none focus:border-amber-600" />
+        <div class="flex flex-wrap items-center gap-3">
+          <input id="all-instruments-search" type="text" placeholder="🔍 搜尋代號或名稱（例如 ETH）"
+            class="w-full sm:w-64 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
+                   placeholder-gray-600 focus:outline-none focus:border-amber-600" />
+          <div class="flex items-center gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
+            <button id="all-instruments-view-list-btn" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">📋 列表</button>
+            <button id="all-instruments-view-heatmap-btn" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">🔥 熱力圖</button>
+          </div>
+        </div>
       </div>
       <p class="text-[11px] text-gray-600 leading-relaxed">
         ⚡ 合約（永續合約，可做多可做空）才會被「立即分析」自動選中做技術分析；💰 現貨（只能做多、沒有槓桿/爆倉概念）
-        只出現在這份總覽，想看技術分析一樣可以點「🔍 分析」單獨查。
+        只出現在這份總覽，想看技術分析一樣可以點「🔍 分析」單獨查。熱力圖用色塊深淺表示 24h 漲跌幅大小，
+        點色塊等同點「🔍 分析」，一次只針對那一檔多打一次資料。
       </p>
       <div id="all-instruments-wrap" class="overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[60vh]">
         <table class="w-full text-xs">
@@ -263,6 +270,9 @@
             <tr><td colspan="7" class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</td></tr>
           </tbody>
         </table>
+      </div>
+      <div id="all-instruments-heatmap-wrap" class="hidden overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[60vh] p-3">
+        <div id="all-instruments-heatmap" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2"></div>
       </div>
     </section>
 
@@ -516,6 +526,7 @@ function renderDashboard(data) {
   document.getElementById("all-instruments-count").textContent = (data.all_instruments || []).length;
   renderAllInstrumentsFilters();
   renderAllInstrumentsList();
+  renderAllInstrumentsHeatmap();
 }
 
 /* 分類篩選＋文字搜尋只作用在「目前已監控」的訊號（純前端篩選、不重打 API），
@@ -654,6 +665,7 @@ function renderAllInstrumentsFilters() {
       allInstrumentsFilter.assetClass = opt.key;
       renderAllInstrumentsFilters();
       renderAllInstrumentsList();
+      renderAllInstrumentsHeatmap();
     });
     wrap.appendChild(btn);
   }
@@ -677,6 +689,7 @@ function renderAllInstrumentsFilters() {
       allInstrumentsFilter.productType = opt.key;
       renderAllInstrumentsFilters();
       renderAllInstrumentsList();
+      renderAllInstrumentsHeatmap();
     });
     productWrap.appendChild(btn);
   }
@@ -742,33 +755,129 @@ function renderAllInstrumentsList() {
   }
 }
 
+/* 熱力圖色塊背景色：綠漲紅跌，色塊深淺代表漲跌幅大小（±10% 封頂，超過一樣是最深，
+   避免極端值把其他色塊都比成同一種淡色）。沒有 change_pct 資料就用中性灰。 */
+function heatColor(pct) {
+  if (pct == null) return "background-color:#1f2937"; // gray-800，中性
+  const clamped = Math.max(-10, Math.min(10, pct));
+  const t = Math.abs(clamped) / 10; // 0~1，漲跌幅越大顏色越深
+  const alpha = (0.18 + t * 0.55).toFixed(2);
+  return clamped >= 0 ? `background-color:rgba(34,197,94,${alpha})` : `background-color:rgba(239,68,68,${alpha})`;
+}
+
+function renderAllInstrumentsHeatmap() {
+  const grid = document.getElementById("all-instruments-heatmap");
+  const data = lastDashboardData;
+  grid.innerHTML = "";
+
+  if (!data || !data.has_run) {
+    grid.innerHTML = `<div class="col-span-full text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</div>`;
+    return;
+  }
+
+  const all = data.all_instruments || [];
+  const q = allInstrumentsFilter.search.trim().toUpperCase();
+  const filtered = all.filter((inst) => {
+    if (allInstrumentsFilter.assetClass !== "all" && inst.asset_class !== allInstrumentsFilter.assetClass) return false;
+    if (allInstrumentsFilter.productType !== "all" && inst.product_type !== allInstrumentsFilter.productType) return false;
+    if (q && !inst.name.toUpperCase().includes(q) && !inst.instId.toUpperCase().includes(q)) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="col-span-full text-center text-gray-500 py-6">沒有符合篩選/搜尋條件的商品。</div>`;
+    return;
+  }
+
+  const analyzedIds = new Set((data.signals || []).map((s) => s.instId));
+  filtered.sort((a, b) => b.amplitude_pct - a.amplitude_pct);
+
+  for (const inst of filtered) {
+    const tile = document.createElement("div");
+    const isAnalyzed = analyzedIds.has(inst.instId);
+    tile.className =
+      "rounded-lg p-2.5 flex flex-col justify-between gap-1 border border-white/5 cursor-pointer " +
+      "hover:border-amber-500/70 transition-colors";
+    tile.style = heatColor(inst.change_pct);
+    tile.title = isAnalyzed ? "已完整分析過，點一下可以重新抓最新資料" : "點一下針對這檔商品打一次完整技術分析";
+    tile.innerHTML = `
+      <div class="flex items-center justify-between gap-1">
+        <span class="text-xs font-bold text-white truncate">${inst.name}</span>
+        ${isAnalyzed ? `<span class="text-[10px] text-green-300 shrink-0">✅</span>` : ""}
+      </div>
+      <span class="text-[11px] font-mono text-gray-100">${fmt(inst.price)}</span>
+      <span class="text-xs font-bold">${changePctHtml(inst.change_pct)}</span>`;
+    tile.addEventListener("click", () => analyzeInstrumentFromHeatmap(inst.instId, tile));
+    grid.appendChild(tile);
+  }
+}
+
+function setAllInstrumentsView(view) {
+  allInstrumentsFilter.view = view;
+  const listBtn = document.getElementById("all-instruments-view-list-btn");
+  const heatmapBtn = document.getElementById("all-instruments-view-heatmap-btn");
+  const activeCls = "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors bg-amber-500 text-gray-950";
+  const inactiveCls = "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors text-gray-400 hover:text-gray-200";
+  listBtn.className = view === "list" ? activeCls : inactiveCls;
+  heatmapBtn.className = view === "heatmap" ? activeCls : inactiveCls;
+  document.getElementById("all-instruments-wrap").classList.toggle("hidden", view !== "list");
+  document.getElementById("all-instruments-heatmap-wrap").classList.toggle("hidden", view !== "heatmap");
+}
+document.getElementById("all-instruments-view-list-btn").addEventListener("click", () => setAllInstrumentsView("list"));
+document.getElementById("all-instruments-view-heatmap-btn").addEventListener("click", () => setAllInstrumentsView("heatmap"));
+setAllInstrumentsView("list");
+
+/* 列表的「🔍 分析」按鈕、熱力圖的色塊點擊，都是觸發同一支後端 API，只是 loading／
+   還原狀態的畫面表現不同（按鈕換文字 vs. 色塊變半透明）——實際打 API＋更新資料的邏輯
+   只寫這一份，兩種 UI 各自包一層處理 loading 動畫。*/
+async function _requestAnalyzeInstrument(instId) {
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/api/v1/analyze-instrument`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inst_id: instId }),
+    });
+  } catch (err) {
+    throw new Error(`無法連上後端：${err}`);
+  }
+  const body = await res.json();
+  if (!res.ok || !body.ok) {
+    throw new Error(body.message || "分析失敗，請稍後再試。");
+  }
+  // 併入目前的訊號清單（同一個 instId 已存在就覆蓋），重繪上方訊號面板 + 這裡的狀態。
+  const data = lastDashboardData;
+  data.signals = (data.signals || []).filter((s) => s.instId !== instId).concat([body.signal]);
+  renderSignalsList();
+  renderAllInstrumentsList();
+  renderAllInstrumentsHeatmap();
+  document.getElementById("signals-container").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 async function analyzeInstrumentOnDemand(instId, btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = "⏳ 分析中…";
   try {
-    const res = await fetch(`${API_BASE}/api/v1/analyze-instrument`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ inst_id: instId }),
-    });
-    const body = await res.json();
-    if (!res.ok || !body.ok) {
-      alert(body.message || "分析失敗，請稍後再試。");
-      btn.disabled = false;
-      btn.textContent = originalText;
-      return;
-    }
-    // 併入目前的訊號清單（同一個 instId 已存在就覆蓋），重繪上方訊號面板 + 這裡的狀態。
-    const data = lastDashboardData;
-    data.signals = (data.signals || []).filter((s) => s.instId !== instId).concat([body.signal]);
-    renderSignalsList();
-    renderAllInstrumentsList();
-    document.getElementById("signals-container").scrollIntoView({ behavior: "smooth", block: "start" });
+    await _requestAnalyzeInstrument(instId);
   } catch (err) {
-    alert(`無法連上後端：${err}`);
+    alert(err.message);
     btn.disabled = false;
     btn.textContent = originalText;
+  }
+}
+
+async function analyzeInstrumentFromHeatmap(instId, tileEl) {
+  if (tileEl.dataset.loading === "1") return;
+  tileEl.dataset.loading = "1";
+  tileEl.classList.add("opacity-40", "pointer-events-none");
+  try {
+    await _requestAnalyzeInstrument(instId);
+    // 成功的話 renderAllInstrumentsHeatmap() 會整塊重建，這個節點會被換掉，不用手動還原樣式。
+  } catch (err) {
+    alert(err.message);
+    tileEl.classList.remove("opacity-40", "pointer-events-none");
+    delete tileEl.dataset.loading;
   }
 }
 
@@ -988,6 +1097,7 @@ document.getElementById("signals-search").addEventListener("input", debounce((e)
 document.getElementById("all-instruments-search").addEventListener("input", debounce((e) => {
   allInstrumentsFilter.search = e.target.value;
   renderAllInstrumentsList();
+  renderAllInstrumentsHeatmap();
 }, 200));
 loadLastResult();
 
