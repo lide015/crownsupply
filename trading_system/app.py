@@ -50,6 +50,16 @@ logger = logging.getLogger("app")
 INDEX_HTML = Path(__file__).resolve().parent / "index.html"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
+# 開機時讀「一次」存進記憶體，之後每次 GET / 都直接回傳這份快取，不再每個請求都重新讀硬碟。
+# 這不只是效能考量：Python 的 asyncio 是單執行緒事件迴圈，任何一個請求處理常式裡的同步
+# 阻塞檔案讀取，都會卡住「整個」伺服器（不只卡住這一個請求）。專案資料夾如果剛好放在
+# OneDrive/Dropbox 這類雲端同步資料夾裡，同步中的檔案鎖定就可能讓 read_text() 卡住不動，
+# 表現起來就像伺服器完全沒回應（連 /api/v1/health 這種完全不碰檔案的端點都連不上）——
+# 這裡先把 index.html 快取掉，消除這個請求路徑上唯一一處逐請求的同步磁碟 I/O。
+_INDEX_HTML_CONTENT = (
+    INDEX_HTML.read_text(encoding="utf-8") if INDEX_HTML.is_file() else "<h1>index.html not found</h1>"
+)
+
 _http_client: httpx.AsyncClient | None = None
 _analyze_lock = asyncio.Lock()
 
@@ -176,6 +186,5 @@ async def coach(req: CoachRequest):
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    if INDEX_HTML.is_file():
-        return INDEX_HTML.read_text(encoding="utf-8")
-    return "<h1>index.html not found</h1>"
+    """回傳開機時就讀好、存在記憶體裡的內容（見上方 _INDEX_HTML_CONTENT），不逐請求碰硬碟。"""
+    return _INDEX_HTML_CONTENT
