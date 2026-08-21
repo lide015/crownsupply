@@ -195,6 +195,16 @@
       <h2 class="text-base font-semibold text-gray-300 flex items-center">
         <span class="mr-2">🎯</span> 多空雙向訊號面板（5 分鐘 K 線・20 EMA + 盤整盒子突破）
       </h2>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div id="signals-filters" class="flex flex-wrap gap-2"></div>
+        <input id="signals-search" type="text" placeholder="🔍 搜尋代號或名稱（例如 BTC）"
+          class="w-full sm:w-64 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
+                 placeholder-gray-600 focus:outline-none focus:border-indigo-600" />
+      </div>
+      <p class="text-[11px] text-gray-600 leading-relaxed">
+        這裡的篩選/搜尋只作用在<b>目前已監控</b>的商品（本輪按流動性/振幅自動篩選出的 <span id="signals-count-hint">0</span> 檔），
+        不是查詢任意商品——OKX 上所有商品都要另外抓資料才能查，目前還沒做這個功能。
+      </p>
       <div id="signals-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 text-center text-gray-500 col-span-full">
           尚未分析。按上方「🔍 立即分析」開始篩選 OKX 活躍合約並計算訊號。
@@ -219,13 +229,21 @@
 
     <div id="kn-toolbar" class="hidden flex flex-wrap items-center justify-between gap-3">
       <div id="kn-filters" class="flex flex-wrap gap-2"></div>
-      <div class="flex items-center gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
-        <button id="kn-view-graph-btn" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">🗺️ 地圖檢視</button>
-        <button id="kn-view-cards-btn" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">🗂️ 卡片檢視</button>
+      <div class="flex flex-wrap items-center gap-3">
+        <input id="kn-search" type="text" placeholder="🔍 搜尋知識卡標題"
+          class="w-full sm:w-56 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
+                 placeholder-gray-600 focus:outline-none focus:border-indigo-600" />
+        <div class="flex items-center gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
+          <button id="kn-view-graph-btn" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">🗺️ 地圖檢視</button>
+          <button id="kn-view-cards-btn" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors">🗂️ 卡片檢視</button>
+        </div>
       </div>
     </div>
 
-    <div id="kn-graph-wrap" class="hidden overflow-auto border border-gray-800 rounded-xl bg-gray-950">
+    <p id="kn-graph-hint" class="hidden text-[11px] text-gray-600">
+      🖱️ 地圖比畫面大，框框裡可以上下/左右捲動、或用觸控板兩指滑動查看完整內容。
+    </p>
+    <div id="kn-graph-wrap" class="hidden overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[70vh]">
       <svg id="kn-graph-svg" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
 
@@ -403,7 +421,11 @@ function renderResolvedList(rows) {
   }
 }
 
+let lastDashboardData = null;
+const signalsFilter = { assetClass: "all", search: "" };
+
 function renderDashboard(data) {
+  lastDashboardData = data;
   document.getElementById("last-update").textContent = data.last_update || "尚未分析";
 
   const sentimentEl = document.getElementById("ai-sentiment");
@@ -417,9 +439,44 @@ function renderDashboard(data) {
   renderResolvedList(data.recent_resolved);
   renderMarketPulse(data.market_pulse);
   renderRankingBoard(data.ranking);
+  document.getElementById("signals-count-hint").textContent = (data.signals || []).length;
 
+  renderSignalsFilters();
+  renderSignalsList();
+}
+
+/* 分類篩選＋文字搜尋只作用在「目前已監控」的訊號（純前端篩選、不重打 API），
+   跟知識宇宙分頁的 kn-filters 走同一套設計。*/
+function renderSignalsFilters() {
+  const wrap = document.getElementById("signals-filters");
+  const options = [
+    { key: "all", label: "全部" },
+    { key: "crypto", label: "🪙 加密貨幣" },
+    { key: "stock", label: "📈 股票永續" },
+  ];
+  wrap.innerHTML = "";
+  for (const opt of options) {
+    const btn = document.createElement("button");
+    btn.textContent = opt.label;
+    btn.className =
+      "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors " +
+      (opt.key === signalsFilter.assetClass
+        ? "bg-indigo-600 border-indigo-500 text-white"
+        : "border-gray-700 text-gray-400 hover:text-gray-200");
+    btn.addEventListener("click", () => {
+      signalsFilter.assetClass = opt.key;
+      renderSignalsFilters();
+      renderSignalsList();
+    });
+    wrap.appendChild(btn);
+  }
+}
+
+function renderSignalsList() {
+  const data = lastDashboardData;
   const container = document.getElementById("signals-container");
   container.innerHTML = "";
+  if (!data) return;
 
   if (data.last_error) {
     container.innerHTML = `<div class="bg-gray-900 p-6 rounded-xl border border-red-800 text-center text-red-400 col-span-full">
@@ -439,7 +496,20 @@ function renderDashboard(data) {
     return;
   }
 
-  for (const sig of data.signals) {
+  const q = signalsFilter.search.trim().toUpperCase();
+  const filtered = data.signals.filter((sig) => {
+    if (signalsFilter.assetClass !== "all" && sig.asset_class !== signalsFilter.assetClass) return false;
+    if (q && !sig.name.toUpperCase().includes(q) && !sig.instId.toUpperCase().includes(q)) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="bg-gray-900 p-6 rounded-xl border border-gray-800 text-center text-gray-500 col-span-full">
+      沒有符合篩選/搜尋條件的已監控商品——換個分類或關鍵字試試，或清空搜尋框看全部。</div>`;
+    return;
+  }
+
+  for (const sig of filtered) {
     const style = colorStyles[sig.color] || colorStyles.gray;
     const card = document.createElement("div");
     card.className = `bg-gray-900 border ${style.border} rounded-xl p-5 shadow-md flex flex-col justify-between space-y-4`;
@@ -648,6 +718,10 @@ async function runAnalysis() {
 }
 
 document.getElementById("analyze-btn").addEventListener("click", runAnalysis);
+document.getElementById("signals-search").addEventListener("input", debounce((e) => {
+  signalsFilter.search = e.target.value;
+  renderSignalsList();
+}, 200));
 loadLastResult();
 
 /* ---------------------------------------------------------------- */
@@ -663,7 +737,7 @@ const CATEGORY_META = {
 };
 const DEFAULT_CATEGORY_META = { label: "", color: "text-gray-300 border-gray-700", fill: "fill-gray-900", stroke: "stroke-gray-600", text: "fill-gray-300" };
 
-let knowledgeState = { nodes: [], edges: [], missions: [], activeCategory: "all", view: "cards" };
+let knowledgeState = { nodes: [], edges: [], missions: [], activeCategory: "all", view: "cards", searchQuery: "" };
 
 async function fetchSupabase(supabaseUrl, anonKey, table, query) {
   const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${query}`, {
@@ -685,13 +759,17 @@ async function loadKnowledgeUniverse() {
       fetchSupabase(supabase_url, supabase_anon_key, "knowledge_edges", "select=*"),
       fetchSupabase(supabase_url, supabase_anon_key, "missions", "select=*"),
     ]);
-    knowledgeState = { nodes, edges, missions, activeCategory: "all", view: "cards" };
+    knowledgeState = { nodes, edges, missions, activeCategory: "all", view: "cards", searchQuery: "" };
 
     statusEl.classList.add("hidden");
     document.getElementById("kn-toolbar").classList.remove("hidden");
     renderKnowledgeFilters();
     setKnowledgeView("cards");
     renderMissions();
+    document.getElementById("kn-search").addEventListener("input", debounce((e) => {
+      knowledgeState.searchQuery = e.target.value.trim().toUpperCase();
+      renderKnowledgeView();
+    }, 200));
   } catch (err) {
     console.error("知識宇宙讀取失敗：", err);
     statusEl.textContent = `知識庫連線失敗：${err.message || err}`;
@@ -739,6 +817,7 @@ function setKnowledgeView(view) {
   graphBtn.className = view === "graph" ? activeCls : inactiveCls;
   cardsBtn.className = view === "cards" ? activeCls : inactiveCls;
   document.getElementById("kn-graph-wrap").classList.toggle("hidden", view !== "graph");
+  document.getElementById("kn-graph-hint").classList.toggle("hidden", view !== "graph");
   document.getElementById("kn-grid").classList.toggle("hidden", view !== "cards");
   renderKnowledgeView();
 }
@@ -750,11 +829,17 @@ const GRAPH_NODE_W = 150;
 const GRAPH_NODE_H = 64;
 const GRAPH_PADDING = 60;
 
+function knowledgeFilteredNodes() {
+  return knowledgeState.nodes.filter((n) => {
+    if (knowledgeState.activeCategory !== "all" && n.category !== knowledgeState.activeCategory) return false;
+    if (knowledgeState.searchQuery && !n.title.toUpperCase().includes(knowledgeState.searchQuery)) return false;
+    return true;
+  });
+}
+
 function renderKnowledgeGraph() {
   const svg = document.getElementById("kn-graph-svg");
-  const nodes = knowledgeState.nodes.filter(
-    (n) => knowledgeState.activeCategory === "all" || n.category === knowledgeState.activeCategory
-  );
+  const nodes = knowledgeFilteredNodes();
   const nodeIds = new Set(nodes.map((n) => n.id));
   const edges = knowledgeState.edges.filter((e) => nodeIds.has(e.source_node_id) && nodeIds.has(e.target_node_id));
 
@@ -806,9 +891,12 @@ function renderKnowledgeGraph() {
 function renderKnowledgeGrid() {
   const grid = document.getElementById("kn-grid");
   grid.innerHTML = "";
-  const nodes = knowledgeState.nodes.filter(
-    (n) => knowledgeState.activeCategory === "all" || n.category === knowledgeState.activeCategory
-  );
+  const nodes = knowledgeFilteredNodes();
+  if (nodes.length === 0) {
+    grid.innerHTML = `<div class="bg-gray-900 p-6 rounded-xl border border-gray-800 text-center text-gray-500 col-span-full">
+      沒有符合篩選/搜尋條件的知識卡——換個分類或關鍵字試試，或清空搜尋框看全部。</div>`;
+    return;
+  }
   for (const node of nodes) {
     const meta = CATEGORY_META[node.category] || { label: node.category, color: "text-gray-300 border-gray-700" };
     const locked = node.unlock_status === "locked";
