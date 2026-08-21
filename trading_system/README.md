@@ -23,7 +23,7 @@
 trading_system/
 ├─ app.py            # FastAPI 進入點：REST API（含手動觸發用的 POST /api/v1/analyze）+ 掛載 index.html
 ├─ background.py      # 分析邏輯：結算舊訊號 → OKX 篩選 → 逐檔+整體 AI 新聞情緒 → K線 → 技術訊號 → 融合，跑一輪
-├─ okx_client.py       # OKX public REST：商品篩選（screen_active_instruments）+ K線抓取
+├─ okx_client.py       # OKX public REST：全部商品解析（parse_instruments）+ 自動篩選（screen_active_instruments）+ K線抓取
 ├─ strategy.py          # 技術面大腦：20 EMA + 盤整盒子突破（純函式，內建自測）
 ├─ news_client.py        # AI 新聞大腦：抓 RSS 頭條 → LLM 判斷多空情緒（Anthropic/OpenAI）
 ├─ brain.py               # 多空共振：技術面 + AI 情緒融合成最終建議（純函式，內建自測）
@@ -142,12 +142,28 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `TP1_RR` / `TP2_RR` | 1.5 / 2.0 | 停利風報比（reward:risk）；risk = │進場價 − 停損價│ |
 | `RANKING_TOP_N` | 5 | 📊 推薦強度榜做多/做空各顯示前幾名 |
 
+## 📋 全部商品總覽 vs. 自動篩選監控
+
+`TOP_N`（預設 6）只決定「自動」做完整技術分析（EMA/突破/停損停利/OI/新聞）的商品數量，
+**不是**畫面上看得到的商品數量上限。每次分析都會把 OKX 回傳的**全部**合約（通常
+200~300+ 檔，含 `EXTRA_INSTRUMENT_KEYWORDS` 額外納入的品項）解析出基本報價（代號/
+價格/24h振幅/成交額），列在「當沖訊號」分頁下方的「📋 全部商品總覽」表格，可以篩選
+分類、搜尋代號——這份清單完全重複利用同一次 `fetch_swap_tickers()` 呼叫的資料，
+**零額外 API 成本**。
+
+想深入研究某一檔沒被自動選中的商品，點該列的「🔍 分析」——會呼叫
+`POST /api/v1/analyze-instrument`，只對這一檔多打一次 K 線＋OI＋新聞搜尋，AI 呼叫也
+只涵蓋這一檔（不是重新分析整個市場），跟自動篩選出的商品走同一套計算邏輯
+（`background.analyze_one_instrument`），結果一樣會記錄進訊號歷史、參與勝率追蹤，
+不會有「自動選的」跟「自己點的」兩套不同標準。分析結果會直接併入上方的訊號面板。
+
 ## API
 
 | 端點 | 方法 | 說明 |
 |---|---|---|
 | `/api/v1/dashboard` | GET | 讀取「上一次」分析結果的快取，不觸發新分析、不打任何外部 API |
 | `/api/v1/analyze` | POST | 觸發一輪全新分析（OKX 篩選＋K線＋AI 新聞情緒），跑完回傳結果；上一輪還沒跑完時回 `409` |
+| `/api/v1/analyze-instrument` | POST | 🔍 對「全部商品總覽」裡任一檔按需求做完整分析。body：`{"inst_id": "ETH-USDT-SWAP"}`，只針對這一檔多打一次資料（不重新分析全部商品），結果會併入 `signals`。商品不存在（還沒按過 `/analyze` 抓清單，或代號打錯）回 `404` |
 | `/api/v1/health` | GET | 存活檢查 + 上次更新時間 + 上次錯誤訊息 |
 | `/api/v1/config` | GET | 給「知識宇宙」分頁的 Supabase URL／anon key（公開金鑰，非機密） |
 | `/api/v1/coach` | POST | AI 辯論空間一輪對話。body：`{"node": {...知識卡}, "history": [{"role","content"}, ...]}`，回傳 `{"reply", "error"}` |

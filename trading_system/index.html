@@ -202,13 +202,46 @@
                  placeholder-gray-600 focus:outline-none focus:border-indigo-600" />
       </div>
       <p class="text-[11px] text-gray-600 leading-relaxed">
-        這裡的篩選/搜尋只作用在<b>目前已監控</b>的商品（本輪按流動性/振幅自動篩選出的 <span id="signals-count-hint">0</span> 檔），
-        不是查詢任意商品——OKX 上所有商品都要另外抓資料才能查，目前還沒做這個功能。
+        這裡的篩選/搜尋只作用在<b>目前已完整分析</b>的商品（自動篩選出的 <span id="signals-count-hint">0</span> 檔
+        ＋你自己從下方「全部商品總覽」點開分析過的）。想看完整清單、挑別的商品來分析，往下拉。
       </p>
       <div id="signals-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 text-center text-gray-500 col-span-full">
           尚未分析。按上方「🔍 立即分析」開始篩選 OKX 活躍合約並計算訊號。
         </div>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-base font-semibold text-gray-300 flex items-center">
+        <span class="mr-2">📋</span> 全部商品總覽（<span id="all-instruments-count">0</span> 檔）
+      </h2>
+      <p class="text-xs text-gray-500 leading-relaxed">
+        OKX 上這輪抓到的<b>所有</b>合約（不套流動性/振幅門檻），只顯示基本報價。想看完整技術分析（EMA/突破/停損停利/OI/新聞），
+        點右邊「🔍 分析」——只針對那一檔多打一次資料，不會重新分析全部商品，結果會出現在上方訊號面板。
+      </p>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div id="all-instruments-filters" class="flex flex-wrap gap-2"></div>
+        <input id="all-instruments-search" type="text" placeholder="🔍 搜尋代號或名稱（例如 ETH）"
+          class="w-full sm:w-64 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
+                 placeholder-gray-600 focus:outline-none focus:border-indigo-600" />
+      </div>
+      <div id="all-instruments-wrap" class="overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[60vh]">
+        <table class="w-full text-xs">
+          <thead class="sticky top-0 bg-gray-900 text-gray-500">
+            <tr>
+              <th class="text-left px-3 py-2 font-semibold">代號</th>
+              <th class="text-left px-3 py-2 font-semibold">分類</th>
+              <th class="text-right px-3 py-2 font-semibold">價格</th>
+              <th class="text-right px-3 py-2 font-semibold">24h 振幅</th>
+              <th class="text-right px-3 py-2 font-semibold">24h 成交額</th>
+              <th class="text-center px-3 py-2 font-semibold">操作</th>
+            </tr>
+          </thead>
+          <tbody id="all-instruments-tbody">
+            <tr><td colspan="6" class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
@@ -443,6 +476,10 @@ function renderDashboard(data) {
 
   renderSignalsFilters();
   renderSignalsList();
+
+  document.getElementById("all-instruments-count").textContent = (data.all_instruments || []).length;
+  renderAllInstrumentsFilters();
+  renderAllInstrumentsList();
 }
 
 /* 分類篩選＋文字搜尋只作用在「目前已監控」的訊號（純前端篩選、不重打 API），
@@ -547,6 +584,119 @@ function renderSignalsList() {
       card.querySelector(".calc-fill-btn").addEventListener("click", () => fillCalcFromSignal(sig));
     }
     container.appendChild(card);
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* 全部商品總覽（不套門檻，OKX 這輪抓到的全部合約）                          */
+/* ---------------------------------------------------------------- */
+const allInstrumentsFilter = { assetClass: "all", search: "" };
+
+function renderAllInstrumentsFilters() {
+  const wrap = document.getElementById("all-instruments-filters");
+  const options = [
+    { key: "all", label: "全部" },
+    { key: "crypto", label: "🪙 加密貨幣" },
+    { key: "stock", label: "📈 股票永續" },
+  ];
+  wrap.innerHTML = "";
+  for (const opt of options) {
+    const btn = document.createElement("button");
+    btn.textContent = opt.label;
+    btn.className =
+      "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors " +
+      (opt.key === allInstrumentsFilter.assetClass
+        ? "bg-indigo-600 border-indigo-500 text-white"
+        : "border-gray-700 text-gray-400 hover:text-gray-200");
+    btn.addEventListener("click", () => {
+      allInstrumentsFilter.assetClass = opt.key;
+      renderAllInstrumentsFilters();
+      renderAllInstrumentsList();
+    });
+    wrap.appendChild(btn);
+  }
+}
+
+function renderAllInstrumentsList() {
+  const tbody = document.getElementById("all-instruments-tbody");
+  const data = lastDashboardData;
+  tbody.innerHTML = "";
+
+  if (!data || !data.has_run) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</td></tr>`;
+    return;
+  }
+
+  const all = data.all_instruments || [];
+  const q = allInstrumentsFilter.search.trim().toUpperCase();
+  const filtered = all.filter((inst) => {
+    if (allInstrumentsFilter.assetClass !== "all" && inst.asset_class !== allInstrumentsFilter.assetClass) return false;
+    if (q && !inst.name.toUpperCase().includes(q) && !inst.instId.toUpperCase().includes(q)) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-gray-500 py-6">沒有符合篩選/搜尋條件的商品。</td></tr>`;
+    return;
+  }
+
+  const analyzedIds = new Set((data.signals || []).map((s) => s.instId));
+  // 依 24h 振幅由高到低排序，跟自動篩選的邏輯一致，活躍的商品排前面比較好找。
+  filtered.sort((a, b) => b.amplitude_pct - a.amplitude_pct);
+
+  for (const inst of filtered) {
+    const tr = document.createElement("tr");
+    tr.className = "border-t border-gray-800 hover:bg-gray-900/50";
+    const isAnalyzed = analyzedIds.has(inst.instId);
+    tr.innerHTML = `
+      <td class="px-3 py-2 text-white font-semibold whitespace-nowrap">${inst.name}</td>
+      <td class="px-3 py-2 whitespace-nowrap">
+        <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400">
+          ${inst.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
+        </span>
+      </td>
+      <td class="px-3 py-2 text-right font-mono text-gray-300">${fmt(inst.price)}</td>
+      <td class="px-3 py-2 text-right font-mono text-gray-300">${fmt(inst.amplitude_pct, 2)}%</td>
+      <td class="px-3 py-2 text-right font-mono text-gray-500">${fmt(inst.vol_usdt, 0)}</td>
+      <td class="px-3 py-2 text-center">
+        <button class="analyze-inst-btn px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors ${
+          isAnalyzed
+            ? "border-green-800 text-green-400 bg-green-950/30"
+            : "border-indigo-800 text-indigo-400 hover:bg-indigo-950/40"
+        }">${isAnalyzed ? "✅ 已分析" : "🔍 分析"}</button>
+      </td>`;
+    tr.querySelector(".analyze-inst-btn").addEventListener("click", (e) => analyzeInstrumentOnDemand(inst.instId, e.target));
+    tbody.appendChild(tr);
+  }
+}
+
+async function analyzeInstrumentOnDemand(instId, btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "⏳ 分析中…";
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/analyze-instrument`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inst_id: instId }),
+    });
+    const body = await res.json();
+    if (!res.ok || !body.ok) {
+      alert(body.message || "分析失敗，請稍後再試。");
+      btn.disabled = false;
+      btn.textContent = originalText;
+      return;
+    }
+    // 併入目前的訊號清單（同一個 instId 已存在就覆蓋），重繪上方訊號面板 + 這裡的狀態。
+    const data = lastDashboardData;
+    data.signals = (data.signals || []).filter((s) => s.instId !== instId).concat([body.signal]);
+    renderSignalsList();
+    renderAllInstrumentsList();
+    document.getElementById("signals-container").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) {
+    alert(`無法連上後端：${err}`);
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
@@ -721,6 +871,10 @@ document.getElementById("analyze-btn").addEventListener("click", runAnalysis);
 document.getElementById("signals-search").addEventListener("input", debounce((e) => {
   signalsFilter.search = e.target.value;
   renderSignalsList();
+}, 200));
+document.getElementById("all-instruments-search").addEventListener("input", debounce((e) => {
+  allInstrumentsFilter.search = e.target.value;
+  renderAllInstrumentsList();
 }, 200));
 loadLastResult();
 

@@ -127,6 +127,68 @@ async def _fetch_btc_pct_change(client: httpx.AsyncClient, already_fetched: dict
     return _pct_change(candles)
 
 
+async def analyze_one_instrument(
+    client: httpx.AsyncClient, item: dict, sentiment: dict, now_ms: int
+) -> tuple[dict | None, list]:
+    """對單一商品跑完整的「K線→技術訊號→OI→多空共振」流程，回傳 (訊號 dict 或 None, candles)。
+    item 需含 instId/name/asset_class/price/vol_usdt/amplitude_pct（parse_instruments() 的格式）；
+    sentiment 是這檔的新聞情緒（{"sentiment","headline","reason"}）。
+
+    這是 `_refresh_signals` 自動篩選迴圈、跟 `app.py` 的 `POST /api/v1/analyze-instrument`
+    （使用者在「全部商品總覽」點按需求分析）**共用的同一份邏輯**——不管是系統自動選中的，
+    還是使用者自己點的，都走一模一樣的計算方式跟訊號歷史記錄規則，結果不會兩套標準。
+    K線抓取失敗時回傳 (None, [])，呼叫端自行決定要不要略過。"""
+    inst_id = item["instId"]
+    try:
+        candles = await okx_client.fetch_confirmed_candles(
+            client, inst_id, bar=config.CANDLE_BAR, limit=config.CANDLE_LIMIT
+        )
+        tech = strategy.compute_signal(
+            candles,
+            ema_period=config.EMA_PERIOD,
+            box_lookback=config.BOX_LOOKBACK,
+            tp1_rr=config.TP1_RR,
+            tp2_rr=config.TP2_RR,
+        )
+    except Exception as exc:  # noqa: BLE001 — 單一商品失敗不能拖垮整輪更新
+        logger.warning("signal calc failed for %s: %s", inst_id, exc)
+        return None, []
+
+    rsi = market_pulse.compute_rsi([c["c"] for c in candles])
+    oi_delta = await _fetch_oi_delta(client, inst_id, now_ms)
+    fused = brain.fuse(tech, sentiment)
+    signal = {
+        "name": item["name"],
+        "instId": inst_id,
+        "asset_class": item["asset_class"],
+        "price": tech["price"] if tech else item["price"],
+        "ema": tech["ema"] if tech else None,
+        "box_high": tech["box_high"] if tech else None,
+        "box_low": tech["box_low"] if tech else None,
+        "stop_loss": tech["stop_loss"] if tech else None,
+        "take_profit_1": tech["take_profit_1"] if tech else None,
+        "take_profit_2": tech["take_profit_2"] if tech else None,
+        "vol_usdt": item["vol_usdt"],
+        "amplitude_pct": item["amplitude_pct"],
+        "signal_type": tech["signal"] if tech else None,
+        "ai_sentiment": sentiment["sentiment"],
+        "news_headline": sentiment.get("headline"),
+        "news_reason": sentiment.get("reason"),
+        "rsi": rsi,
+        "oi_change_pct": oi_delta["oi_change_pct"],
+        "oi_label": oi_delta["label"],
+        **fused,
+    }
+
+    if tech is not None:
+        try:
+            _maybe_record_new_signal(item, tech, candles, fused, sentiment, now_ms)
+        except Exception as exc:  # noqa: BLE001 — 記錄歷史失敗不該讓分析整個掛掉
+            logger.warning("recording signal history failed for %s: %s", inst_id, exc)
+
+    return signal, candles
+
+
 async def _refresh_signals(client: httpx.AsyncClient):
     now_ms = int(time.time() * 1000)
 
@@ -151,6 +213,9 @@ async def _refresh_signals(client: httpx.AsyncClient):
     STATE.recent_resolved = db.get_recent_resolved(20)
 
     tickers = await okx_client.fetch_swap_tickers(client)
+    # OKX 上「全部」商品的基本報價（不套門檻、不截斷）——零額外 API 成本，這份資料本來就在
+    # 這一次 tickers 回應裡，只是之前直接丟掉了。給前端「全部商品總覽」瀏覽/篩選/搜尋用。
+    STATE.all_instruments = okx_client.parse_instruments(tickers, config.EXTRA_INSTRUMENT_KEYWORDS)
     monitored = okx_client.screen_active_instruments(
         tickers,
         min_vol_usdt=config.MIN_VOL_USDT,
@@ -182,63 +247,16 @@ async def _refresh_signals(client: httpx.AsyncClient):
     pct_changes_by_inst = {}
     for item in monitored:
         inst_id = item["instId"]
-        try:
-            candles = await okx_client.fetch_confirmed_candles(
-                client, inst_id, bar=config.CANDLE_BAR, limit=config.CANDLE_LIMIT
-            )
-            tech = strategy.compute_signal(
-                candles,
-                ema_period=config.EMA_PERIOD,
-                box_lookback=config.BOX_LOOKBACK,
-                tp1_rr=config.TP1_RR,
-                tp2_rr=config.TP2_RR,
-            )
-        except Exception as exc:  # noqa: BLE001 — 單一商品失敗不能拖垮整輪更新
-            logger.warning("signal calc failed for %s: %s", inst_id, exc)
-            continue
-
-        # 市場情緒儀表板用的附加資料：重複利用這裡已經抓好的 K 線，不額外多打 API。
-        rsi = market_pulse.compute_rsi([c["c"] for c in candles])
-        if rsi is not None:
-            rsi_values.append(rsi)
-        pct_changes_by_inst[inst_id] = _pct_change(candles)
-
-        # 推薦強度榜「籌碼面」維度用的附加資料（見 ranking.py / oi_tracker.py）。
-        oi_delta = await _fetch_oi_delta(client, inst_id, now_ms)
-
-        # 這檔專屬的新聞情緒（查不到專屬新聞時，news_client 已經 fallback 成整體市場情緒，
-        # 這裡不用再判斷一次「有沒有資料」）。
         sentiment = sentiment_by_inst.get(inst_id, news["market"])
+        signal, candles = await analyze_one_instrument(client, item, sentiment, now_ms)
+        if signal is None:
+            continue
+        signals.append(signal)
 
-        fused = brain.fuse(tech, sentiment)
-        signals.append({
-            "name": item["name"],
-            "instId": inst_id,
-            "asset_class": item["asset_class"],
-            "price": tech["price"] if tech else item["price"],
-            "ema": tech["ema"] if tech else None,
-            "box_high": tech["box_high"] if tech else None,
-            "box_low": tech["box_low"] if tech else None,
-            "stop_loss": tech["stop_loss"] if tech else None,
-            "take_profit_1": tech["take_profit_1"] if tech else None,
-            "take_profit_2": tech["take_profit_2"] if tech else None,
-            "vol_usdt": item["vol_usdt"],
-            "amplitude_pct": item["amplitude_pct"],
-            "signal_type": tech["signal"] if tech else None,
-            "ai_sentiment": sentiment["sentiment"],
-            "news_headline": sentiment.get("headline"),
-            "news_reason": sentiment.get("reason"),
-            "rsi": rsi,
-            "oi_change_pct": oi_delta["oi_change_pct"],
-            "oi_label": oi_delta["label"],
-            **fused,
-        })
-
-        if tech is not None:
-            try:
-                _maybe_record_new_signal(item, tech, candles, fused, sentiment, now_ms)
-            except Exception as exc:  # noqa: BLE001 — 記錄歷史失敗不該讓這輪分析整個掛掉
-                logger.warning("recording signal history failed for %s: %s", inst_id, exc)
+        # 市場情緒儀表板用的附加資料：重複利用剛剛已經抓好的 K 線，不額外多打 API。
+        if signal["rsi"] is not None:
+            rsi_values.append(signal["rsi"])
+        pct_changes_by_inst[inst_id] = _pct_change(candles)
 
     STATE.signals = signals
     STATE.last_update = time.strftime("%Y-%m-%d %H:%M:%S")

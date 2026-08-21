@@ -11,6 +11,7 @@
 """
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai_coach, background, config, db, position_sizing
+from . import ai_coach, background, config, db, news_client, position_sizing
 from .state import STATE
 
 
@@ -43,6 +44,10 @@ class PositionSizeRequest(BaseModel):
     leverage_cap: float | None = None
     take_profit_1: float | None = None
     take_profit_2: float | None = None
+
+
+class AnalyzeInstrumentRequest(BaseModel):
+    inst_id: str
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("app")
@@ -103,6 +108,7 @@ def _dashboard_payload() -> dict:
         "news_headline": STATE.news_headline,
         "news_reason": STATE.news_reason,
         "monitored": STATE.monitored,
+        "all_instruments": STATE.all_instruments,
         "signals": STATE.signals,
         "last_error": STATE.last_error,
         "win_rate_stats": STATE.win_rate_stats,
@@ -149,6 +155,39 @@ async def analyze():
             STATE.is_analyzing = False
 
     return _dashboard_payload()
+
+
+@app.post("/api/v1/analyze-instrument")
+async def analyze_instrument(req: AnalyzeInstrumentRequest):
+    """🔍「全部商品總覽」裡任一檔按需求做完整分析（K線→EMA/突破訊號→OI→這檔專屬新聞→多空
+    共振），不用等下一輪「立即分析」重新篩選全部商品才看得到。跟自動篩選出的 TOP_N 走
+    同一套邏輯（background.analyze_one_instrument），結果一樣會記錄進訊號歷史、參與勝率
+    追蹤——不管是系統自動選中的還是你自己點的，標準一致。
+
+    只針對「這一檔」多打一次小小的 AI 呼叫（不是重新分析全部商品），用量可控。"""
+    item = next((i for i in STATE.all_instruments if i["instId"] == req.inst_id), None)
+    if item is None:
+        return JSONResponse(
+            {"ok": False, "message": "找不到這個商品——可能還沒按過「立即分析」抓取商品清單，或代號不存在。"},
+            status_code=404,
+        )
+
+    assert _http_client is not None
+    now_ms = int(time.time() * 1000)
+    news = await news_client.get_market_and_instrument_sentiment(
+        _http_client,
+        [{"instId": item["instId"], "query": item["instId"].split("-")[0], "label": item["name"]}],
+    )
+    sentiment = news["by_instrument"].get(item["instId"], news["market"])
+    signal, _candles = await background.analyze_one_instrument(_http_client, item, sentiment, now_ms)
+    if signal is None:
+        return JSONResponse(
+            {"ok": False, "message": "這檔商品目前抓不到 K 線資料，稍後再試一次。"}, status_code=502
+        )
+
+    # 併入目前的訊號清單：同一個 instId 已存在就覆蓋掉舊的，不會重複顯示兩張卡片。
+    STATE.signals = [s for s in STATE.signals if s["instId"] != signal["instId"]] + [signal]
+    return {"ok": True, "signal": signal}
 
 
 @app.post("/api/v1/position-size")

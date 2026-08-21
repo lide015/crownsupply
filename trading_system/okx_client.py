@@ -40,19 +40,16 @@ async def fetch_swap_tickers(client: httpx.AsyncClient) -> list[dict]:
     return data.get("data", [])
 
 
-def screen_active_instruments(
-    tickers: list[dict],
-    min_vol_usdt: float = 50_000_000.0,
-    min_amplitude_pct: float = 3.0,
-    top_n: int = 6,
-    extra_keywords: tuple = (),
-) -> list[dict]:
-    """篩選具備流動性（24h 成交額）與波動度（24h 振幅）的合約，依振幅由高到低排序取前 top_n 檔。
+def parse_instruments(tickers: list[dict], extra_keywords: tuple = ()) -> list[dict]:
+    """把 OKX ticker 原始資料解析成標準格式，**不套用任何流動性/振幅門檻、不截斷筆數**——
+    給「全部商品總覽」用，讓使用者看得到 OKX 上全部（通常 200~300+ 檔）合約的基本報價，
+    不是只看得到自動篩選出來的那幾檔。`screen_active_instruments()` 在這份完整清單上
+    再套門檻篩選，兩者共用同一份解析邏輯，門檻邏輯只寫一次。
 
     注意：OKX ticker 的 `volCcy24h` 欄位本身就是以計價貨幣（USDT 本位合約即 USDT）計算的
     24h 成交額，不需要再乘上最新價——用 `vol24h`（張數/幣數）乘價格會重複換算、算出錯誤數字。
     """
-    candidates = []
+    parsed = []
     for t in tickers:
         inst_id = t.get("instId", "")
         is_crypto_perp = inst_id.endswith("-USDT-SWAP")
@@ -69,15 +66,30 @@ def screen_active_instruments(
         if low <= 0:
             continue
         amplitude_pct = (high - low) / low * 100.0
-        if vol_usdt >= min_vol_usdt and amplitude_pct >= min_amplitude_pct:
-            candidates.append({
-                "instId": inst_id,
-                "name": inst_id.replace("-SWAP", ""),
-                "price": last,
-                "vol_usdt": vol_usdt,
-                "amplitude_pct": round(amplitude_pct, 2),
-                "asset_class": asset_class(inst_id),
-            })
+        parsed.append({
+            "instId": inst_id,
+            "name": inst_id.replace("-SWAP", ""),
+            "price": last,
+            "vol_usdt": vol_usdt,
+            "amplitude_pct": round(amplitude_pct, 2),
+            "asset_class": asset_class(inst_id),
+        })
+    return parsed
+
+
+def screen_active_instruments(
+    tickers: list[dict],
+    min_vol_usdt: float = 50_000_000.0,
+    min_amplitude_pct: float = 3.0,
+    top_n: int = 6,
+    extra_keywords: tuple = (),
+) -> list[dict]:
+    """在 parse_instruments() 的完整清單上，篩選具備流動性（24h 成交額）與波動度（24h 振幅）
+    的合約，依振幅由高到低排序取前 top_n 檔——這是「自動監控」用的子集合，不是全部商品。"""
+    candidates = [
+        c for c in parse_instruments(tickers, extra_keywords)
+        if c["vol_usdt"] >= min_vol_usdt and c["amplitude_pct"] >= min_amplitude_pct
+    ]
     candidates.sort(key=lambda c: c["amplitude_pct"], reverse=True)
     return candidates[:top_n]
 
@@ -152,6 +164,15 @@ if __name__ == "__main__":
     check("asset_class BTC-USDT-SWAP -> crypto", asset_class("BTC-USDT-SWAP"), "crypto")
     check("asset_class XTSLA-USDT-SWAP -> stock (X 前綴也認得)", asset_class("XTSLA-USDT-SWAP"), "stock")
     check("screen_active_instruments tags asset_class", result[0]["asset_class"], "crypto")
+
+    # 5) parse_instruments：不套門檻、不截斷，給「全部商品總覽」用
+    all_parsed = parse_instruments(tickers)  # 沿用第 1 組資料，4 檔裡有 3 檔是合法 USDT 本位合約
+    check("parse_instruments keeps all valid USDT-SWAP instruments (no threshold)",
+          sorted(c["instId"] for c in all_parsed), ["BTC-USDT-SWAP", "DOGE-USDT-SWAP", "ETH-USDT-SWAP"])
+    check("parse_instruments still excludes non-USDT-SWAP without extra_keywords",
+          "BTC-USD-SWAP" not in [c["instId"] for c in all_parsed], True)
+    check("screen_active_instruments is a strict subset of parse_instruments",
+          set(c["instId"] for c in result).issubset(set(c["instId"] for c in all_parsed)), True)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

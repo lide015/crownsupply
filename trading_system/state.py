@@ -16,6 +16,9 @@ class SystemState:
         self.news_reason: str = "請點擊「立即分析」開始，本系統不會自動在背景執行分析。"
         self.monitored: list[dict] = []
         self.signals: list[dict] = []
+        # OKX 上「全部」商品的基本報價（不套流動性/振幅門檻、不截斷），給前端的「全部商品
+        # 總覽」瀏覽/篩選/搜尋用；`monitored` 才是自動篩選出來、真正做完整分析的子集合。
+        self.all_instruments: list[dict] = []
         self.last_error: str | None = None
         # 訊號結果追蹤與自動優化（見 db.py / outcome_tracker.py / strategy_tuner.py）
         self.win_rate_stats: dict = {"total": 0, "wins": 0, "losses": 0, "win_rate_pct": None}
