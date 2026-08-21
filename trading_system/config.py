@@ -2,6 +2,13 @@
 複製 .env.example 為 .env 並填入你的金鑰；.env 已加進 .gitignore，不會被 commit。
 """
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# 明確指向 trading_system/.env（不管執行時的工作目錄是 repo 根目錄還是 trading_system/
+# 本身），這樣 `uvicorn trading_system.app:app` 跟直接在 trading_system/ 裡跑都吃得到。
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # ---- OKX 商品篩選門檻（見 okx_client.screen_active_instruments） ----
 MIN_VOL_USDT = float(os.getenv("MIN_VOL_USDT", "50000000"))       # 24h 成交額門檻（USDT）

@@ -106,6 +106,21 @@ async def _call_openai(client: httpx.AsyncClient, prompt: str) -> dict | None:
     return _parse_sentiment_json(text)
 
 
+def _describe_error(exc: Exception) -> str:
+    """把 Anthropic/OpenAI 回傳的錯誤 JSON（例如額度不足、金鑰失效）轉成人看得懂的一句話，
+    而不是丟一整包 httpx 的 HTTP 狀態碼字串給使用者。"""
+    response = getattr(exc, "response", None)
+    if response is not None:
+        try:
+            body = response.json()
+            message = body.get("error", {}).get("message") or body.get("message")
+            if message:
+                return f"{message}（HTTP {response.status_code}）"
+        except ValueError:
+            pass
+    return str(exc)
+
+
 def _no_ai_result(reason: str) -> dict:
     return {"sentiment": "NEUTRAL", "headline": "AI 新聞分析未啟用", "reason": reason}
 
@@ -142,7 +157,7 @@ async def get_market_sentiment(client: httpx.AsyncClient) -> dict:
             parsed = await _call_anthropic(client, prompt)
     except Exception as exc:  # noqa: BLE001 — AI 呼叫失敗一樣優雅退回，不讓儀表板掛掉
         logger.warning("AI sentiment call failed: %s", exc)
-        return {"sentiment": "NEUTRAL", "headline": headlines[0], "reason": f"AI 分析暫時失敗：{exc}"}
+        return {"sentiment": "NEUTRAL", "headline": headlines[0], "reason": f"AI 分析暫時失敗：{_describe_error(exc)}"}
 
     if not parsed:
         return {"sentiment": "NEUTRAL", "headline": headlines[0], "reason": "AI 回覆格式無法解析，暫以中性處理"}
