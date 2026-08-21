@@ -26,6 +26,24 @@ AI 辯論空間。目前狀態：**資料庫、前端（卡片＋知識圖兩種
 之後如果要擴充知識卡，請延續這個方針：用自己的話寫「這個概念是什麼、為什麼重要、常見的
 錯誤用法」，不要貼書摘。
 
+## 深度金融知識延伸內容來源（第三批卡片）
+
+第三批 9 張卡片（`fund_dcf_basics` 等，見下方檔案列表）聚焦專業股票研究方法論——估值
+三方法交叉驗證、財報 beat 品質判讀、選股篩選邏輯、催化劑思維、風險分類、TAM 市場規模
+迷思。這批卡片的方法論架構，參考了 Anthropic 公開釋出、Apache 2.0 授權的
+[`github.com/anthropics/financial-services`](https://github.com/anthropics/financial-services)
+專案裡股票研究相關 skill 文件所描述的分析框架。
+
+需要說明兩點：
+1. **這不是那個產品本身**。「Claude for Financial Services」是企業級付費服務，串接
+   Daloopa、FactSet、S&P Global 等付費資料源；`financial-services` 這個 GitHub repo 是
+   Anthropic 另外公開釋出、跟付費資料源脫鉤的方法論文件，本專案用的是這個公開 repo，
+   沒有、也無法整合前者的企業付費功能。
+2. **延續同一套版權方針**：DCF、WACC、可比公司分析、選股篩選這些是金融教科書等級的
+   通用方法論，本身廣為人知、不是特定文本的表達方式；即使來源 repo 是 Apache 2.0（比
+   單純「概念公開」更進一步、明確允許重製與衍生），這裡的文字仍然是重新用自己的話撰寫
+   （案例、行文全部原創），沒有照抄任何原始 SKILL.md 檔案的段落。
+
 ## Supabase 專案資訊
 
 | 項目 | 值 |
@@ -53,28 +71,30 @@ knowledge_universe/
 ├─ schema.sql                  # 完整資料庫結構（已部署，來源見上）
 ├─ seed_knowledge_nodes.sql     # 第一批 17 張原創知識卡 + 8 條關聯 + 5 個任務（已部署）
 ├─ seed_knowledge_nodes_2.sql    # 第二批 13 張原創知識卡 + 12 條關聯 + 3 個任務（已部署）
+├─ seed_knowledge_nodes_3.sql    # 第三批 9 張原創知識卡 + 11 條關聯 + 3 個任務（已部署，見下方來源說明）
 ├─ .env.example                   # SUPABASE_URL / SUPABASE_ANON_KEY 範本，供之後的前端使用
 └─ README.md
 ```
 
 ## 已部署的種子內容
 
-累計 **30 張知識卡**，橫跨 schema 定義的 5 個分類：
+累計 **39 張知識卡**，橫跨 schema 定義的 5 個分類：
 
 | 分類 | 卡片 |
 |---|---|
 | 技術面 (technical) | 均線與趨勢判斷、盤整區間與突破交易、裸K/Price Action、中樞與背馳、多週期分析、RSI/MACD 震盪指標、布林通道、支撐與壓力位 |
-| 基本面 (fundamental) | 財報三表基礎、護城河與競爭優勢、成長股選股框架、指數化投資、估值倍數、盈餘品質與現金流量、股息投資與殖利率 |
+| 基本面 (fundamental) | 財報三表基礎、護城河與競爭優勢、成長股選股框架、指數化投資、估值倍數、盈餘品質與現金流量、股息投資與殖利率、DCF現金流折現核心邏輯、終值陷阱、估值三隻腳交叉驗證、財報beat品質、財測guidance判讀、四種選股篩選邏輯、催化劑驅動的投資論點、四類風險分類、TAM市場規模迷思 |
 | 籌碼面 (chips) | 三大法人籌碼觀察、融資融券與借券、股權分散表與大戶動向、選擇權 Put/Call 比率、期貨未平倉量 |
 | 情緒面 (sentiment) | 恐懼貪婪與逆勢思維、交易心理與紀律、黑天鵝與尾部風險、FOMO 與損失趨避、群眾心理與從眾效應、確認偏誤 |
 | 總經面 (macro) | 常用總經領先/落後指標、利率循環與資產價格、通膨與 CPI、殖利率曲線與衰退訊號 |
 
-多數卡片 `level_requirement=1`、`unlock_status='available'`（一開始就能看）；較進階的十張
+多數卡片 `level_requirement=1`、`unlock_status='available'`（一開始就能看）；較進階的十二張
 設成 `level_requirement=2`、`unlock_status='locked'`，體現 schema 設計的等級解鎖機制——
 目前前端沒有真的登入/等級判斷（見 Next Steps），鎖頭只是畫面上的示意，內容仍點得開。
 
-20 條 `knowledge_edges` 把知識卡連成脈絡（例如「均線判斷方向」→「盒子突破找進場時機」→
-「有訊號後紀律決定能不能執行」），8 個 `missions` 對應到其中 8 張卡片。
+31 條 `knowledge_edges` 把知識卡連成脈絡（例如「均線判斷方向」→「盒子突破找進場時機」→
+「有訊號後紀律決定能不能執行」，或「DCF算出內在價值」→「終值陷阱是DCF最大弱點」→
+「估值三隻腳交叉驗證，不能只信一種方法」），11 個 `missions` 對應到其中 11 張卡片。
 
 ## 已完成的前端（在 `trading_system/index.html` 裡）
 
@@ -105,7 +125,7 @@ knowledge_universe/
    ——訪客一進站就自動拿到一個 `auth.uid()`，滿足現有 RLS policy，不需要任何登入表單；
    但那是 Dashboard 層級的 Auth Provider 設定，目前可用的 Supabase 工具查不到、也改不了，
    需要你自己到 Supabase Dashboard 開啟。
-2. **更多知識卡**：30 張仍只涵蓋 Drive 書單所代表概念的一部分，之後要擴充一樣要走
-   「原創改寫、不摘錄」的方針。
+2. **更多知識卡**：39 張仍只涵蓋 Drive 書單、以及股票研究方法論所代表概念的一部分，
+   之後要擴充一樣要走「原創改寫、不摘錄」的方針。
 3. **`dingyao-tw` 的 RLS 缺口**：獨立於這個知識平台之外，但仍然是待處理的安全問題，
    需要你自己確認那個專案的用途與存取設計。
