@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>加密貨幣當沖訊號大腦</title>
+<title>交易大腦｜當沖訊號 + 知識宇宙</title>
 <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans min-h-screen">
@@ -11,75 +11,175 @@
 <header class="border-b border-gray-800 bg-gray-900 px-6 py-4 flex flex-wrap justify-between items-center gap-3">
   <div class="flex items-center space-x-3">
     <span class="text-2xl">🧠</span>
-    <h1 class="text-xl font-bold tracking-wider text-indigo-400">加密貨幣當沖訊號大腦</h1>
+    <h1 class="text-xl font-bold tracking-wider text-indigo-400">交易大腦</h1>
   </div>
-  <div class="flex items-center gap-3">
-    <span class="text-sm text-gray-400">
-      上次分析：<span id="last-update" class="text-indigo-300 font-mono">尚未分析</span>
-    </span>
-    <button id="analyze-btn"
-      class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold
-             transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-      <span id="analyze-btn-icon">🔍</span>
-      <span id="analyze-btn-label">立即分析</span>
+  <nav class="flex items-center gap-1 bg-gray-950 border border-gray-800 rounded-lg p-1">
+    <button id="tab-btn-signals" class="tab-btn px-3 py-1.5 rounded-md text-sm font-semibold transition-colors">
+      🎯 當沖訊號
     </button>
-  </div>
+    <button id="tab-btn-knowledge" class="tab-btn px-3 py-1.5 rounded-md text-sm font-semibold transition-colors">
+      📚 知識宇宙
+    </button>
+  </nav>
 </header>
 
-<div class="bg-yellow-950/40 border-b border-yellow-800/60 text-yellow-300 text-xs px-6 py-2">
-  ⚠️ 本系統<b>不會自動在背景分析</b>，只在你按下「立即分析」時才呼叫一次 OKX／AI API——用量由你自己掌控。
-  訊號僅供參考，<b>不會自動下單、不動用任何真實資金</b>；所有內容非投資建議。
+<!-- ==================== 當沖訊號分頁 ==================== -->
+<div id="tab-signals">
+
+  <div class="bg-yellow-950/40 border-b border-yellow-800/60 text-yellow-300 text-xs px-6 py-2">
+    ⚠️ 本系統<b>不會自動在背景分析</b>，只在你按下「立即分析」時才呼叫一次 OKX／AI API——用量由你自己掌控。
+    訊號僅供參考，<b>不會自動下單、不動用任何真實資金</b>；所有內容非投資建議。
+  </div>
+
+  <main class="max-w-7xl mx-auto p-6 space-y-6">
+
+    <div class="flex flex-wrap items-center justify-between gap-3 bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
+      <span class="text-sm text-gray-400">
+        上次分析：<span id="last-update" class="text-indigo-300 font-mono">尚未分析</span>
+      </span>
+      <button id="analyze-btn"
+        class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold
+               transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+        <span id="analyze-btn-icon">🔍</span>
+        <span id="analyze-btn-label">立即分析</span>
+      </button>
+    </div>
+
+    <details class="bg-gray-900 border border-gray-800 rounded-xl shadow-lg group">
+      <summary class="cursor-pointer select-none px-5 py-4 flex items-center justify-between text-gray-300 font-semibold">
+        <span class="flex items-center"><span class="mr-2">📚</span> 新手教學：這些數字是什麼意思？</span>
+        <span class="text-xs text-gray-500 group-open:hidden">點開展開</span>
+      </summary>
+      <div class="px-5 pb-5 space-y-3 text-sm text-gray-400 leading-relaxed border-t border-gray-800 pt-4">
+        <p><b class="text-indigo-400">20 EMA（20 週期指數移動平均線）</b>：把最近 20 根 K 線的收盤價取一個「越近期權重越高」的平均，用來判斷短線趨勢方向。價格在 EMA 之上通常視為偏多、之下視為偏空——這也是本系統「只做多不做空 / 只做空不做多」的判斷依據，不會兩邊都猜。</p>
+        <p><b class="text-indigo-400">盤整盒子（Box）</b>：價格在一段時間內上下小幅震盪，用最近 15 根已收盤 K 線的最高點與最低點框出一個區間。當某根 K 線的收盤價「站穩」盒子外面（不是影線碰到，是實體收盤價突破），才視為有效突破，避免插針假訊號。</p>
+        <p><b class="text-indigo-400">停損（Stop-Loss）</b>：這筆交易願意承受的最大虧損價位，固定設在盒子的中線。一旦價格跌破/漲破停損，代表原本的技術面假設不成立了，應該出場，不要心存僥倖。</p>
+        <p><b class="text-indigo-400">停利1 / 停利2（Take-Profit）</b>：用「風報比」（reward : risk）算出來的目標價——risk 是「進場價到停損價」的距離，停利1＝risk × 1.5 倍、停利2＝risk × 2 倍（皆可在 `.env` 調整）。常見做法是價格到停利1先減碼一半、剩下留到停利2，讓獲利部位有機會跟上更大的走勢。</p>
+        <p><b class="text-indigo-400">AI 新聞情緒</b>：抓即時財經新聞頭條，讓 AI 判斷市場整體氣氛是利多（BULLISH）、利空（BEARISH）還是中性（NEUTRAL）。</p>
+        <p><b class="text-indigo-400">多空共振</b>：技術面訊號（突破/跌破）跟 AI 新聞情緒方向一致時，才標記「強烈做多/做空」；如果技術面突破了但新聞情緒明確反向，會標記「潛在假突破，觀望」——這是系統刻意設計的煞車機制，避免逆著大方向硬做技術面訊號。</p>
+        <p class="text-yellow-500/80">⚠️ 以上全部是規則式技術分析的參考資訊，不是投資建議，過去的訊號不保證未來獲利，進場前務必自己再三確認。</p>
+      </div>
+    </details>
+
+    <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-md font-semibold text-gray-300 flex items-center">
+          <span class="mr-2">📰</span> AI 即時新聞情緒大腦
+        </h2>
+        <span id="ai-sentiment" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400">
+          尚未分析
+        </span>
+      </div>
+      <div class="bg-gray-950 p-4 rounded-lg border border-gray-800 space-y-1">
+        <p id="news-headline" class="text-gray-200 text-sm leading-relaxed">按上方「立即分析」開始第一次掃描。</p>
+        <p id="news-reason" class="text-gray-500 text-xs leading-relaxed"></p>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-md font-semibold text-gray-300 flex items-center">
+        <span class="mr-2">🎯</span> 多空雙向訊號面板（5 分鐘 K 線・20 EMA + 盤整盒子突破）
+      </h2>
+      <div id="signals-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 text-center text-gray-500 col-span-full">
+          尚未分析。按上方「🔍 立即分析」開始篩選 OKX 活躍合約並計算訊號。
+        </div>
+      </div>
+    </section>
+
+  </main>
 </div>
 
-<main class="max-w-7xl mx-auto p-6 space-y-6">
+<!-- ==================== 知識宇宙分頁 ==================== -->
+<div id="tab-knowledge" class="hidden">
 
-  <details class="bg-gray-900 border border-gray-800 rounded-xl shadow-lg group">
-    <summary class="cursor-pointer select-none px-5 py-4 flex items-center justify-between text-gray-300 font-semibold">
-      <span class="flex items-center"><span class="mr-2">📚</span> 新手教學：這些數字是什麼意思？</span>
-      <span class="text-xs text-gray-500 group-open:hidden">點開展開</span>
-    </summary>
-    <div class="px-5 pb-5 space-y-3 text-sm text-gray-400 leading-relaxed border-t border-gray-800 pt-4">
-      <p><b class="text-indigo-400">20 EMA（20 週期指數移動平均線）</b>：把最近 20 根 K 線的收盤價取一個「越近期權重越高」的平均，用來判斷短線趨勢方向。價格在 EMA 之上通常視為偏多、之下視為偏空——這也是本系統「只做多不做空 / 只做空不做多」的判斷依據，不會兩邊都猜。</p>
-      <p><b class="text-indigo-400">盤整盒子（Box）</b>：價格在一段時間內上下小幅震盪，用最近 15 根已收盤 K 線的最高點與最低點框出一個區間。當某根 K 線的收盤價「站穩」盒子外面（不是影線碰到，是實體收盤價突破），才視為有效突破，避免插針假訊號。</p>
-      <p><b class="text-indigo-400">停損（Stop-Loss）</b>：這筆交易願意承受的最大虧損價位，固定設在盒子的中線。一旦價格跌破/漲破停損，代表原本的技術面假設不成立了，應該出場，不要心存僥倖。</p>
-      <p><b class="text-indigo-400">停利1 / 停利2（Take-Profit）</b>：用「風報比」（reward : risk）算出來的目標價——risk 是「進場價到停損價」的距離，停利1＝risk × 1.5 倍、停利2＝risk × 2 倍（皆可在 `.env` 調整）。常見做法是價格到停利1先減碼一半、剩下留到停利2，讓獲利部位有機會跟上更大的走勢。</p>
-      <p><b class="text-indigo-400">AI 新聞情緒</b>：抓即時財經新聞頭條，讓 AI 判斷市場整體氣氛是利多（BULLISH）、利空（BEARISH）還是中性（NEUTRAL）。</p>
-      <p><b class="text-indigo-400">多空共振</b>：技術面訊號（突破/跌破）跟 AI 新聞情緒方向一致時，才標記「強烈做多/做空」；如果技術面突破了但新聞情緒明確反向，會標記「潛在假突破，觀望」——這是系統刻意設計的煞車機制，避免逆著大方向硬做技術面訊號。</p>
-      <p class="text-yellow-500/80">⚠️ 以上全部是規則式技術分析的參考資訊，不是投資建議，過去的訊號不保證未來獲利，進場前務必自己再三確認。</p>
-    </div>
-  </details>
+  <div class="bg-indigo-950/40 border-b border-indigo-800/60 text-indigo-300 text-xs px-6 py-2">
+    📚 每張知識卡都是原創撰寫的通用交易/投資概念說明，不摘錄任何書籍原文。等級/XP/任務進度是
+    <span class="text-indigo-200 font-semibold">系統設計預覽</span>（尚未接使用者登入），鎖頭圖示僅示意解鎖機制，內容一樣點得開。
+  </div>
 
-  <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
-    <div class="flex items-center justify-between mb-3">
+  <main class="max-w-7xl mx-auto p-6 space-y-6">
+
+    <div id="kn-status" class="text-sm text-gray-500">正在連線知識庫…</div>
+
+    <div id="kn-filters" class="hidden flex flex-wrap gap-2"></div>
+
+    <section id="kn-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></section>
+
+    <section id="kn-missions-section" class="hidden space-y-3">
       <h2 class="text-md font-semibold text-gray-300 flex items-center">
-        <span class="mr-2">📰</span> AI 即時新聞情緒大腦
+        <span class="mr-2">🏁</span> 任務（Missions）
       </h2>
-      <span id="ai-sentiment" class="px-3 py-1 text-xs font-bold rounded-full bg-gray-800 text-gray-400">
-        尚未分析
-      </span>
-    </div>
-    <div class="bg-gray-950 p-4 rounded-lg border border-gray-800 space-y-1">
-      <p id="news-headline" class="text-gray-200 text-sm leading-relaxed">按上方「立即分析」開始第一次掃描。</p>
-      <p id="news-reason" class="text-gray-500 text-xs leading-relaxed"></p>
-    </div>
-  </section>
+      <div id="kn-missions" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </section>
 
-  <section class="space-y-3">
-    <h2 class="text-md font-semibold text-gray-300 flex items-center">
-      <span class="mr-2">🎯</span> 多空雙向訊號面板（5 分鐘 K 線・20 EMA + 盤整盒子突破）
-    </h2>
-    <div id="signals-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 text-center text-gray-500 col-span-full">
-        尚未分析。按右上角「🔍 立即分析」開始篩選 OKX 活躍合約並計算訊號。
+  </main>
+</div>
+
+<!-- 知識卡詳情彈窗 -->
+<div id="kn-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+  <div class="bg-gray-900 border border-gray-800 rounded-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 space-y-4">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <span id="kn-modal-category" class="text-xs px-2 py-0.5 rounded-full border"></span>
+        <h3 id="kn-modal-title" class="text-xl font-bold text-white mt-2"></h3>
+      </div>
+      <button id="kn-modal-close" class="text-gray-500 hover:text-white text-2xl leading-none">&times;</button>
+    </div>
+    <div class="space-y-3 text-sm text-gray-300 leading-relaxed">
+      <div>
+        <div class="text-indigo-400 font-semibold mb-1">核心原理</div>
+        <p id="kn-modal-principle"></p>
+      </div>
+      <div>
+        <div class="text-indigo-400 font-semibold mb-1">案例</div>
+        <p id="kn-modal-case"></p>
+      </div>
+      <div>
+        <div class="text-red-400 font-semibold mb-1">常見錯誤</div>
+        <ul id="kn-modal-mistakes" class="list-disc list-inside space-y-1 text-gray-400"></ul>
+      </div>
+      <div id="kn-modal-related-wrap" class="hidden">
+        <div class="text-indigo-400 font-semibold mb-1">延伸概念</div>
+        <div id="kn-modal-related" class="flex flex-wrap gap-2"></div>
       </div>
     </div>
-  </section>
-
-</main>
+  </div>
+</div>
 
 <script>
 const API_BASE = window.location.origin.startsWith("file") ? "http://127.0.0.1:8000" : window.location.origin;
 
+/* ---------------------------------------------------------------- */
+/* 分頁切換                                                            */
+/* ---------------------------------------------------------------- */
+const TABS = {
+  signals: { btn: "tab-btn-signals", panel: "tab-signals" },
+  knowledge: { btn: "tab-btn-knowledge", panel: "tab-knowledge" },
+};
+let knowledgeLoaded = false;
+
+function activateTab(name) {
+  for (const [key, t] of Object.entries(TABS)) {
+    const isActive = key === name;
+    document.getElementById(t.panel).classList.toggle("hidden", !isActive);
+    document.getElementById(t.btn).className =
+      "tab-btn px-3 py-1.5 rounded-md text-sm font-semibold transition-colors " +
+      (isActive ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-gray-200");
+  }
+  if (name === "knowledge" && !knowledgeLoaded) {
+    knowledgeLoaded = true;
+    loadKnowledgeUniverse();
+  }
+}
+
+document.getElementById("tab-btn-signals").addEventListener("click", () => activateTab("signals"));
+document.getElementById("tab-btn-knowledge").addEventListener("click", () => activateTab("knowledge"));
+activateTab("signals");
+
+/* ---------------------------------------------------------------- */
+/* 當沖訊號分頁                                                        */
+/* ---------------------------------------------------------------- */
 const colorStyles = {
   green:  { border: "border-green-600 bg-gradient-to-b from-gray-900 to-green-950/20", badge: "bg-green-500 text-gray-950 font-bold" },
   red:    { border: "border-red-600 bg-gradient-to-b from-gray-900 to-red-950/20",     badge: "bg-red-500 text-white font-bold" },
@@ -118,7 +218,7 @@ function renderDashboard(data) {
 
   if (!data.has_run) {
     container.innerHTML = `<div class="bg-gray-900 p-6 rounded-xl border border-gray-800 text-center text-gray-500 col-span-full">
-      尚未分析。按右上角「🔍 立即分析」開始篩選 OKX 活躍合約並計算訊號。</div>`;
+      尚未分析。按上方「🔍 立即分析」開始篩選 OKX 活躍合約並計算訊號。</div>`;
     return;
   }
 
@@ -202,6 +302,175 @@ async function runAnalysis() {
 
 document.getElementById("analyze-btn").addEventListener("click", runAnalysis);
 loadLastResult();
+
+/* ---------------------------------------------------------------- */
+/* 知識宇宙分頁 —— 直接用 fetch 打 Supabase REST API（PostgREST），      */
+/* 不用額外的 SDK；anon key 是公開金鑰，設計上就是給前端直接用的。         */
+/* ---------------------------------------------------------------- */
+const CATEGORY_META = {
+  technical:   { label: "技術面", color: "text-blue-300 border-blue-700 bg-blue-950/40" },
+  fundamental: { label: "基本面", color: "text-emerald-300 border-emerald-700 bg-emerald-950/40" },
+  chips:       { label: "籌碼面", color: "text-purple-300 border-purple-700 bg-purple-950/40" },
+  sentiment:   { label: "情緒面", color: "text-rose-300 border-rose-700 bg-rose-950/40" },
+  macro:       { label: "總經面", color: "text-amber-300 border-amber-700 bg-amber-950/40" },
+};
+
+let knowledgeState = { nodes: [], edges: [], missions: [], activeCategory: "all" };
+
+async function fetchSupabase(supabaseUrl, anonKey, table, query) {
+  const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${query}`, {
+    headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+  });
+  if (!res.ok) throw new Error(`Supabase ${table} 讀取失敗: HTTP ${res.status}`);
+  return res.json();
+}
+
+async function loadKnowledgeUniverse() {
+  const statusEl = document.getElementById("kn-status");
+  try {
+    const cfgRes = await fetch(`${API_BASE}/api/v1/config`);
+    if (!cfgRes.ok) throw new Error(`HTTP ${cfgRes.status}`);
+    const { supabase_url, supabase_anon_key } = await cfgRes.json();
+
+    const [nodes, edges, missions] = await Promise.all([
+      fetchSupabase(supabase_url, supabase_anon_key, "knowledge_nodes", "select=*&order=category.asc,position_y.asc"),
+      fetchSupabase(supabase_url, supabase_anon_key, "knowledge_edges", "select=*"),
+      fetchSupabase(supabase_url, supabase_anon_key, "missions", "select=*"),
+    ]);
+    knowledgeState = { nodes, edges, missions, activeCategory: "all" };
+
+    statusEl.classList.add("hidden");
+    renderKnowledgeFilters();
+    renderKnowledgeGrid();
+    renderMissions();
+  } catch (err) {
+    console.error("知識宇宙讀取失敗：", err);
+    statusEl.textContent = `知識庫連線失敗：${err.message || err}`;
+    statusEl.className = "text-sm text-red-400";
+  }
+}
+
+function renderKnowledgeFilters() {
+  const wrap = document.getElementById("kn-filters");
+  wrap.classList.remove("hidden");
+  const cats = ["all", ...new Set(knowledgeState.nodes.map((n) => n.category))];
+  wrap.innerHTML = "";
+  for (const cat of cats) {
+    const label = cat === "all" ? "全部" : (CATEGORY_META[cat]?.label || cat);
+    const btn = document.createElement("button");
+    btn.textContent = label;
+    btn.className =
+      "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors " +
+      (cat === knowledgeState.activeCategory
+        ? "bg-indigo-600 border-indigo-500 text-white"
+        : "border-gray-700 text-gray-400 hover:text-gray-200");
+    btn.addEventListener("click", () => {
+      knowledgeState.activeCategory = cat;
+      renderKnowledgeFilters();
+      renderKnowledgeGrid();
+    });
+    wrap.appendChild(btn);
+  }
+}
+
+function renderKnowledgeGrid() {
+  const grid = document.getElementById("kn-grid");
+  grid.innerHTML = "";
+  const nodes = knowledgeState.nodes.filter(
+    (n) => knowledgeState.activeCategory === "all" || n.category === knowledgeState.activeCategory
+  );
+  for (const node of nodes) {
+    const meta = CATEGORY_META[node.category] || { label: node.category, color: "text-gray-300 border-gray-700" };
+    const locked = node.unlock_status === "locked";
+    const card = document.createElement("div");
+    card.className =
+      "bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3 cursor-pointer hover:border-indigo-600 transition-colors" +
+      (locked ? " opacity-70" : "");
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-2">
+        <span class="text-xs px-2 py-0.5 rounded-full border ${meta.color}">${meta.label}</span>
+        ${locked ? `<span class="text-xs text-gray-500">🔒 Lv.${node.level_requirement}</span>` : `<span class="text-xs text-indigo-400">+${node.xp_reward} XP</span>`}
+      </div>
+      <h3 class="text-white font-bold text-base leading-snug">${node.title}</h3>
+      <p class="text-gray-400 text-sm leading-relaxed">${node.description}</p>`;
+    card.addEventListener("click", () => openKnowledgeModal(node.id));
+    grid.appendChild(card);
+  }
+}
+
+function renderMissions() {
+  if (!knowledgeState.missions.length) return;
+  document.getElementById("kn-missions-section").classList.remove("hidden");
+  const wrap = document.getElementById("kn-missions");
+  wrap.innerHTML = "";
+  for (const m of knowledgeState.missions) {
+    const meta = CATEGORY_META[m.category] || { label: m.category, color: "text-gray-300 border-gray-700" };
+    const node = knowledgeState.nodes.find((n) => n.id === m.node_id);
+    const card = document.createElement("div");
+    card.className = "bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2";
+    card.innerHTML = `
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-xs px-2 py-0.5 rounded-full border ${meta.color}">${meta.label}</span>
+        <span class="text-xs text-indigo-400">+${m.reward_xp} XP · ${m.difficulty}</span>
+      </div>
+      <h4 class="text-white font-semibold text-sm">${m.title}</h4>
+      <p class="text-gray-400 text-xs leading-relaxed">${m.description}</p>
+      ${node ? `<button class="text-xs text-indigo-400 hover:underline" data-node="${node.id}">相關知識卡：${node.title} →</button>` : ""}`;
+    const linkBtn = card.querySelector("[data-node]");
+    if (linkBtn) linkBtn.addEventListener("click", () => openKnowledgeModal(node.id));
+    wrap.appendChild(card);
+  }
+}
+
+function openKnowledgeModal(nodeId) {
+  const node = knowledgeState.nodes.find((n) => n.id === nodeId);
+  if (!node) return;
+  const meta = CATEGORY_META[node.category] || { label: node.category, color: "text-gray-300 border-gray-700" };
+
+  document.getElementById("kn-modal-category").textContent = meta.label;
+  document.getElementById("kn-modal-category").className = `text-xs px-2 py-0.5 rounded-full border ${meta.color}`;
+  document.getElementById("kn-modal-title").textContent = node.title;
+  document.getElementById("kn-modal-principle").textContent = node.principle;
+  document.getElementById("kn-modal-case").textContent = node.case_study;
+
+  const mistakesEl = document.getElementById("kn-modal-mistakes");
+  mistakesEl.innerHTML = "";
+  for (const m of node.common_mistakes || []) {
+    const li = document.createElement("li");
+    li.textContent = m;
+    mistakesEl.appendChild(li);
+  }
+
+  const relatedIds = knowledgeState.edges
+    .filter((e) => e.source_node_id === nodeId || e.target_node_id === nodeId)
+    .map((e) => (e.source_node_id === nodeId ? e.target_node_id : e.source_node_id));
+  const relatedWrap = document.getElementById("kn-modal-related-wrap");
+  const relatedEl = document.getElementById("kn-modal-related");
+  relatedEl.innerHTML = "";
+  if (relatedIds.length) {
+    relatedWrap.classList.remove("hidden");
+    for (const rid of relatedIds) {
+      const rn = knowledgeState.nodes.find((n) => n.id === rid);
+      if (!rn) continue;
+      const btn = document.createElement("button");
+      btn.textContent = rn.title;
+      btn.className = "text-xs px-2.5 py-1 rounded-full border border-gray-700 text-gray-300 hover:border-indigo-600 hover:text-indigo-300";
+      btn.addEventListener("click", () => openKnowledgeModal(rid));
+      relatedEl.appendChild(btn);
+    }
+  } else {
+    relatedWrap.classList.add("hidden");
+  }
+
+  document.getElementById("kn-modal").classList.remove("hidden");
+}
+
+document.getElementById("kn-modal-close").addEventListener("click", () => {
+  document.getElementById("kn-modal").classList.add("hidden");
+});
+document.getElementById("kn-modal").addEventListener("click", (e) => {
+  if (e.target.id === "kn-modal") document.getElementById("kn-modal").classList.add("hidden");
+});
 </script>
 </body>
 </html>

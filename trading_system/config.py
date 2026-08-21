@@ -30,6 +30,15 @@ CANDLE_LIMIT = int(os.getenv("CANDLE_LIMIT", "50"))
 TP1_RR = float(os.getenv("TP1_RR", "1.5"))
 TP2_RR = float(os.getenv("TP2_RR", "2.0"))
 
+# ---- 知識宇宙前端用（見 knowledge_universe/README.md）----
+# anon/publishable key 設計上就是給前端直接使用的公開金鑰，不是密鑰，預設值可以直接寫在這裡；
+# 之後如果換了 Supabase 專案，改這兩個環境變數即可，不用動程式碼。
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://qirovvwpeblxgpobptlc.supabase.co")
+SUPABASE_ANON_KEY = os.getenv(
+    "SUPABASE_ANON_KEY",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpcm92dndwZWJseGdwb2JwdGxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczMTAzNzEsImV4cCI6MjEwMjg4NjM3MX0.bqGLdtDaRu_5lc-c5SOHWc7-p-oz8gunQ5YWkMTPAvk",
+)
+
 # ---- AI 新聞情緒大腦（見 news_client.py） ----
 # AI_PROVIDER: "anthropic" | "openai" | "none"（none = 完全停用 AI，訊號只看技術面）
 AI_PROVIDER = os.getenv("AI_PROVIDER", "anthropic").lower()

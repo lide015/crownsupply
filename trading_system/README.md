@@ -1,7 +1,14 @@
-# 加密貨幣當沖訊號大腦（獨立全端專案）
+# 交易大腦（獨立全端專案）
 
-動態量化選幣 ＋ AI 總經新聞情緒 ＋ 20 EMA/盤整盒子技術面訊號的獨立監控平台。跟 repo 根目錄
+動態量化選幣 ＋ AI 總經新聞情緒 ＋ 20 EMA/盤整盒子技術面訊號的獨立監控平台，**同一個網站**
+再整合了 `../knowledge_universe/`（Supabase 上的遊戲化投資知識庫）當第二個分頁。跟 repo 根目錄
 的 `backend/`（節流晨報）是**完全獨立的專案**，互不依賴、互不影響，可以各自單獨啟動。
+
+打開 `http://127.0.0.1:8000` 後，右上角有兩個分頁：
+- **🎯 當沖訊號**：原本的當沖訊號儀表板（見下方各節）。
+- **📚 知識宇宙**：知識卡瀏覽（依技術面/基本面/籌碼面/情緒面/總經面篩選、點卡片看詳情、
+  任務列表），直接用瀏覽器打 Supabase REST API 讀取，不用另外啟動伺服器，只需要這個
+  FastAPI app 透過 `/api/v1/config` 把 Supabase URL／anon key 交給前端。
 
 > ⚠️ **這是訊號監控工具，不是自動化交易系統。** 全程不使用任何交易所 API 金鑰、不下單、
 > 不動用真實資金。所有訊號僅供研究參考，不構成投資建議。若之後要接上真正的自動化下單，
@@ -18,10 +25,17 @@ trading_system/
 ├─ news_client.py        # AI 新聞大腦：抓 RSS 頭條 → LLM 判斷多空情緒（Anthropic/OpenAI）
 ├─ brain.py               # 多空共振：技術面 + AI 情緒融合成最終建議（純函式，內建自測）
 ├─ state.py                # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
-├─ index.html                # 獨立網頁前端（暗黑交易儀表板，右上角「立即分析」按鈕手動觸發）
+├─ index.html                # 網頁前端：🎯當沖訊號／📚知識宇宙 兩個分頁的單一 SPA
 ├─ requirements.txt           # fastapi / uvicorn / httpx / pandas / python-dotenv
 └─ .env.example                # 環境變數範本
 ```
+
+`config.py` 另外存了 `SUPABASE_URL` / `SUPABASE_ANON_KEY`（預設值指向已部署好的
+`investment-knowledge-universe` 專案，anon key 是公開金鑰、給前端直接用沒有資安疑慮）。
+`GET /api/v1/config` 把這兩個值交給前端，「知識宇宙」分頁載入時直接用瀏覽器 `fetch()` 打
+Supabase 的 PostgREST API（`{SUPABASE_URL}/rest/v1/knowledge_nodes` 等），沒有另外寫後端
+代理端點——因為 `knowledge_nodes`／`knowledge_edges`／`missions` 這三張表在 Supabase 上本來
+就設成公開唯讀（見 `../knowledge_universe/README.md`）。
 
 > **沒有背景排程。** 舊版本會在背景每 30 秒自動重算一次、每 10 分鐘自動打一次 AI，
 > 現在改成純手動：伺服器啟動後**完全不會**呼叫任何 OKX／AI API，只有你在網頁上按下

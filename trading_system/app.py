@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from . import background
+from . import background, config
 from .state import STATE
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -67,6 +67,13 @@ def _dashboard_payload() -> dict:
         "last_error": STATE.last_error,
         "disclaimer": "僅供訊號監控參考，非投資建議；本系統不執行任何自動化下單，也不會自動在背景分析。",
     }
+
+
+@app.get("/api/v1/config")
+async def frontend_config():
+    """給前端「知識宇宙」分頁用的公開設定——anon/publishable key 本來就設計成給前端直接
+    使用，不是密鑰，這裡回傳完全沒有資安疑慮（真正的機密如 service role key 從不會出現在這）。"""
+    return {"supabase_url": config.SUPABASE_URL, "supabase_anon_key": config.SUPABASE_ANON_KEY}
 
 
 @app.get("/api/v1/health")
