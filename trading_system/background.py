@@ -1,10 +1,8 @@
-"""背景重新整理迴圈：定期重跑「OKX 篩選 → 抓 K 線 → 技術面訊號 → 融合 AI 新聞情緒」，
-結果寫進 state.STATE。前端 /api/v1/dashboard 只讀快取，不會每次請求都重打 OKX/AI API。
-
-新聞情緒呼叫頻率由 config.NEWS_REFRESH_SECONDS 獨立控制（預設 10 分鐘），跟商品/K線的
-config.REFRESH_SECONDS（預設 30 秒）分開，避免每 30 秒燒一次 AI token。
+"""分析迴圈：「OKX 篩選 → 抓 K 線 → 技術面訊號 → 融合 AI 新聞情緒」跑一輪，結果寫進
+state.STATE。刻意**不是**背景排程——沒有 while True + sleep 的自動輪詢，只有 app.py 的
+`POST /api/v1/analyze` 端點在使用者按下「立即分析」時才會呼叫 refresh_cycle() 一次。
+這樣 OKX／AI API 的用量完全由使用者手動觸發次數決定，不會有背景空轉的隱藏消耗。
 """
-import asyncio
 import logging
 import time
 
@@ -17,14 +15,12 @@ logger = logging.getLogger("background")
 
 
 async def _refresh_news(client: httpx.AsyncClient):
-    now = time.time()
-    if now - STATE.last_news_refresh_ts < config.NEWS_REFRESH_SECONDS and STATE.last_news_refresh_ts > 0:
-        return  # 還沒到重新整理的時間，沿用快取，不重打 AI API
+    """每次呼叫都是使用者主動按下按鈕的結果，所以每次都抓最新新聞、重新判斷情緒，
+    不做時間快取節流（節流的意義在自動背景輪詢；手動觸發本身就是節流）。"""
     sentiment = await news_client.get_market_sentiment(client)
     STATE.market_sentiment = sentiment["sentiment"]
     STATE.news_headline = sentiment["headline"]
     STATE.news_reason = sentiment["reason"]
-    STATE.last_news_refresh_ts = now
 
 
 async def _refresh_signals(client: httpx.AsyncClient):
@@ -72,9 +68,12 @@ async def _refresh_signals(client: httpx.AsyncClient):
 
     STATE.signals = signals
     STATE.last_update = time.strftime("%Y-%m-%d %H:%M:%S")
+    STATE.has_run = True
 
 
 async def refresh_cycle(client: httpx.AsyncClient):
+    """完整跑一輪分析：新聞情緒 → 商品篩選 → 每檔的技術訊號 → 多空共振。
+    由 app.py 在收到 POST /api/v1/analyze 時呼叫，一次請求對應一輪，不重複、不背景自動跑。"""
     try:
         await _refresh_news(client)
     except Exception as exc:  # noqa: BLE001 — 新聞失敗不影響技術面訊號照常更新
@@ -83,13 +82,6 @@ async def refresh_cycle(client: httpx.AsyncClient):
     try:
         await _refresh_signals(client)
         STATE.last_error = None
-    except Exception as exc:  # noqa: BLE001 — 整輪失敗也不能讓背景任務死掉，下一輪重試
+    except Exception as exc:  # noqa: BLE001 — 失敗要讓使用者在儀表板上看到原因，不能悶掉
         logger.warning("signal refresh cycle failed: %s", exc)
         STATE.last_error = str(exc)
-
-
-async def run_forever():
-    async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
-        while True:
-            await refresh_cycle(client)
-            await asyncio.sleep(config.REFRESH_SECONDS)

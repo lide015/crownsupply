@@ -33,8 +33,5 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-# 新聞情緒每隔這麼久才重新呼叫一次 AI（省 token、避免前端每次輪詢都燒錢）
-NEWS_REFRESH_SECONDS = int(os.getenv("NEWS_REFRESH_SECONDS", "600"))
-
-# ---- 後端背景重新整理頻率（重算 OKX 篩選 + 技術訊號） ----
-REFRESH_SECONDS = int(os.getenv("REFRESH_SECONDS", "30"))
+# 沒有背景排程、沒有自動輪詢——分析只在使用者按下「立即分析」時才觸發一輪，
+# 用量由點擊次數決定，不需要額外的節流間隔設定。

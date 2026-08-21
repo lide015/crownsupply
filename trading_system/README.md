@@ -11,17 +11,22 @@
 
 ```
 trading_system/
-├─ app.py            # FastAPI 進入點：REST API + 掛載 index.html + 啟動背景迴圈
-├─ background.py      # 背景重新整理迴圈：OKX 篩選 → K線 → 技術訊號 → 融合 AI 新聞情緒
+├─ app.py            # FastAPI 進入點：REST API（含手動觸發用的 POST /api/v1/analyze）+ 掛載 index.html
+├─ background.py      # 分析邏輯：OKX 篩選 → K線 → 技術訊號 → 融合 AI 新聞情緒，跑一輪
 ├─ okx_client.py       # OKX public REST：商品篩選（screen_active_instruments）+ K線抓取
 ├─ strategy.py          # 技術面大腦：20 EMA + 盤整盒子突破（純函式，內建自測）
 ├─ news_client.py        # AI 新聞大腦：抓 RSS 頭條 → LLM 判斷多空情緒（Anthropic/OpenAI）
 ├─ brain.py               # 多空共振：技術面 + AI 情緒融合成最終建議（純函式，內建自測）
-├─ state.py                # 行程內記憶體狀態（單一背景迴圈寫、REST 端點讀）
-├─ index.html                # 獨立網頁前端（暗黑交易儀表板，每 10 秒輪詢一次）
-├─ requirements.txt           # fastapi / uvicorn / httpx / pandas
+├─ state.py                # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
+├─ index.html                # 獨立網頁前端（暗黑交易儀表板，右上角「立即分析」按鈕手動觸發）
+├─ requirements.txt           # fastapi / uvicorn / httpx / pandas / python-dotenv
 └─ .env.example                # 環境變數範本
 ```
+
+> **沒有背景排程。** 舊版本會在背景每 30 秒自動重算一次、每 10 分鐘自動打一次 AI，
+> 現在改成純手動：伺服器啟動後**完全不會**呼叫任何 OKX／AI API，只有你在網頁上按下
+> 「🔍 立即分析」，前端才會打 `POST /api/v1/analyze`，後端才跑一輪分析。用量（尤其是
+> AI token）完全由你點擊的次數決定，不會有背景空轉的隱藏消耗。
 
 ## 啟動方式
 
@@ -42,6 +47,9 @@ uvicorn trading_system.app:app --host 127.0.0.1 --port 8000
 也可以不啟動網頁伺服器服務前端，直接雙擊 `trading_system/index.html` 用瀏覽器打開——
 後端 CORS 全開放，一樣能連上 `http://127.0.0.1:8000/api/v1/dashboard`。
 
+頁面打開後不會自動跑分析，按右上角「🔍 立即分析」才會觸發一輪 OKX 篩選＋K線＋AI 新聞情緒；
+分析中按鈕會顯示「分析中…」並鎖住，避免手滑連點打出兩輪同時進行的請求。
+
 ## 自測（不需要網路，也不需要 AI 金鑰）
 
 ```bash
@@ -60,7 +68,7 @@ python -m trading_system.news_client  # JSON 解析（LLM 回覆容錯）自測
 1. 用你的帳號登入 Anthropic Console。
 2. 左側選單「API Keys」→「Create Key」，複製產生的金鑰（只會顯示一次）。
 3. 貼進 `trading_system/.env` 的 `ANTHROPIC_API_KEY=`。
-4. 重新啟動 `uvicorn`，等下一輪背景更新（預設最多 10 分鐘，見 `NEWS_REFRESH_SECONDS`）即可看到真實的 AI 新聞判讀。
+4. 重新啟動 `uvicorn`，回到網頁按一次「立即分析」，就會看到真實的 AI 新聞判讀。
 
 也支援 OpenAI 當替代方案：把 `.env` 的 `AI_PROVIDER` 改成 `openai`，並在
 https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
@@ -76,8 +84,14 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `TOP_N` | 6 | 最終精選監控幾檔（依振幅由高到低排序） |
 | `EMA_PERIOD` / `BOX_LOOKBACK` | 20 / 15 | 20 EMA 週期、盒子回看根數 |
 | `CANDLE_BAR` | 5m | K 線週期 |
-| `REFRESH_SECONDS` | 30 | 背景重算商品篩選＋技術訊號的間隔（秒） |
-| `NEWS_REFRESH_SECONDS` | 600 | 背景重新呼叫 AI 新聞情緒的間隔（秒），避免每次前端輪詢都燒 token |
+
+## API
+
+| 端點 | 方法 | 說明 |
+|---|---|---|
+| `/api/v1/dashboard` | GET | 讀取「上一次」分析結果的快取，不觸發新分析、不打任何外部 API |
+| `/api/v1/analyze` | POST | 觸發一輪全新分析（OKX 篩選＋K線＋AI 新聞情緒），跑完回傳結果；上一輪還沒跑完時回 `409` |
+| `/api/v1/health` | GET | 存活檢查 + 上次更新時間 + 上次錯誤訊息 |
 
 ## 訊號邏輯
 
