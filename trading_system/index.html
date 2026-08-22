@@ -47,6 +47,34 @@
       </button>
     </div>
 
+    <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
+      <h2 class="text-sm font-semibold text-gray-300 mb-1">用三層資料建立交易觀察</h2>
+      <p class="text-xs text-gray-500 mb-4 leading-relaxed">先縮小範圍、再看結構是否一致、最後把觀察轉成具體的進出場決策——這是本系統各個功能區塊被設計成這樣的原因，不是零散功能的堆疊。</p>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3.5 flex gap-3">
+          <span class="text-amber-400 font-mono font-bold text-lg leading-none shrink-0">1</span>
+          <div>
+            <div class="text-gray-200 font-semibold mb-1">🔎 市場掃描</div>
+            <div class="text-gray-500 leading-relaxed">熱力圖／全部商品總覽先縮小範圍——哪些商品正在變動、成交爆量、OI 暴增。</div>
+          </div>
+        </div>
+        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3.5 flex gap-3">
+          <span class="text-amber-400 font-mono font-bold text-lg leading-none shrink-0">2</span>
+          <div>
+            <div class="text-gray-200 font-semibold mb-1">🧩 結構判斷</div>
+            <div class="text-gray-500 leading-relaxed">技術面突破 ＋ 籌碼面（OI）＋ 情緒面（AI 即時新聞）是否同向共振，決定要不要跟。</div>
+          </div>
+        </div>
+        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3.5 flex gap-3">
+          <span class="text-amber-400 font-mono font-bold text-lg leading-none shrink-0">3</span>
+          <div>
+            <div class="text-gray-200 font-semibold mb-1">🎯 風控落地</div>
+            <div class="text-gray-500 leading-relaxed">停損停利價位、扣手續費後的淨盈虧比、凱利公式建議部位——把「觀察」變成「進場／等待／避開」。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <details class="bg-gray-900 border border-gray-800 rounded-xl shadow-lg group">
       <summary class="cursor-pointer select-none px-5 py-4 flex items-center justify-between text-gray-300 font-semibold">
         <span class="flex items-center"><span class="mr-2">📚</span> 新手教學：這些數字是什麼意思？</span>
@@ -1347,6 +1375,10 @@ function renderRankingCard(item, idx) {
           ${medal ? `<span class="text-base">${medal}</span>` : ""}${item.name}
         </span>
         <span class="text-base font-mono font-bold ${overallCls}">${item.overall.toFixed(1)}</span>
+      </div>
+      <div class="flex items-center justify-between text-xs font-mono">
+        <span class="text-gray-300">${fmt(item.price)}</span>
+        ${changePctHtml(item.change_pct)}
       </div>
       ${dimsHtml}
     </div>`;
