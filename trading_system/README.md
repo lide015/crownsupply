@@ -214,6 +214,7 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/coach` | POST | AI 辯論空間一輪對話。body：`{"node": {...知識卡}, "history": [{"role","content"}, ...]}`，回傳 `{"reply", "error"}` |
 | `/api/v1/position-size` | POST | 🧮 倉位計算機，純本地計算、零外部 API 成本。body：`{"account_balance","risk_pct","entry_price","stop_loss_price","leverage_cap"?,"take_profit_1"?,"take_profit_2"?}` |
 | `/api/v1/backtest` | POST | 📊 歷史回測，**零 AI 成本**，只多打一次免費的 OKX 歷史K線查詢。body：`{"inst_id","bar"?,"limit"?}`，任何商品都可以直接跑，不用先做過技術分析；資料不夠跑一次完整 EMA+盒子週期回 `422` |
+| `/api/v1/candles/{inst_id}` | GET | 📈 K線走勢圖資料，**零 AI 成本**，只是把 OKX 免費公開的歷史K線包一層。query：`bar`?、`limit`?（不帶就用 `config.CANDLE_BAR`/`BACKTEST_CANDLE_LIMIT`）|
 
 `/api/v1/dashboard`、`/api/v1/analyze` 的回傳現在還多了 `market_pulse`（市場情緒儀表板資料）
 跟 `ranking`（推薦強度榜資料），見下一節。
@@ -349,6 +350,21 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 (THIN MARGIN)」，不會讓使用者衝進一筆扣完手續費不划算的交易。訊號卡片上也會直接顯示
 「💸 淨盈虧比（已扣來回手續費 X%）」跟「手續費吃掉停利1獲利的 Y%」兩個數字，全部透明，
 不是黑箱判斷。手續費費率（`TAKER_FEE_PCT`）可在 `.env` 依自己實際帳號等級調整。
+
+## 📈 K線走勢圖（詳情頁自動載入、定時刷新）
+
+任一商品詳情頁打開就自動畫出 K 線走勢圖（1 分鐘線，約近 3 小時），純 Canvas 繪製，
+不依賴任何外部圖表函式庫。有進行中的訊號時，會疊加「停損／停利1／停利2／進場」四條
+水平參考線——**這幾個數字一律直接讀 `signal` 物件本身**，跟畫面其他地方（技術分析
+結果、淨盈虧比）顯示的是同一組數字，不會另外算一套可能兜不起來的版本。刻意**不**畫
+「在哪根K線進場」的標記——這個 repo 目前沒有可靠對應到「當初那根K線」的紀錄，與其
+猜一個可能對不上的位置誤導使用者，不如只畫這幾個價位本身。
+
+`/api/v1/candles/{inst_id}` 端點跟 `/api/v1/backtest` 一樣，**零 AI 成本**，只是把
+OKX 免費公開的歷史 K 線包一層；走勢圖每 20 秒自動重新抓取一次（只有詳情頁開著才會
+刷新，關閉就停止，不是背景輪詢），讓使用者不用手動重整就能看到最新收盤K線。走勢圖
+用的 1 分鐘週期跟訊號分析用的 `CANDLE_BAR`（預設 5 分鐘）是兩件互不影響的獨立設定——
+一個是「畫面看起來多即時」，一個是「策略邏輯用哪個週期判斷突破」。
 
 ## 📊 歷史回測
 

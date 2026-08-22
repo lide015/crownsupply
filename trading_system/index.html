@@ -429,6 +429,14 @@
     <div id="inst-modal-loading" class="text-sm text-gray-500">載入中…</div>
 
     <div id="inst-modal-body" class="hidden space-y-5">
+      <div id="inst-modal-chart-wrap" class="hidden">
+        <div class="text-amber-400 font-semibold mb-2 text-sm">📈 K線走勢圖</div>
+        <div class="bg-gray-950 rounded-lg border border-gray-800 p-2">
+          <canvas id="inst-modal-chart-canvas" class="w-full block" style="height:200px;"></canvas>
+        </div>
+        <div id="inst-modal-chart-status" class="text-[11px] text-gray-600 mt-1 leading-relaxed"></div>
+      </div>
+
       <div>
         <div class="text-amber-400 font-semibold mb-2 text-sm">📊 基本資料</div>
         <div id="inst-modal-basic-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono bg-gray-950 p-3 rounded-lg border border-gray-800"></div>
@@ -1124,6 +1132,8 @@ async function openInstrumentModal(instId) {
   document.getElementById("inst-modal-badges").innerHTML = "";
   document.getElementById("inst-modal-price-line").innerHTML = "";
   document.getElementById("inst-modal-backtest-wrap").classList.add("hidden");
+  document.getElementById("inst-modal-chart-wrap").classList.add("hidden");
+  stopInstrumentChartPolling();
 
   try {
     const res = await fetch(`${API_BASE}/api/v1/instrument/${encodeURIComponent(instId)}`);
@@ -1243,6 +1253,17 @@ function renderInstrumentModal(data) {
   backtestBtn.disabled = false;
   backtestBtn.textContent = "📊 執行歷史回測（零 AI 成本）";
   backtestBtn.onclick = () => runBacktestFromModal(basic.instId);
+
+  // 📈 K線走勢圖：疊加線一律直接讀 signal 已經算好、畫面其他地方也在用的同一組數字
+  // （停損/停利/進場價），不會另外算一套可能兜不起來的版本——「重點資訊要正確」的
+  // 前提就是只有一份真相來源。沒有訊號方向時（signal 是 null 或 signal_type 是 null）
+  // 就只畫價格走勢，不疊加任何線，避免顯示容易被誤讀的假數字。
+  loadInstrumentChart(basic.instId, {
+    stopLoss: signal && signal.signal_type ? signal.stop_loss : null,
+    takeProfit1: signal && signal.signal_type ? signal.take_profit_1 : null,
+    takeProfit2: signal && signal.signal_type ? signal.take_profit_2 : null,
+    entryPrice: signal && signal.signal_type ? signal.price : null,
+  });
 }
 
 /* ---------------------------------------------------------------- */
@@ -1292,6 +1313,141 @@ function renderBacktestResultHtml(data) {
     <p class="text-yellow-500/70">⚠️ 歷史表現不保證未來結果，樣本數（${data.total_trades} 筆）越少參考價值越低，僅供策略評估參考，不是投資建議。</p>`;
 }
 
+/* ---------------------------------------------------------------- */
+/* 📈 K線走勢圖（詳情頁自動載入 + 定時刷新，零 AI 成本；純 Canvas 繪製，  */
+/* 不依賴任何外部圖表函式庫）                                           */
+/* ---------------------------------------------------------------- */
+const CHART_BAR = "1m";          // 走勢圖用較短週期讓畫面看起來更即時，跟訊號分析用的
+                                  // config.CANDLE_BAR 是各自獨立的兩件事，互不影響
+const CHART_CANDLE_LIMIT = 180;  // 180 根 1 分鐘線 ≈ 過去 3 小時
+const CHART_POLL_MS = 20000;     // 只抓免費公開的OKX K線，不是AI/分析成本，可以放心定時刷新；
+                                  // 只有詳情頁「開著」的時候才會刷新，關閉就停止，不是背景輪詢
+let _chartPollTimer = null;
+
+function stopInstrumentChartPolling() {
+  if (_chartPollTimer) {
+    clearInterval(_chartPollTimer);
+    _chartPollTimer = null;
+  }
+}
+
+/* candles: [{ts,o,h,l,c,vol}, ...]（升冪，OKX 已收盤K線）。
+   overlays: {stopLoss, takeProfit1, takeProfit2, entryPrice}——只畫水平參考線，不畫「在哪根
+   K線進場」的標記：這個 repo 目前沒有可靠對應到「當初那根K線」的紀錄，與其猜一個可能對不上
+   的位置，不如只畫「這幾個價位」——每一條線的數值都直接來自 signal 本身，保證跟畫面其他
+   地方顯示的數字一致，不會有第二套可能兜不起來的版本。回傳 false 代表資料不足以繪圖。*/
+function drawCandlestickChart(canvas, candles, overlays) {
+  const ctx = canvas.getContext("2d");
+  if (!candles || candles.length < 2) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return false;
+  }
+
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth || 400;
+  const cssHeight = canvas.clientHeight || 200;
+  canvas.width = cssWidth * dpr;
+  canvas.height = cssHeight * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const padRight = 56;   // 右側留給價位標籤文字
+  const volumeH = cssHeight * 0.18;
+  const priceH = cssHeight - volumeH - 2;
+  const plotW = cssWidth - padRight;
+
+  let lo = Math.min(...candles.map((c) => c.l));
+  let hi = Math.max(...candles.map((c) => c.h));
+  const overlayPrices = [overlays.stopLoss, overlays.takeProfit1, overlays.takeProfit2, overlays.entryPrice].filter((v) => v != null);
+  if (overlayPrices.length) {
+    lo = Math.min(lo, ...overlayPrices);
+    hi = Math.max(hi, ...overlayPrices);
+  }
+  const span = (hi - lo) || Math.abs(hi) * 0.02 || 1;
+  lo -= span * 0.08;
+  hi += span * 0.08;
+
+  const priceToY = (p) => priceH - ((p - lo) / (hi - lo)) * priceH;
+
+  const n = candles.length;
+  const slot = plotW / n;
+  const bodyW = Math.max(1, Math.min(slot * 0.6, 8));
+  const maxVol = Math.max(...candles.map((c) => c.vol || 0), 1e-9);
+
+  candles.forEach((c, i) => {
+    const x = slot * i + slot / 2;
+    const isUp = c.c >= c.o;
+    const color = isUp ? "#4ade80" : "#f87171";
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, priceToY(c.h));
+    ctx.lineTo(x, priceToY(c.l));
+    ctx.stroke();
+
+    const yOpen = priceToY(c.o);
+    const yClose = priceToY(c.c);
+    const top = Math.min(yOpen, yClose);
+    const barH = Math.max(1, Math.abs(yClose - yOpen));
+    ctx.fillStyle = color;
+    ctx.fillRect(x - bodyW / 2, top, bodyW, barH);
+
+    const volH = ((c.vol || 0) / maxVol) * volumeH;
+    ctx.fillStyle = isUp ? "rgba(74,222,128,0.35)" : "rgba(248,113,113,0.35)";
+    ctx.fillRect(x - bodyW / 2, cssHeight - volH, bodyW, volH);
+  });
+
+  const drawLevel = (price, color, label) => {
+    if (price == null) return;
+    const y = priceToY(price);
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(plotW, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = color;
+    ctx.font = "10px ui-monospace, monospace";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${label} ${price.toFixed(4)}`, plotW + 3, Math.min(Math.max(y, 6), priceH - 6));
+  };
+  drawLevel(overlays.stopLoss, "#f87171", "SL");
+  drawLevel(overlays.takeProfit1, "#4ade80", "TP1");
+  drawLevel(overlays.takeProfit2, "#86efac", "TP2");
+  drawLevel(overlays.entryPrice, "#fbbf24", "進場");
+
+  return true;
+}
+
+async function loadInstrumentChart(instId, overlays) {
+  stopInstrumentChartPolling();
+  const wrap = document.getElementById("inst-modal-chart-wrap");
+  const canvas = document.getElementById("inst-modal-chart-canvas");
+  const statusEl = document.getElementById("inst-modal-chart-status");
+  wrap.classList.remove("hidden");
+
+  const fetchAndDraw = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/candles/${encodeURIComponent(instId)}?bar=${CHART_BAR}&limit=${CHART_CANDLE_LIMIT}`);
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.message || "抓不到K線資料");
+      const ok = drawCandlestickChart(canvas, body.candles, overlays);
+      const last = body.candles[body.candles.length - 1];
+      statusEl.textContent = ok && last
+        ? `${body.bar} K線・最新收盤 ${fmt(last.c)}（${fmtTime(last.ts)}）・每 ${CHART_POLL_MS / 1000} 秒自動刷新`
+        : "這檔商品目前收盤K線根數不夠畫圖。";
+    } catch (err) {
+      statusEl.textContent = `K線暫時抓不到：${err.message}`;
+    }
+  };
+
+  await fetchAndDraw();
+  _chartPollTimer = setInterval(fetchAndDraw, CHART_POLL_MS);
+}
+
 async function analyzeInstrumentFromModal(instId) {
   const btn = document.getElementById("inst-modal-analyze-btn");
   btn.disabled = true;
@@ -1308,9 +1464,13 @@ async function analyzeInstrumentFromModal(instId) {
 
 document.getElementById("inst-modal-close").addEventListener("click", () => {
   document.getElementById("inst-modal").classList.add("hidden");
+  stopInstrumentChartPolling();
 });
 document.getElementById("inst-modal").addEventListener("click", (e) => {
-  if (e.target.id === "inst-modal") document.getElementById("inst-modal").classList.add("hidden");
+  if (e.target.id === "inst-modal") {
+    document.getElementById("inst-modal").classList.add("hidden");
+    stopInstrumentChartPolling();
+  }
 });
 
 /* 列表的「🔍 分析」按鈕、熱力圖的色塊點擊，都是觸發同一支後端 API，只是 loading／

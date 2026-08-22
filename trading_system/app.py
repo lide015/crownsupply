@@ -223,6 +223,22 @@ async def run_backtest_endpoint(req: BacktestRequest):
     return {"ok": True, "inst_id": req.inst_id, "bar": bar, "candle_count": len(candles), **result}
 
 
+@app.get("/api/v1/candles/{inst_id}")
+async def get_candles(inst_id: str, bar: str | None = None, limit: int | None = None):
+    """📈 K線走勢圖資料，零 AI 成本，只是把 OKX 免費公開的歷史 K 線包一層給前端畫圖用。
+    跟訊號分析用的 K 線是各自獨立的兩次呼叫——這裡的 bar/limit 由前端自訂（詳情頁圖表
+    預設用較短的週期讓畫面看起來更即時），不影響 `config.CANDLE_BAR` 那份用來算技術
+    訊號的設定，兩者互不干擾。"""
+    assert _http_client is not None
+    bar_ = bar or config.CANDLE_BAR
+    limit_ = min(limit or config.BACKTEST_CANDLE_LIMIT, config.BACKTEST_CANDLE_LIMIT)
+    try:
+        candles = await okx_client.fetch_confirmed_candles(_http_client, inst_id, bar=bar_, limit=limit_)
+    except Exception as exc:  # noqa: BLE001 — 單一商品查不到不該讓整個端點掛掉
+        return JSONResponse({"ok": False, "message": f"抓不到 {inst_id} 的K線：{exc}"}, status_code=502)
+    return {"ok": True, "inst_id": inst_id, "bar": bar_, "candles": candles}
+
+
 @app.get("/api/v1/instrument/{inst_id}")
 async def instrument_detail(inst_id: str):
     """單一商品詳情頁：基本資料 + 事件時間軸，**不呼叫 AI、零額外成本**——只是把已經有的
