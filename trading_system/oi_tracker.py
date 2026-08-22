@@ -45,6 +45,39 @@ async def fetch_open_interest(client: httpx.AsyncClient, inst_id: str) -> dict |
         return None
 
 
+def parse_oi_rows(rows: list[dict]) -> list[dict]:
+    """把 OKX open-interest API 回應的 data 陣列解析成標準格式，跳過欄位缺漏/格式錯誤的列
+    （單一商品資料異常不該讓整批解析失敗）。純函式，跟網路呼叫分開方便測試。"""
+    parsed = []
+    for row in rows:
+        try:
+            parsed.append({
+                "inst_id": row["instId"],
+                "oi": float(row["oi"]),
+                "oi_ccy": float(row["oiCcy"]),
+            })
+        except (KeyError, TypeError, ValueError):
+            continue
+    return parsed
+
+
+async def fetch_all_open_interest(client: httpx.AsyncClient, inst_type: str = "SWAP") -> list[dict]:
+    """一次抓「全部」某類型合約（預設 SWAP／永續合約）的未平倉量，不用逐檔各打一次 API——
+    只帶 instType、不帶 instId 時，OKX 這支公開端點就回傳該類型全部商品的資料，跟
+    okx_client.fetch_swap_tickers() 的 instType 用法是同一種慣例。給熱力圖的「📌 持倉」
+    模式用：現貨（SPOT）沒有未平倉量的概念，這裡固定只查 SWAP。
+
+    單次呼叫失敗（網路錯誤、OKX 回錯誤碼）時往上拋例外，讓呼叫端決定要不要整批放棄——
+    跟單檔查詢的「回 None 就略過」不同，這裡是全市場批次抓取，失敗了通常代表 OKX 那端
+    有問題，重試整批比較合理，不是自己在這裡默默吞掉。"""
+    resp = await client.get(OKX_OI_URL, params={"instType": inst_type})
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("code") != "0":
+        raise ValueError(f"OKX open-interest API error ({inst_type}): {data.get('msg')}")
+    return parse_oi_rows(data.get("data", []))
+
+
 def compute_oi_delta(current_oi: float, previous_oi: float | None) -> dict:
     """比較這次跟上次分析週期的 OI，判斷是否有「快速建倉/平倉」的跡象。
     previous_oi 是 None（第一次看到這檔商品，沒有基準值）時回傳中性結果，不瞎猜。"""
@@ -100,6 +133,25 @@ if __name__ == "__main__":
     # 5) 剛好在閾值邊界 -> 算作 surge（>=，不是 >）
     r4 = compute_oi_delta(1050.0, 1000.0)
     check("exactly +5% -> surge (boundary inclusive)", r4["is_surge"], True)
+
+    # 6) parse_oi_rows：正常解析多筆
+    raw_rows = [
+        {"instId": "BTC-USDT-SWAP", "oi": "10000", "oiCcy": "5000"},
+        {"instId": "ETH-USDT-SWAP", "oi": "20000", "oiCcy": "8000"},
+    ]
+    parsed = parse_oi_rows(raw_rows)
+    check("parse_oi_rows parses all valid rows", len(parsed), 2)
+    check("parse_oi_rows converts fields to float", parsed[0], {"inst_id": "BTC-USDT-SWAP", "oi": 10000.0, "oi_ccy": 5000.0})
+
+    # 7) parse_oi_rows：單筆欄位缺漏不該讓整批解析失敗，只跳過那一筆
+    raw_rows_bad = [
+        {"instId": "BTC-USDT-SWAP", "oi": "10000", "oiCcy": "5000"},
+        {"instId": "BROKEN-SWAP"},  # 缺 oi/oiCcy
+    ]
+    check("parse_oi_rows skips malformed rows instead of failing entirely", len(parse_oi_rows(raw_rows_bad)), 1)
+
+    # 8) parse_oi_rows：空清單 -> 空清單
+    check("parse_oi_rows on empty input", parse_oi_rows([]), [])
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

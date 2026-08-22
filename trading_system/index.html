@@ -238,6 +238,7 @@
         <div class="flex flex-wrap items-center gap-3">
           <div id="all-instruments-filters" class="flex flex-wrap gap-2"></div>
           <div id="all-instruments-product-filters" class="flex flex-wrap gap-2"></div>
+          <div id="all-instruments-watchlist-toggle" class="flex flex-wrap gap-2"></div>
         </div>
         <div class="flex flex-wrap items-center gap-3">
           <input id="all-instruments-search" type="text" placeholder="🔍 搜尋代號或名稱（例如 ETH）"
@@ -251,28 +252,35 @@
       </div>
       <p class="text-[11px] text-gray-600 leading-relaxed">
         ⚡ 合約（永續合約，可做多可做空）才會被「立即分析」自動選中做技術分析；💰 現貨（只能做多、沒有槓桿/爆倉概念）
-        只出現在這份總覽，想看技術分析一樣可以點「🔍 分析」單獨查。熱力圖用色塊深淺表示 24h 漲跌幅大小，
-        點色塊等同點「🔍 分析」，一次只針對那一檔多打一次資料。
+        只出現在這份總覽，想看技術分析一樣可以點「🔍 分析」單獨查。熱力圖可切換「價格／成交額／持倉」三種依據，
+        點色塊會打開該商品的詳情頁（不會呼叫 AI）。全部報價／成交額／持倉量都是即時從 OKX 抓的公開資料，
+        跟自動篩選/AI 新聞情緒完全獨立，瀏覽這些資料不會消耗任何 AI 用量。
       </p>
       <div id="all-instruments-wrap" class="overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[60vh]">
         <table class="w-full text-xs">
           <thead class="sticky top-0 bg-gray-900 text-gray-500">
             <tr>
+              <th class="text-center px-2 py-2 font-semibold">⭐</th>
               <th class="text-left px-3 py-2 font-semibold">代號</th>
               <th class="text-left px-3 py-2 font-semibold">分類</th>
               <th class="text-right px-3 py-2 font-semibold">價格</th>
               <th class="text-right px-3 py-2 font-semibold">24h 漲跌</th>
               <th class="text-right px-3 py-2 font-semibold">24h 振幅</th>
               <th class="text-right px-3 py-2 font-semibold">24h 成交額</th>
+              <th class="text-right px-3 py-2 font-semibold">持倉異動</th>
               <th class="text-center px-3 py-2 font-semibold">操作</th>
             </tr>
           </thead>
           <tbody id="all-instruments-tbody">
-            <tr><td colspan="7" class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</td></tr>
+            <tr><td colspan="9" class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</td></tr>
           </tbody>
         </table>
       </div>
       <div id="all-instruments-heatmap-wrap" class="hidden overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[60vh] p-3">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-[11px] text-gray-500 mr-1">熱力圖依據：</span>
+          <div id="heatmap-mode-toggle" class="flex items-center gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1"></div>
+        </div>
         <div id="all-instruments-heatmap" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2"></div>
       </div>
     </section>
@@ -683,6 +691,7 @@ function renderSignalsList() {
       <div class="flex justify-between items-start gap-2">
         <span class="flex flex-col gap-1.5">
           <span class="flex items-center gap-2 flex-wrap">
+            ${starButtonHtml(sig.instId, "text-base")}
             <span class="sig-name-link text-lg font-bold tracking-wide text-white cursor-pointer hover:text-amber-400 hover:underline" title="點一下看這檔的詳情頁">${sig.name}</span>
             <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400 whitespace-nowrap">
               ${sig.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
@@ -719,6 +728,7 @@ function renderSignalsList() {
       card.querySelector(".calc-fill-btn").addEventListener("click", () => fillCalcFromSignal(sig));
     }
     card.querySelector(".sig-name-link").addEventListener("click", () => openInstrumentModal(sig.instId));
+    card.querySelector(".watchlist-star-btn").addEventListener("click", () => toggleWatchlist(sig.instId));
     container.appendChild(card);
   }
 }
@@ -726,7 +736,49 @@ function renderSignalsList() {
 /* ---------------------------------------------------------------- */
 /* 全部商品總覽（不套門檻，OKX 這輪抓到的全部合約）                          */
 /* ---------------------------------------------------------------- */
-const allInstrumentsFilter = { assetClass: "all", productType: "all", search: "" };
+const allInstrumentsFilter = { assetClass: "all", productType: "all", search: "", watchlistOnly: false };
+
+/* ---------------------------------------------------------------- */
+/* ⭐ 觀察清單——純瀏覽器端功能（localStorage），沒有使用者登入系統可以存到雲端，
+   只存在「這一台裝置的這個瀏覽器」。私密瀏覽模式或儲存空間被封鎖時安靜失敗，
+   不會讓其他功能掛掉，只是這個瀏覽器記不住你選過誰。 */
+const WATCHLIST_STORAGE_KEY = "trading_system_watchlist";
+
+function getWatchlist() {
+  try {
+    const raw = localStorage.getItem(WATCHLIST_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function isWatchlisted(instId) {
+  return getWatchlist().includes(instId);
+}
+
+function toggleWatchlist(instId) {
+  try {
+    const list = getWatchlist();
+    const idx = list.indexOf(instId);
+    if (idx >= 0) list.splice(idx, 1);
+    else list.push(instId);
+    localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(list));
+  } catch (err) {
+    // 存不進去就算了（私密瀏覽/儲存空間被封鎖），不要讓點擊本身噴錯誤擋住其他功能。
+  }
+  renderAllInstrumentsFilters();
+  renderAllInstrumentsList();
+  renderAllInstrumentsHeatmap();
+  renderSignalsList();
+}
+
+function starButtonHtml(instId, extraCls = "") {
+  const starred = isWatchlisted(instId);
+  return `<button type="button" class="watchlist-star-btn ${extraCls} ${starred ? "text-amber-400" : "text-gray-600 hover:text-gray-400"}"
+    title="${starred ? "從觀察清單移除" : "加進觀察清單"}" data-inst-id="${instId}">${starred ? "★" : "☆"}</button>`;
+}
 
 function renderAllInstrumentsFilters() {
   const wrap = document.getElementById("all-instruments-filters");
@@ -776,6 +828,24 @@ function renderAllInstrumentsFilters() {
     });
     productWrap.appendChild(btn);
   }
+
+  const watchlistWrap = document.getElementById("all-instruments-watchlist-toggle");
+  watchlistWrap.innerHTML = "";
+  const watchlistBtn = document.createElement("button");
+  const watchlistCount = getWatchlist().length;
+  watchlistBtn.textContent = `⭐ 只看觀察清單${watchlistCount ? `（${watchlistCount}）` : ""}`;
+  watchlistBtn.className =
+    "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors " +
+    (allInstrumentsFilter.watchlistOnly
+      ? "bg-amber-500 border-amber-400 text-gray-950"
+      : "border-gray-700 text-gray-400 hover:text-gray-200");
+  watchlistBtn.addEventListener("click", () => {
+    allInstrumentsFilter.watchlistOnly = !allInstrumentsFilter.watchlistOnly;
+    renderAllInstrumentsFilters();
+    renderAllInstrumentsList();
+    renderAllInstrumentsHeatmap();
+  });
+  watchlistWrap.appendChild(watchlistBtn);
 }
 
 function renderAllInstrumentsList() {
@@ -784,7 +854,7 @@ function renderAllInstrumentsList() {
   tbody.innerHTML = "";
 
   if (!data || !data.has_run) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</td></tr>`;
     return;
   }
 
@@ -793,12 +863,15 @@ function renderAllInstrumentsList() {
   const filtered = all.filter((inst) => {
     if (allInstrumentsFilter.assetClass !== "all" && inst.asset_class !== allInstrumentsFilter.assetClass) return false;
     if (allInstrumentsFilter.productType !== "all" && inst.product_type !== allInstrumentsFilter.productType) return false;
+    if (allInstrumentsFilter.watchlistOnly && !isWatchlisted(inst.instId)) return false;
     if (q && !inst.name.toUpperCase().includes(q) && !inst.instId.toUpperCase().includes(q)) return false;
     return true;
   });
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500 py-6">沒有符合篩選/搜尋條件的商品。</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-gray-500 py-6">${
+      allInstrumentsFilter.watchlistOnly ? "觀察清單目前是空的——點任一商品的 ☆ 加進來。" : "沒有符合篩選/搜尋條件的商品。"
+    }</td></tr>`;
     return;
   }
 
@@ -811,6 +884,7 @@ function renderAllInstrumentsList() {
     tr.className = "border-t border-gray-800 hover:bg-gray-900/50";
     const isAnalyzed = analyzedIds.has(inst.instId);
     tr.innerHTML = `
+      <td class="px-2 py-2 text-center">${starButtonHtml(inst.instId, "text-sm")}</td>
       <td class="inst-name-cell px-3 py-2 text-white font-semibold whitespace-nowrap cursor-pointer hover:text-amber-400 hover:underline" title="點一下看這檔的詳情頁">${inst.name}</td>
       <td class="px-3 py-2 whitespace-nowrap space-x-1">
         <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400">
@@ -826,6 +900,9 @@ function renderAllInstrumentsList() {
       <td class="px-3 py-2 text-right font-mono">${changePctHtml(inst.change_pct)}</td>
       <td class="px-3 py-2 text-right font-mono text-gray-300">${fmt(inst.amplitude_pct, 2)}%</td>
       <td class="px-3 py-2 text-right font-mono text-gray-500">${fmt(inst.vol_usdt, 0)}</td>
+      <td class="px-3 py-2 text-right font-mono">${
+        inst.product_type === "spot" ? `<span class="text-gray-700">—</span>` : changePctHtml(inst.oi_change_pct)
+      }</td>
       <td class="px-3 py-2 text-center">
         <button class="analyze-inst-btn px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors ${
           isAnalyzed
@@ -835,19 +912,58 @@ function renderAllInstrumentsList() {
       </td>`;
     tr.querySelector(".analyze-inst-btn").addEventListener("click", (e) => analyzeInstrumentOnDemand(inst.instId, e.target));
     tr.querySelector(".inst-name-cell").addEventListener("click", () => openInstrumentModal(inst.instId));
+    tr.querySelector(".watchlist-star-btn").addEventListener("click", () => toggleWatchlist(inst.instId));
     tbody.appendChild(tr);
   }
 }
 
-/* 熱力圖色塊背景色：綠漲紅跌，色塊深淺代表漲跌幅大小（±10% 封頂，超過一樣是最深，
-   避免極端值把其他色塊都比成同一種淡色）。沒有 change_pct 資料就用中性灰。 */
+/* 熱力圖色塊背景色：綠漲紅跌，色塊深淺代表幅度大小（±10% 封頂，超過一樣是最深，
+   避免極端值把其他色塊都比成同一種淡色）。沒有資料就用中性灰。給「價格」跟「持倉」
+   兩種模式共用——兩者都是有正負號的百分比變化，同一套配色邏輯。 */
 function heatColor(pct) {
   if (pct == null) return "background-color:#1f2937"; // gray-800，中性
   const clamped = Math.max(-10, Math.min(10, pct));
-  const t = Math.abs(clamped) / 10; // 0~1，漲跌幅越大顏色越深
+  const t = Math.abs(clamped) / 10; // 0~1，變化幅度越大顏色越深
   const alpha = (0.18 + t * 0.55).toFixed(2);
   return clamped >= 0 ? `background-color:rgba(34,197,94,${alpha})` : `background-color:rgba(239,68,68,${alpha})`;
 }
+
+/* 「成交額」模式沒有天然的正負號（量只有大小，沒有漲跌方向），改用單一色相（藍紫色）
+   依相對大小決定深淺——相對於「目前篩選出來這批商品裡的最大成交額」正規化，不是全市場
+   固定量級，這樣不管你篩的是加密貨幣還是股票、看的是合約還是現貨，色塊深淺永遠是「這批
+   裡面誰的量能相對突出」，才有意義。 */
+function heatColorVolume(volUsdt, maxVol) {
+  if (volUsdt == null || !maxVol || maxVol <= 0) return "background-color:#1f2937";
+  const t = Math.max(0, Math.min(1, volUsdt / maxVol));
+  const alpha = (0.18 + t * 0.55).toFixed(2);
+  return `background-color:rgba(99,102,241,${alpha})`; // indigo，跟價格/持倉的綠紅區隔開來
+}
+
+const HEATMAP_MODES = [
+  { key: "price", label: "💰 價格" },
+  { key: "volume", label: "📊 成交額" },
+  { key: "oi", label: "📌 持倉" },
+];
+let heatmapMode = "price";
+
+function renderHeatmapModeToggle() {
+  const wrap = document.getElementById("heatmap-mode-toggle");
+  wrap.innerHTML = "";
+  for (const m of HEATMAP_MODES) {
+    const btn = document.createElement("button");
+    btn.textContent = m.label;
+    btn.className =
+      "px-2.5 py-1 rounded text-[11px] font-semibold transition-colors " +
+      (m.key === heatmapMode ? "bg-amber-500 text-gray-950" : "text-gray-400 hover:text-gray-200");
+    btn.addEventListener("click", () => {
+      heatmapMode = m.key;
+      renderHeatmapModeToggle();
+      renderAllInstrumentsHeatmap();
+    });
+    wrap.appendChild(btn);
+  }
+}
+renderHeatmapModeToggle();
 
 function renderAllInstrumentsHeatmap() {
   const grid = document.getElementById("all-instruments-heatmap");
@@ -864,17 +980,28 @@ function renderAllInstrumentsHeatmap() {
   const filtered = all.filter((inst) => {
     if (allInstrumentsFilter.assetClass !== "all" && inst.asset_class !== allInstrumentsFilter.assetClass) return false;
     if (allInstrumentsFilter.productType !== "all" && inst.product_type !== allInstrumentsFilter.productType) return false;
+    if (allInstrumentsFilter.watchlistOnly && !isWatchlisted(inst.instId)) return false;
     if (q && !inst.name.toUpperCase().includes(q) && !inst.instId.toUpperCase().includes(q)) return false;
     return true;
   });
 
   if (filtered.length === 0) {
-    grid.innerHTML = `<div class="col-span-full text-center text-gray-500 py-6">沒有符合篩選/搜尋條件的商品。</div>`;
+    grid.innerHTML = `<div class="col-span-full text-center text-gray-500 py-6">${
+      allInstrumentsFilter.watchlistOnly ? "觀察清單目前是空的——點任一商品的 ☆ 加進來。" : "沒有符合篩選/搜尋條件的商品。"
+    }</div>`;
     return;
   }
 
   const analyzedIds = new Set((data.signals || []).map((s) => s.instId));
-  filtered.sort((a, b) => b.amplitude_pct - a.amplitude_pct);
+  const maxVol = Math.max(...filtered.map((i) => i.vol_usdt || 0));
+
+  if (heatmapMode === "volume") {
+    filtered.sort((a, b) => (b.vol_usdt || 0) - (a.vol_usdt || 0));
+  } else if (heatmapMode === "oi") {
+    filtered.sort((a, b) => Math.abs(b.oi_change_pct ?? -1) - Math.abs(a.oi_change_pct ?? -1));
+  } else {
+    filtered.sort((a, b) => b.amplitude_pct - a.amplitude_pct);
+  }
 
   for (const inst of filtered) {
     const tile = document.createElement("div");
@@ -882,16 +1009,37 @@ function renderAllInstrumentsHeatmap() {
     tile.className =
       "rounded-lg p-2.5 flex flex-col justify-between gap-1 border border-white/5 cursor-pointer " +
       "hover:border-amber-500/70 transition-colors";
-    tile.style = heatColor(inst.change_pct);
+
+    let metricHtml;
+    if (heatmapMode === "volume") {
+      tile.style = heatColorVolume(inst.vol_usdt, maxVol);
+      metricHtml = `<span class="text-gray-100">${fmt(inst.vol_usdt, 0)}</span>`;
+    } else if (heatmapMode === "oi") {
+      tile.style = heatColor(inst.oi_change_pct);
+      metricHtml = inst.product_type === "spot"
+        ? `<span class="text-gray-600">現貨無持倉</span>`
+        : changePctHtml(inst.oi_change_pct);
+    } else {
+      tile.style = heatColor(inst.change_pct);
+      metricHtml = changePctHtml(inst.change_pct);
+    }
+
     tile.title = "點一下看這檔的詳情頁（基本資料＋事件時間軸，不會呼叫 AI）";
     tile.innerHTML = `
       <div class="flex items-center justify-between gap-1">
         <span class="text-xs font-bold text-white truncate">${inst.name}</span>
-        ${isAnalyzed ? `<span class="text-[10px] text-green-300 shrink-0">✅</span>` : ""}
+        <span class="flex items-center gap-1 shrink-0">
+          ${isAnalyzed ? `<span class="text-[10px] text-green-300">✅</span>` : ""}
+          ${starButtonHtml(inst.instId, "heatmap-star-btn text-xs leading-none")}
+        </span>
       </div>
       <span class="text-[11px] font-mono text-gray-100">${fmt(inst.price)}</span>
-      <span class="text-xs font-bold">${changePctHtml(inst.change_pct)}</span>`;
+      <span class="text-xs font-bold">${metricHtml}</span>`;
     tile.addEventListener("click", () => openInstrumentModal(inst.instId));
+    tile.querySelector(".watchlist-star-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleWatchlist(inst.instId);
+    });
     grid.appendChild(tile);
   }
 }

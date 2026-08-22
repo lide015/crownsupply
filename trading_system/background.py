@@ -201,7 +201,10 @@ async def _refresh_signals(client: httpx.AsyncClient):
     last_tune_sample_count = db.get_param("MIN_AMPLITUDE_PCT__sample_count", 0)
 
     win_rate_stats = outcome_tracker.compute_win_rate(db.get_all_resolved_for_stats())
-    tuning = strategy_tuner.maybe_auto_tune(win_rate_stats, effective_min_amplitude, int(last_tune_sample_count))
+    tuning = strategy_tuner.maybe_auto_tune(
+        win_rate_stats, effective_min_amplitude, int(last_tune_sample_count),
+        floor_amplitude_pct=config.MIN_AMPLITUDE_PCT,
+    )
     if tuning:
         db.set_param(tuning["param"], tuning["new_value"], now_ms, tuning["reason"])
         db.set_param("MIN_AMPLITUDE_PCT__sample_count", win_rate_stats["total"], now_ms, None)
@@ -236,6 +239,31 @@ async def _refresh_signals(client: httpx.AsyncClient):
         all_instruments += okx_client.parse_instruments(spot_tickers, product_type="spot")
     except Exception as exc:  # noqa: BLE001 — 現貨清單只是附加瀏覽功能，失敗不影響主要分析
         logger.warning("spot ticker fetch failed: %s", exc)
+
+    # 📌 全市場未平倉量（OI）——只有合約（SWAP）才有這個概念，現貨沒有。給熱力圖「持倉」
+    # 模式跟「全部商品總覽」用，OKX 公開端點一次拿全部（不用逐檔查），零 AI 成本。
+    # 先把「上一輪」的快照讀出來存好（previous_oi_map），再抓這一輪的最新值——下面才不會
+    # 因為監控清單那幾檔稍後各自又跑一次 _fetch_oi_delta（寫入新快照）而污染了這裡要用的
+    # 「上一輪基準值」。實際把這一輪的值寫回資料庫，要等到這個函式最後面才做。
+    previous_oi_map = db.get_all_previous_oi()
+    oi_rows: list[dict] = []
+    try:
+        oi_rows = await oi_tracker.fetch_all_open_interest(client, "SWAP")
+        oi_by_inst = {
+            row["inst_id"]: oi_tracker.compute_oi_delta(row["oi_ccy"], previous_oi_map.get(row["inst_id"]))
+            for row in oi_rows
+        }
+        oi_ccy_by_inst = {row["inst_id"]: row["oi_ccy"] for row in oi_rows}
+        for item in all_instruments:
+            if item["product_type"] != "swap":
+                continue
+            delta = oi_by_inst.get(item["instId"])
+            if delta is None:
+                continue
+            item["oi_ccy"] = oi_ccy_by_inst[item["instId"]]
+            item["oi_change_pct"] = delta["oi_change_pct"]
+    except Exception as exc:  # noqa: BLE001 — 全市場 OI 是附加資料，抓不到不該擋住報價/訊號主線
+        logger.warning("bulk OI fetch failed: %s", exc)
 
     STATE.all_instruments = all_instruments
     monitored = okx_client.screen_active_instruments(
@@ -298,6 +326,12 @@ async def _refresh_signals(client: httpx.AsyncClient):
         for s in signals if s.get("signal_type") in ("long", "short")
     ]
     STATE.ranking = ranking.rank_signals(scored, top_n=config.RANKING_TOP_N)
+
+    # 現在監控清單那幾檔的 _fetch_oi_delta 都跑完了（各自已經用「真正的上一輪基準值」算出
+    # 正確的變化幅度），才把這一輪全市場的 OI 寫回資料庫當下次的基準——如果提早寫，前面
+    # 監控清單的 db.get_previous_oi() 會讀到「這一輪」剛寫的值，變化幅度永遠算成 0%。
+    if oi_rows:
+        db.set_oi_snapshots_bulk(oi_rows, now_ms)
 
 
 async def refresh_cycle(client: httpx.AsyncClient):

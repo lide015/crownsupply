@@ -232,6 +232,36 @@ def set_oi_snapshot(inst_id: str, oi: float, oi_ccy: float, updated_at: int):
         conn.close()
 
 
+def get_all_previous_oi() -> dict[str, float]:
+    """跟 get_previous_oi 同樣的用途，但一次撈出「全部」商品的上一輪 OI 快照，給熱力圖
+    的「📌 持倉」模式用——現在要同時比較全部合約（可能兩三百檔）的 OI 變化，逐檔各開一次
+    連線太浪費，一次查詢、一個連線就夠。回傳 {inst_id: oi_ccy}。"""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT inst_id, oi_ccy FROM oi_snapshot").fetchall()
+        return {r["inst_id"]: float(r["oi_ccy"]) for r in rows}
+    finally:
+        conn.close()
+
+
+def set_oi_snapshots_bulk(rows: list[dict], updated_at: int):
+    """set_oi_snapshot 的批次版本：rows 是 [{"inst_id", "oi", "oi_ccy"}, ...]，全部商品
+    共用同一個連線、同一次 commit，避免全市場規模（兩三百檔）逐一開關連線的開銷。"""
+    if not rows:
+        return
+    conn = get_connection()
+    try:
+        conn.executemany(
+            "INSERT INTO oi_snapshot (inst_id, oi, oi_ccy, updated_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(inst_id) DO UPDATE SET oi = excluded.oi, oi_ccy = excluded.oi_ccy, "
+            "updated_at = excluded.updated_at",
+            [(r["inst_id"], r["oi"], r["oi_ccy"], updated_at) for r in rows],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     import tempfile
 
@@ -312,6 +342,24 @@ if __name__ == "__main__":
         check("get_resolved_trades_for_kelly returns only resolved signals", len(kelly_rows), 2)
         check("get_resolved_trades_for_kelly rows carry the fields Kelly math needs",
               set(kelly_rows[0].keys()), {"entry_price", "stop_loss", "resolution", "resolution_price"})
+
+        # get_all_previous_oi / set_oi_snapshots_bulk：熱力圖「持倉」模式的全市場批次版本
+        check("get_all_previous_oi empty before any snapshot", get_all_previous_oi(), {})
+        set_oi_snapshots_bulk([
+            {"inst_id": "BTC-USDT-SWAP", "oi": 1000.0, "oi_ccy": 500.0},
+            {"inst_id": "ETH-USDT-SWAP", "oi": 2000.0, "oi_ccy": 800.0},
+        ], updated_at=5000)
+        all_oi = get_all_previous_oi()
+        check("set_oi_snapshots_bulk writes both rows", all_oi, {"BTC-USDT-SWAP": 500.0, "ETH-USDT-SWAP": 800.0})
+
+        # 再跑一次、換一組數值 -> 驗證是 UPSERT（覆蓋掉舊值），不是無限累積重複列
+        set_oi_snapshots_bulk([{"inst_id": "BTC-USDT-SWAP", "oi": 1100.0, "oi_ccy": 550.0}], updated_at=6000)
+        check("set_oi_snapshots_bulk upserts existing inst_id", get_all_previous_oi()["BTC-USDT-SWAP"], 550.0)
+        check("set_oi_snapshots_bulk does not touch other inst_ids", get_all_previous_oi()["ETH-USDT-SWAP"], 800.0)
+
+        # 空清單不該炸掉，也不該建立任何連線副作用
+        set_oi_snapshots_bulk([], updated_at=7000)
+        check("set_oi_snapshots_bulk with empty list is a no-op", len(get_all_previous_oi()), 2)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:
