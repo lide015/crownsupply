@@ -22,7 +22,10 @@ state.STATE。刻意**不是**背景排程——沒有 while True + sleep 的自
    outcome_tracker.compute_daily_circuit_breaker），觸及的話這一輪所有新訊號都會被
    brain.fuse() 攔截成「今日已達虧損上限」，不管技術面/新聞面/淨盈虧比再好看都一樣。
 10. 真正「新產生」的強烈多空共振訊號（STRONG LONG/SHORT），如果有設定 Telegram
-    Bot（見 telegram_notify.py），會主動推播一則通知——沒設定就優雅跳過。
+    Bot（見 telegram_notify.py）或 SMTP（見 email_notify.py），會各自主動推播一則
+    通知——兩個管道互相獨立，沒設定就優雅跳過，不影響另一個。
+11. 每一輪也順便算「持倉組合風險總覽」（見 outcome_tracker.compute_portfolio_exposure）：
+    現在同時開著幾筆未結算訊號、有沒有同方向集中度警訊。
 
 新聞情緒判讀刻意放在「OKX 篩選出這輪實際監控哪些商品」**之後**才做（不是開頭第一步）：
 要先知道這輪到底在看哪幾檔商品，才能各自搜尋「這檔」的專屬新聞，而不是每一檔訊號都套用
@@ -34,7 +37,7 @@ import time
 
 import httpx
 
-from . import brain, config, db, fee_calc, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, position_sizing, ranking, strategy, strategy_tuner, telegram_notify
+from . import brain, config, db, email_notify, fee_calc, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, position_sizing, ranking, strategy, strategy_tuner, telegram_notify
 from .state import STATE
 
 BTC_INST_ID = "BTC-USDT-SWAP"  # 山寨季代理指標的比較基準（見 market_pulse.py 說明）
@@ -244,12 +247,17 @@ async def analyze_one_instrument(
 
     # 📨 訊號觸發通知：只在「真正新產生」且是多空共振強烈訊號（STRONG LONG/SHORT，也就是
     # 沒有被手續費/高週期趨勢/每日斷路器攔截成警告）時才通知，避免雜訊/警告訊號也跳通知
-    # 太擾人。telegram_notify 內部已經吞掉所有失敗情況，這裡再包一層純粹是雙重保險。
+    # 太擾人。Telegram／Email 各自獨立、都是選用管道，兩邊內部都已經吞掉所有失敗情況，
+    # 這裡再包一層純粹是雙重保險；沒設定的管道 is_configured() 一律優雅回傳 False。
     if is_new_signal and fused.get("color") in (brain.COLOR_GREEN, brain.COLOR_RED):
         try:
             await telegram_notify.send_signal_notification(client, signal)
         except Exception as exc:  # noqa: BLE001 — 通知失敗不該讓分析流程掛掉
             logger.warning("telegram notification failed for %s: %s", inst_id, exc)
+        try:
+            await email_notify.send_signal_notification(signal)
+        except Exception as exc:  # noqa: BLE001 — 通知失敗不該讓分析流程掛掉
+            logger.warning("email notification failed for %s: %s", inst_id, exc)
 
     return signal, candles
 
@@ -278,7 +286,13 @@ async def _refresh_signals(client: httpx.AsyncClient):
     STATE.effective_min_amplitude_pct = effective_min_amplitude
     # 訊號歷史純讀 DB、跟 OKX 網路呼叫無關，先設好——就算接下來的 OKX 篩選失敗，
     # 使用者還是看得到歷史成效，不會因為這次分析失敗就連歷史紀錄都不見了。
-    STATE.recent_resolved = db.get_recent_resolved(20)
+    recent_resolved = db.get_recent_resolved(20)
+    # 📚 每一筆停損訊號附上失效原因反推出的分類代碼，讓前端可以推薦對應的知識宇宙卡片
+    # （見 outcome_tracker.categorize_failure_reason 說明）——純從已經存好的 failure_reason
+    # 文字推導，不需要額外的資料庫欄位或 AI 呼叫。
+    for row in recent_resolved:
+        row["failure_categories"] = outcome_tracker.categorize_failure_reason(row.get("failure_reason"))
+    STATE.recent_resolved = recent_resolved
 
     # 🛑 每日虧損斷路器：今天已結算的訊號有沒有觸及虧損上限（見
     # outcome_tracker.compute_daily_circuit_breaker 說明）。純讀 DB + 純函式計算，
@@ -287,6 +301,11 @@ async def _refresh_signals(client: httpx.AsyncClient):
         db.get_resolved_today(now_ms), config.MAX_DAILY_LOSS_COUNT, config.MAX_DAILY_LOSS_R
     )
     STATE.circuit_breaker = circuit_breaker
+
+    # 📦 持倉組合風險總覽：現在同時開著幾筆未結算訊號（見
+    # outcome_tracker.compute_portfolio_exposure 說明）——每日斷路器看的是「今天已發生」，
+    # 這個看的是「現在正在承受」，純讀 DB + 純函式計算，零額外成本。
+    STATE.portfolio_exposure = outcome_tracker.compute_portfolio_exposure(db.get_open_signals())
 
     # 🧮 倉位計算機的凱利公式建議：用「本系統自己歷史上真的中停利/停損過幾次」算出來的
     # 勝率＋平均獲利倍數，不是憑空給一個數字。零額外 AI/API 成本，純讀 DB + 純函式計算。

@@ -37,6 +37,9 @@ class SystemState:
         # 每日虧損斷路器（見 outcome_tracker.compute_daily_circuit_breaker）：今天已結算
         # 訊號有沒有觸及虧損上限，前端用這個顯示「今日戰績」跟斷路器是否啟動。
         self.circuit_breaker: dict = {"active": False, "reason": None, "loss_count": 0, "total_r": 0.0}
+        # 持倉組合風險總覽（見 outcome_tracker.compute_portfolio_exposure）：現在同時開著
+        # 幾筆未結算訊號、有沒有同方向集中度警訊。
+        self.portfolio_exposure: dict = {"total_open": 0, "long_count": 0, "short_count": 0, "concentration_warning": None}
 
 
 STATE = SystemState()

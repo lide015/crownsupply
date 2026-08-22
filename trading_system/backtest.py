@@ -98,7 +98,36 @@ def run_backtest(
 
         i += 1
 
-    return _summarize(trades)
+    result = _summarize(trades)
+    result["buy_hold_pct"] = _compute_buy_hold_pct(candles)
+    return result
+
+
+def _compute_buy_hold_pct(candles: list[dict]) -> float | None:
+    """同一段回測期間，如果單純買進持有到底（不做任何交易），價格報酬率是多少——純粹
+    給使用者一個對照組參考：如果策略的表現還不如單純抱著不動，那這套規則的價值就存疑。
+
+    ⚠️ 這個百分比是「價格報酬率」，跟策略的「R 倍數」是不同單位（R 是用風險距離正規化過
+    的相對倍數，買入持有的%是價格本身漲跌幅），**不能直接比大小**，只能看方向跟大致
+    幅度是否合理——這件事前端顯示時要講清楚，不要讓使用者誤以為「策略賺 2R > 買入持有
+    賺 10%」這種跨單位的比較有意義。
+
+    candles 少於 2 根（理論上不會發生，run_backtest 呼叫前已經檢查過 min_len）回傳 None。"""
+    if len(candles) < 2 or candles[0]["c"] <= 0:
+        return None
+    return round((candles[-1]["c"] - candles[0]["c"]) / candles[0]["c"] * 100.0, 2)
+
+
+def _compute_equity_curve(trades: list[dict]) -> list[float]:
+    """把每筆交易的 r_multiple 依時間序累加成「權益曲線」（以 R 為單位，不是實際金額——
+    實際部位大小因人而異，見 position_sizing.py 的凱利公式試算）。第 0 個點固定是 0
+    （回測起點、尚未有任何交易時的曲線起點），方便前端畫圖時有一個明確的起始點。"""
+    curve = [0.0]
+    running = 0.0
+    for t in trades:
+        running += t["r_multiple"]
+        curve.append(round(running, 3))
+    return curve
 
 
 def _summarize(trades: list[dict]) -> dict:
@@ -136,6 +165,7 @@ def _summarize(trades: list[dict]) -> dict:
         "avg_r_multiple": avg_r_multiple,
         "max_consecutive_losses": max_consecutive_losses,
         "profit_factor": profit_factor,
+        "equity_curve": _compute_equity_curve(trades),
         "trades": trades,
     }
 
@@ -170,6 +200,8 @@ if __name__ == "__main__":
     check("winning trade r_multiple ~2.0", result_win["trades"][0]["r_multiple"], 2.0)
     check("win_rate_pct is 100.0", result_win["win_rate_pct"], 100.0)
     check("no losses -> profit_factor None (undefined ratio)", result_win["profit_factor"], None)
+    check("equity_curve starts at 0 then adds the +2.0R win", result_win["equity_curve"], [0.0, 2.0])
+    check("buy_hold_pct is (115-100)/100=15.0%", result_win["buy_hold_pct"], 15.0)
 
     # 3) 對稱情境：突破後立刻反轉觸及停損 -> 1 筆 hit_sl 交易，r_multiple = -1.0
     breakout_loss = flat + [
@@ -182,6 +214,8 @@ if __name__ == "__main__":
     check("losing trade r_multiple is -1.0", result_loss["trades"][0]["r_multiple"], -1.0)
     check("win_rate_pct is 0.0", result_loss["win_rate_pct"], 0.0)
     check("max_consecutive_losses is 1", result_loss["max_consecutive_losses"], 1)
+    check("equity_curve starts at 0 then adds the -1.0R loss", result_loss["equity_curve"], [0.0, -1.0])
+    check("buy_hold_pct is (96-100)/100=-4.0%", result_loss["buy_hold_pct"], -4.0)
 
     # 4) 訊號觸發但資料在結果出來之前就用完 -> 不計入統計（維持 open，不誤判輸贏）
     breakout_unresolved = flat + [
@@ -214,6 +248,7 @@ if __name__ == "__main__":
     check("mixed scenario -> avg_r_multiple is (-1.0+2.0)/2=0.5", result_mixed["avg_r_multiple"], 0.5)
     check("mixed scenario -> profit_factor is 2.0/1.0=2.0", result_mixed["profit_factor"], 2.0)
     check("mixed scenario -> max_consecutive_losses is 1", result_mixed["max_consecutive_losses"], 1)
+    check("mixed scenario -> equity_curve is [0, -1.0, 1.0] (loss then win)", result_mixed["equity_curve"], [0.0, -1.0, 1.0])
 
     # 7) volume_confirm_multiple 有正確傳進 strategy.compute_signal：量能不足的突破
     # 在回測重播時也應該被過濾掉，跟線上即時分析用同一套判斷邏輯

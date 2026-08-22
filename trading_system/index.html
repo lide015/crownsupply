@@ -161,6 +161,17 @@
       📋 今日戰績：<span id="circuit-breaker-tally"></span>
     </div>
 
+    <div id="portfolio-exposure-wrap" class="hidden bg-gray-900 border border-gray-800 rounded-xl px-5 py-4 space-y-2">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h2 class="text-sm font-semibold text-gray-300 flex items-center">
+          <span class="mr-2">📦</span> 持倉組合風險總覽
+        </h2>
+        <span class="text-xs text-gray-500">同時開著 <span id="portfolio-total-open" class="text-white font-mono font-bold"></span> 筆
+          （<span id="portfolio-long-count" class="text-green-400 font-mono"></span> 多／<span id="portfolio-short-count" class="text-red-400 font-mono"></span> 空）</span>
+      </div>
+      <div id="portfolio-concentration-warning" class="hidden text-xs text-yellow-300 bg-yellow-950/30 border border-yellow-800/50 rounded-lg px-3 py-2"></div>
+    </div>
+
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg space-y-3">
       <div class="flex items-center justify-between">
         <h2 class="text-base font-semibold text-gray-200 flex items-center border-l-2 border-amber-500/70 pl-3">
@@ -646,6 +657,28 @@ function renderCircuitBreakerBanner(cb) {
   }
 }
 
+/* 📦 持倉組合風險總覽——現在同時開著幾筆未結算訊號，跟每日虧損斷路器（看「今天已發生」）
+   是互補的兩個時間視角，這個看「現在正在承受」。集中度警訊刻意講清楚不是嚴謹的統計
+   相關係數，只是同方向曝險的方向性提醒（見 outcome_tracker.compute_portfolio_exposure）。*/
+function renderPortfolioExposure(exposure) {
+  const wrap = document.getElementById("portfolio-exposure-wrap");
+  if (!exposure || exposure.total_open === 0) {
+    wrap.classList.add("hidden");
+    return;
+  }
+  wrap.classList.remove("hidden");
+  document.getElementById("portfolio-total-open").textContent = exposure.total_open;
+  document.getElementById("portfolio-long-count").textContent = exposure.long_count;
+  document.getElementById("portfolio-short-count").textContent = exposure.short_count;
+  const warnEl = document.getElementById("portfolio-concentration-warning");
+  if (exposure.concentration_warning) {
+    warnEl.textContent = `⚠️ ${exposure.concentration_warning}`;
+    warnEl.classList.remove("hidden");
+  } else {
+    warnEl.classList.add("hidden");
+  }
+}
+
 function renderWinRate(stats) {
   const badge = document.getElementById("win-rate-badge");
   if (!stats || stats.total === 0) {
@@ -668,6 +701,25 @@ const RESOLUTION_META = {
   open:    { label: "🔵 追蹤中", cls: "text-blue-400" },
 };
 
+// 失效原因分類代碼（見 outcome_tracker.categorize_failure_reason）-> 對應的知識宇宙卡片
+// （knowledge_universe/seed_knowledge_nodes.sql 的實際卡片 id）。label 只是給還沒載入
+// 知識宇宙分頁時按鈕先顯示用的固定文字，真正點開一律以 Supabase 抓到的最新內容為準。
+const FAILURE_CATEGORY_TO_CARD = {
+  fake_breakout: { id: "tech_box_breakout", label: "盤整區間與突破交易" },
+  narrow_consolidation: { id: "tech_box_breakout", label: "盤整區間與突破交易" },
+  weak_trend_confirmation: { id: "tech_ma_trend", label: "均線與趨勢判斷" },
+};
+
+// 點知識卡推薦按鈕時，知識宇宙分頁可能還沒載入過（knowledgeState.nodes 是空陣列）——
+// 先確保載入好，再打開卡片詳情 modal（openKnowledgeModal 本身是全螢幕覆蓋層，不管
+// 目前在哪個分頁都能開）。
+async function openKnowledgeCardById(nodeId) {
+  if (!knowledgeState.nodes.length) {
+    await loadKnowledgeUniverse();
+  }
+  openKnowledgeModal(nodeId);
+}
+
 function renderResolvedList(rows) {
   const wrap = document.getElementById("resolved-list");
   wrap.innerHTML = "";
@@ -680,6 +732,19 @@ function renderResolvedList(rows) {
     const meta = RESOLUTION_META[r.resolution] || { label: r.resolution, cls: "text-gray-400" };
     const div = document.createElement("div");
     div.className = "bg-gray-950 border border-gray-800 rounded-lg p-3 text-xs space-y-1";
+
+    // 📚 依失效原因分類代碼找出對應的知識卡，去重（fake_breakout/narrow_consolidation
+    // 都對應同一張卡時，只顯示一個按鈕，不會重複兩個一樣的推薦）。
+    const seenCardIds = new Set();
+    const cardPills = [];
+    for (const cat of r.failure_categories || []) {
+      const card = FAILURE_CATEGORY_TO_CARD[cat];
+      if (card && !seenCardIds.has(card.id)) {
+        seenCardIds.add(card.id);
+        cardPills.push(card);
+      }
+    }
+
     div.innerHTML = `
       <div class="flex items-center justify-between gap-2">
         <span class="text-white font-semibold">${r.name}（${r.signal_type === "long" ? "做多" : "做空"}）</span>
@@ -687,7 +752,14 @@ function renderResolvedList(rows) {
       </div>
       <div class="text-gray-500 font-mono">進場 ${fmt(r.entry_price)} → 結算 ${fmt(r.resolution_price)}
         <span class="text-gray-600">・${fmtTime(r.created_at)} → ${fmtTime(r.resolved_at)}</span></div>
-      ${r.failure_reason ? `<div class="text-gray-400 leading-relaxed"><span class="text-red-400 font-semibold">失效原因：</span>${r.failure_reason}</div>` : ""}`;
+      ${r.failure_reason ? `<div class="text-gray-400 leading-relaxed"><span class="text-red-400 font-semibold">失效原因：</span>${r.failure_reason}</div>` : ""}
+      ${cardPills.length ? `<div class="flex items-center gap-1.5 flex-wrap pt-1">${cardPills.map((c) =>
+        `<button type="button" class="kn-card-pill text-[10px] px-2 py-0.5 rounded-full border border-amber-800 text-amber-400 hover:bg-amber-950/30 transition-colors" data-node-id="${c.id}">📚 ${c.label}</button>`
+      ).join("")}</div>` : ""}`;
+
+    for (const btn of div.querySelectorAll(".kn-card-pill")) {
+      btn.addEventListener("click", () => openKnowledgeCardById(btn.dataset.nodeId));
+    }
     wrap.appendChild(div);
   }
 }
@@ -735,6 +807,7 @@ function renderDashboard(data) {
 
   renderTuningBanner(data.tuning_note);
   renderCircuitBreakerBanner(data.circuit_breaker);
+  renderPortfolioExposure(data.portfolio_exposure);
   renderWinRate(data.win_rate_stats);
   renderResolvedList(data.recent_resolved);
   renderKellySuggestion(data.kelly_suggestion);
@@ -882,7 +955,7 @@ async function loadAllSignalCardCharts(signals) {
     const canvas = document.getElementById(`mini-chart-${sig.instId}`);
     if (!canvas) return;
     try {
-      const res = await fetch(`${API_BASE}/api/v1/candles/${encodeURIComponent(sig.instId)}?bar=${CHART_BAR}&limit=${CHART_CANDLE_LIMIT}`);
+      const res = await fetch(`${API_BASE}/api/v1/candles/${encodeURIComponent(sig.instId)}?limit=${CHART_CANDLE_LIMIT}`);
       const body = await res.json();
       if (!res.ok || !body.ok) return;
       drawCandlestickChart(canvas, body.candles, {
@@ -890,7 +963,7 @@ async function loadAllSignalCardCharts(signals) {
         takeProfit1: sig.signal_type ? sig.take_profit_1 : null,
         takeProfit2: sig.signal_type ? sig.take_profit_2 : null,
         entryPrice: sig.signal_type ? sig.price : null,
-      });
+      }, body.ema_series);
     } catch (err) {
       console.error(`mini chart failed for ${sig.instId}:`, err);
     }
@@ -1417,6 +1490,7 @@ async function runBacktestFromModal(instId) {
     if (!res.ok || !body.ok) throw new Error(body.message || "回測失敗，請稍後再試。");
     wrap.classList.remove("hidden");
     resultEl.innerHTML = renderBacktestResultHtml(body);
+    drawEquityCurve(document.getElementById("bt-equity-canvas"), body.equity_curve);
   } catch (err) {
     wrap.classList.remove("hidden");
     resultEl.innerHTML = `<div class="text-red-400">${err.message}</div>`;
@@ -1437,6 +1511,10 @@ function renderBacktestResultHtml(data) {
   }
   const winRateCls = data.win_rate_pct >= 50 ? "text-green-400" : "text-red-400";
   const avgRCls = data.avg_r_multiple >= 0 ? "text-green-400" : "text-red-400";
+  const buyHoldHtml = data.buy_hold_pct != null
+    ? `　同期間買入持有報酬率：<span class="${data.buy_hold_pct >= 0 ? "text-green-400" : "text-red-400"} font-mono">${data.buy_hold_pct}%</span>
+       <span class="text-gray-700">（不同單位，僅供參考，不能直接跟R倍數比大小）</span>`
+    : "";
   return `
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono">
       <div class="text-gray-400">交易次數 <span class="text-white block font-bold">${data.total_trades}</span></div>
@@ -1446,9 +1524,58 @@ function renderBacktestResultHtml(data) {
       <div class="text-gray-400">最大連續虧損 <span class="text-white block font-bold">${data.max_consecutive_losses} 次</span></div>
       <div class="text-gray-400">勝/敗 <span class="text-white block font-bold">${data.wins}/${data.losses}</span></div>
     </div>
-    <div class="text-gray-600">回測範圍：過去 ${data.candle_count} 根 ${data.bar} K 線（OKX 單次查詢上限）。</div>
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-2">
+      <div class="text-[10px] text-gray-500 mb-1">權益曲線（累積R倍數，依交易時間序）</div>
+      <canvas id="bt-equity-canvas" class="w-full block" style="height:70px;"></canvas>
+    </div>
+    <div class="text-gray-600">回測範圍：過去 ${data.candle_count} 根 ${data.bar} K 線（OKX 單次查詢上限）。${buyHoldHtml}</div>
     ${_backtestParamsLineHtml(data.params)}
     <p class="text-yellow-500/70">⚠️ 歷史表現不保證未來結果，樣本數（${data.total_trades} 筆）越少參考價值越低，僅供策略評估參考，不是投資建議。</p>`;
+}
+
+/* 權益曲線（累積R倍數）——跟蠟燭圖走勢圖是各自獨立的小畫布，不共用 drawCandlestickChart
+   的座標系統（沒有OHLC/成交量，純粹一條線）。curve[0] 固定是 0（回測起點）。*/
+function drawEquityCurve(canvas, curve) {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!curve || curve.length < 2) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth || 400;
+  const cssHeight = canvas.clientHeight || 70;
+  canvas.width = cssWidth * dpr;
+  canvas.height = cssHeight * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const lo = Math.min(...curve, 0);
+  const hi = Math.max(...curve, 0);
+  const span = (hi - lo) || 1;
+  const pad = span * 0.1;
+  const toY = (v) => cssHeight - ((v - (lo - pad)) / (span + pad * 2)) * cssHeight;
+  const toX = (i) => (i / (curve.length - 1)) * cssWidth;
+
+  // 0 那條基準線（起點水位），方便一眼看出目前是在水面上還是水面下
+  ctx.strokeStyle = "rgba(148,163,184,0.3)";
+  ctx.setLineDash([3, 3]);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, toY(0));
+  ctx.lineTo(cssWidth, toY(0));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = curve[curve.length - 1] >= 0 ? "#4ade80" : "#f87171";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  curve.forEach((v, i) => {
+    const x = toX(i);
+    const y = toY(v);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
 }
 
 /* ---------------------------------------------------------------- */
@@ -1502,9 +1629,11 @@ document.getElementById("backtest-all-btn").addEventListener("click", runBacktes
 /* 📈 K線走勢圖（詳情頁自動載入 + 定時刷新，零 AI 成本；純 Canvas 繪製，  */
 /* 不依賴任何外部圖表函式庫）                                           */
 /* ---------------------------------------------------------------- */
-const CHART_BAR = "1m";          // 走勢圖用較短週期讓畫面看起來更即時，跟訊號分析用的
-                                  // config.CANDLE_BAR 是各自獨立的兩件事，互不影響
-const CHART_CANDLE_LIMIT = 180;  // 180 根 1 分鐘線 ≈ 過去 3 小時
+// 刻意不在前端寫死 bar（例如 "1m"）——請求時不帶 bar 參數，讓後端用
+// config.CANDLE_BAR 當預設值，這樣走勢圖疊加的 EMA 線，才會跟「技術分析結果」顯示的
+// 20 EMA 是同一個K線週期算出來的同一個數字，不會出現兩個都叫「20 EMA」卻對不上的情況
+// （見 app.py 的 /api/v1/candles 端點說明）。
+const CHART_CANDLE_LIMIT = 180;  // 180 根K線（週期由後端決定）
 const CHART_POLL_MS = 20000;     // 只抓免費公開的OKX K線，不是AI/分析成本，可以放心定時刷新；
                                   // 只有詳情頁「開著」的時候才會刷新，關閉就停止，不是背景輪詢
 let _chartPollTimer = null;
@@ -1520,8 +1649,12 @@ function stopInstrumentChartPolling() {
    overlays: {stopLoss, takeProfit1, takeProfit2, entryPrice}——只畫水平參考線，不畫「在哪根
    K線進場」的標記：這個 repo 目前沒有可靠對應到「當初那根K線」的紀錄，與其猜一個可能對不上
    的位置，不如只畫「這幾個價位」——每一條線的數值都直接來自 signal 本身，保證跟畫面其他
-   地方顯示的數字一致，不會有第二套可能兜不起來的版本。回傳 false 代表資料不足以繪圖。*/
-function drawCandlestickChart(canvas, candles, overlays) {
+   地方顯示的數字一致，不會有第二套可能兜不起來的版本。
+   emaSeries：跟 candles 等長的 EMA 數值陣列（來自 /api/v1/candles 回傳的 ema_series，
+   跟後端 strategy.compute_ema_series 同一份公式算出來的，等於「技術分析結果」顯示的
+   20 EMA 用同一個K線週期）——可以是 null/undefined（資料不足時），該情況下就不畫這條線。
+   回傳 false 代表資料不足以繪圖。*/
+function drawCandlestickChart(canvas, candles, overlays, emaSeries) {
   const ctx = canvas.getContext("2d");
   if (!candles || candles.length < 2) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1541,12 +1674,21 @@ function drawCandlestickChart(canvas, candles, overlays) {
   const priceH = cssHeight - volumeH - 2;
   const plotW = cssWidth - padRight;
 
+  const hasEma = Array.isArray(emaSeries) && emaSeries.length === candles.length;
+
   let lo = Math.min(...candles.map((c) => c.l));
   let hi = Math.max(...candles.map((c) => c.h));
   const overlayPrices = [overlays.stopLoss, overlays.takeProfit1, overlays.takeProfit2, overlays.entryPrice].filter((v) => v != null);
   if (overlayPrices.length) {
     lo = Math.min(lo, ...overlayPrices);
     hi = Math.max(hi, ...overlayPrices);
+  }
+  if (hasEma) {
+    const emaValues = emaSeries.filter((v) => v != null);
+    if (emaValues.length) {
+      lo = Math.min(lo, ...emaValues);
+      hi = Math.max(hi, ...emaValues);
+    }
   }
   const span = (hi - lo) || Math.abs(hi) * 0.02 || 1;
   lo -= span * 0.08;
@@ -1583,6 +1725,28 @@ function drawCandlestickChart(canvas, candles, overlays) {
     ctx.fillRect(x - bodyW / 2, cssHeight - volH, bodyW, volH);
   });
 
+  // 20 EMA 連續線——用跟訊號分析同一個K線週期算出來的同一份數字（見 app.py 的
+  // /api/v1/candles 說明），資料不足的位置（emaSeries[i] 是 null）就跳過那一段，不會
+  // 硬畫一條連到 0 的假線。
+  if (hasEma) {
+    ctx.strokeStyle = "#38bdf8";  // 天藍色，跟停損(紅)/停利(綠)/進場(黃) 都不撞色
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    let started = false;
+    emaSeries.forEach((v, i) => {
+      if (v == null) { started = false; return; }
+      const x = slot * i + slot / 2;
+      const y = priceToY(v);
+      if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+    });
+    ctx.stroke();
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "10px ui-monospace, monospace";
+    ctx.textBaseline = "top";
+    ctx.fillText("— 20 EMA", 2, 2);
+  }
+
   const drawLevel = (price, color, label) => {
     if (price == null) return;
     const y = priceToY(price);
@@ -1616,10 +1780,10 @@ async function loadInstrumentChart(instId, overlays) {
 
   const fetchAndDraw = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/candles/${encodeURIComponent(instId)}?bar=${CHART_BAR}&limit=${CHART_CANDLE_LIMIT}`);
+      const res = await fetch(`${API_BASE}/api/v1/candles/${encodeURIComponent(instId)}?limit=${CHART_CANDLE_LIMIT}`);
       const body = await res.json();
       if (!res.ok || !body.ok) throw new Error(body.message || "抓不到K線資料");
-      const ok = drawCandlestickChart(canvas, body.candles, overlays);
+      const ok = drawCandlestickChart(canvas, body.candles, overlays, body.ema_series);
       const last = body.candles[body.candles.length - 1];
       statusEl.textContent = ok && last
         ? `${body.bar} K線・最新收盤 ${fmt(last.c)}（${fmtTime(last.ts)}）・每 ${CHART_POLL_MS / 1000} 秒自動刷新`

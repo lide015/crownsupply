@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai_coach, background, backtest, config, db, news_client, okx_client, outcome_tracker, position_sizing, stock_fundamentals
+from . import ai_coach, background, backtest, config, db, news_client, okx_client, outcome_tracker, position_sizing, stock_fundamentals, strategy
 from .state import STATE
 
 
@@ -137,6 +137,7 @@ def _dashboard_payload() -> dict:
         "market_pulse": STATE.market_pulse,
         "ranking": STATE.ranking,
         "circuit_breaker": STATE.circuit_breaker,
+        "portfolio_exposure": STATE.portfolio_exposure,
         "disclaimer": "僅供訊號監控參考，非投資建議；本系統不執行任何自動化下單，也不會自動在背景分析。",
     }
 
@@ -315,19 +316,28 @@ async def run_backtest_all_endpoint(req: BacktestAllRequest):
 
 
 @app.get("/api/v1/candles/{inst_id}")
-async def get_candles(inst_id: str, bar: str | None = None, limit: int | None = None):
+async def get_candles(inst_id: str, bar: str | None = None, limit: int | None = None, ema_period: int | None = None):
     """📈 K線走勢圖資料，零 AI 成本，只是把 OKX 免費公開的歷史 K 線包一層給前端畫圖用。
-    跟訊號分析用的 K 線是各自獨立的兩次呼叫——這裡的 bar/limit 由前端自訂（詳情頁圖表
-    預設用較短的週期讓畫面看起來更即時），不影響 `config.CANDLE_BAR` 那份用來算技術
-    訊號的設定，兩者互不干擾。"""
+
+    bar/limit **預設直接沿用 config.CANDLE_BAR/EMA_PERIOD**（前端也預設不特地覆蓋這兩個
+    值）——這是刻意的選擇：走勢圖上疊加的 EMA 線，要跟「技術分析結果」顯示的 20 EMA
+    是同一個週期算出來的同一個數字，兩邊如果用不同的K線週期（例如圖表用1分鐘、訊號判斷
+    用5分鐘），畫出來的 EMA 線會跟真正驅動訊號的那條線對不上，可能誤導使用者——這正是
+    「重點資訊要正確」的核心，寧可犧牲一點「畫面感覺更即時」，也不要顯示兩個標籤都叫
+    「20 EMA」卻其實是不同東西的數字。"""
     assert _http_client is not None
     bar_ = bar or config.CANDLE_BAR
     limit_ = min(limit or config.BACKTEST_CANDLE_LIMIT, config.BACKTEST_CANDLE_LIMIT)
+    ema_period_ = ema_period or config.EMA_PERIOD
     try:
         candles = await okx_client.fetch_confirmed_candles(_http_client, inst_id, bar=bar_, limit=limit_)
     except Exception as exc:  # noqa: BLE001 — 單一商品查不到不該讓整個端點掛掉
         return JSONResponse({"ok": False, "message": f"抓不到 {inst_id} 的K線：{exc}"}, status_code=502)
-    return {"ok": True, "inst_id": inst_id, "bar": bar_, "candles": candles}
+    ema_series = strategy.compute_ema_series(candles, ema_period_)
+    return {
+        "ok": True, "inst_id": inst_id, "bar": bar_, "candles": candles,
+        "ema_period": ema_period_, "ema_series": ema_series,
+    }
 
 
 @app.get("/api/v1/instrument/{inst_id}")

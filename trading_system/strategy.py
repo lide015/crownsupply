@@ -4,6 +4,17 @@
 import pandas as pd
 
 
+def compute_ema_series(candles: list[dict], period: int = 20) -> list[float] | None:
+    """算出每一根K線當下的 EMA 值（pandas ewm(span=period, adjust=False)）。這是
+    `compute_signal()` 判斷方向用的同一套公式，單獨拉出來給 K 線走勢圖疊加 EMA 線用
+    （見 app.py 的 /api/v1/candles 端點），兩處只有一份公式，不會各寫一套可能兜不起來
+    的版本。資料不到一個 EMA 週期就回傳 None（呼叫端沒有足夠資料可以判斷）。"""
+    if len(candles) < period:
+        return None
+    df = pd.DataFrame(candles)
+    return [round(float(v), 6) for v in df["c"].ewm(span=period, adjust=False).mean()]
+
+
 def compute_signal(
     candles: list[dict],
     ema_period: int = 20,
@@ -31,9 +42,10 @@ def compute_signal(
     if len(candles) < min_len:
         return None
 
-    df = pd.DataFrame(candles)
-    df["ema"] = df["c"].ewm(span=ema_period, adjust=False).mean()
+    # min_len >= ema_period 保證了這裡一定拿得到非 None 的 EMA 序列，不用另外判斷。
+    ema_series = compute_ema_series(candles, ema_period)
 
+    df = pd.DataFrame(candles)
     last = df.iloc[-1]
     box_df = df.iloc[-(box_lookback + 1):-1]  # 排除當前這根，只看它「之前」的整理區間
     box_high = float(box_df["h"].max())
@@ -41,7 +53,7 @@ def compute_signal(
     box_mid = (box_high + box_low) / 2.0
 
     price = float(last["c"])
-    ema = float(last["ema"])
+    ema = ema_series[-1]
 
     volume_confirmed = True
     avg_vol = None
@@ -182,6 +194,15 @@ if __name__ == "__main__":
     down_candles = [{"c": 100.0} for _ in range(19)] + [{"c": 90.0}]
     check("trend bias: price below EMA -> down", compute_trend_bias(down_candles, ema_period=20), "down")
     check("trend bias: insufficient data -> None", compute_trend_bias([{"c": 100.0}] * 5, ema_period=20), None)
+
+    # 9) compute_ema_series：長度跟輸入一致、資料不足回傳 None、跟 compute_signal 內部
+    # 用的是同一份數字（不會各算一套兜不起來的版本）
+    check("compute_ema_series insufficient data -> None", compute_ema_series([{"c": 100.0}] * 5, period=20), None)
+    series = compute_ema_series(flat, period=20)
+    check("compute_ema_series length matches input", len(series), len(flat))
+    check("compute_ema_series constant price -> EMA settles at that price", series[-1], 100.0)
+    check("compute_signal's ema field matches compute_ema_series' last value",
+          sig_long["ema"], compute_ema_series(breakout_up, period=20)[-1])
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

@@ -68,6 +68,17 @@ MIN_NET_RR = float(os.getenv("MIN_NET_RR", "1.0"))
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
+# ---- 訊號觸發通知（Email，選用，見 email_notify.py） ----
+# 用一般 SMTP 帳號寄信（Gmail 等服務通常要用「應用程式密碼」，不是登入密碼本身）。
+# 5 個欄位（HOST/USERNAME/PASSWORD/FROM/TO）都留空就完全停用，不影響任何其他功能。
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "")
+EMAIL_TO = os.getenv("EMAIL_TO", "")
+
 # ---- 知識宇宙前端用（見 knowledge_universe/README.md）----
 # anon/publishable key 設計上就是給前端直接使用的公開金鑰，不是密鑰，預設值可以直接寫在這裡；
 # 之後如果換了 Supabase 專案，改這兩個環境變數即可，不用動程式碼。

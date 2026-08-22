@@ -71,6 +71,34 @@ def classify_failure_reason(signal_row: dict, bars_to_sl: int) -> str:
     return " ".join(reasons)
 
 
+# 分類代碼對應的知識宇宙卡片 id（見 knowledge_universe/seed_knowledge_nodes*.sql）：
+# - fake_breakout / narrow_consolidation 都跟「盤整區間與突破交易」這張卡直接相關
+# - weak_trend_confirmation 對應「均線與趨勢判斷」
+# 這個對照表是前端（index.html 的 FAILURE_CATEGORY_TO_CARD）用的同一份分類代碼，這裡只是
+# 說明分類代碼從何而來；實際的卡片 id 對照表維護在前端（那裡才知道 Supabase 卡片資料）。
+def categorize_failure_reason(failure_reason: str | None) -> list[str]:
+    """把 classify_failure_reason() 產生的人類可讀理由字串，反推出結構化的分類代碼，
+    給知識宇宙卡片推薦用。直接讀已經存進資料庫的 failure_reason 文字比對關鍵字，不需要
+    另外幫 signal_history 表新增欄位、也不用改資料庫 schema——這個函式本身就是「查詢時」
+    才做的推導，不是寫入時的額外狀態，所以不影響任何既有資料。
+
+    可能同時符合多個分類（跟 classify_failure_reason 一樣，一筆失效原因可能包含多種
+    結構性弱點）；完全比對不到已知關鍵字時回傳 ["unclear"]，不會回傳空清單讓呼叫端
+    誤以為「這筆沒有任何可以參考的知識點」。"""
+    if not failure_reason:
+        return []
+    categories = []
+    if "插針假突破" in failure_reason:
+        categories.append("fake_breakout")
+    if "盤整盒子過窄" in failure_reason:
+        categories.append("narrow_consolidation")
+    if "趨勢過濾條件在邊緣" in failure_reason:
+        categories.append("weak_trend_confirmation")
+    if not categories:
+        categories.append("unclear")
+    return categories
+
+
 def compute_win_rate(resolved_rows: list[dict]) -> dict:
     """resolved_rows: signal_history 裡 resolution != 'open' 的紀錄（至少要有 "resolution" 欄位）。
     'expired'（追蹤逾期都沒結果）不計入勝率分母——沒有明確輸贏，算進去會失真。"""
@@ -149,6 +177,48 @@ def compute_daily_circuit_breaker(resolved_today: list[dict], max_loss_count: in
             "total_r": total_r,
         }
     return {"active": False, "reason": None, "loss_count": loss_count, "total_r": total_r}
+
+
+def compute_portfolio_exposure(open_signals: list[dict]) -> dict:
+    """目前所有「還沒結算」的訊號（db.get_open_signals() 的格式），看得到「現在同時開著
+    幾筆」的曝險總覽——每日虧損斷路器算的是「今天已經發生的」，這個算的是「現在正在
+    承受的」，是互補的兩個時間視角。
+
+    刻意不假裝知道每筆訊號實際下單的部位大小——本系統不碰真實下單，只有
+    position_sizing.py 的凱利公式試算，實際部位多大是使用者自己決定的——所以用最保守的
+    假設：每筆訊號都當作同一份風險單位，「同時開著幾筆」本身就是曝險的近似值：3 筆同時
+    開著，不管各自賺賠多少，都代表同時承擔 3 份風險，不是分散成互相獨立的 3 份小風險。
+
+    「同方向集中度提醒」也刻意用最簡單、最誠實的規則：不是真正算 Pearson 相關係數（那
+    需要額外抓每對商品的歷史報酬率序列，多一層複雜度跟 API 成本），而是老實提醒「同
+    方向的未結算訊號數 ≥ 2」——加密貨幣主流幣普遍高度連動，同方向的部位本來就不是真正
+    分散的風險。這不是嚴謹的統計相關係數，只是方向性的曝險集中度警訊，函式本身跟前端
+    顯示都會講清楚這個侷限，不假裝比實際上更精確。
+
+    回傳 {"total_open","long_count","short_count","concentration_warning"}
+    （警訊沒觸發時 concentration_warning 是 None）。"""
+    long_count = sum(1 for s in open_signals if s["signal_type"] == "long")
+    short_count = sum(1 for s in open_signals if s["signal_type"] == "short")
+    total_open = long_count + short_count
+
+    concentration_warning = None
+    if long_count >= 2:
+        concentration_warning = (
+            f"目前有 {long_count} 筆做多訊號同時進行中，加密貨幣主流幣普遍高度連動，"
+            "同方向部位是疊加曝險、不是真正分散——這不是嚴謹的統計相關係數，只是方向性提醒。"
+        )
+    elif short_count >= 2:
+        concentration_warning = (
+            f"目前有 {short_count} 筆做空訊號同時進行中，加密貨幣主流幣普遍高度連動，"
+            "同方向部位是疊加曝險、不是真正分散——這不是嚴謹的統計相關係數，只是方向性提醒。"
+        )
+
+    return {
+        "total_open": total_open,
+        "long_count": long_count,
+        "short_count": short_count,
+        "concentration_warning": concentration_warning,
+    }
 
 
 if __name__ == "__main__":
@@ -281,6 +351,68 @@ if __name__ == "__main__":
     empty_day = compute_daily_circuit_breaker([], max_loss_count=3, max_loss_r=-5.0)
     check("no resolved trades today -> inactive", empty_day["active"], False)
     check("no resolved trades today -> total_r is 0.0", empty_day["total_r"], 0.0)
+
+    # 22) categorize_failure_reason -- 各種失效原因字串反推出正確的分類代碼
+    check(
+        "fast reversal reason -> fake_breakout category",
+        categorize_failure_reason(classify_failure_reason({"box_high": 105, "box_low": 100, "ema": 95, "entry_price": 106}, bars_to_sl=1)),
+        ["fake_breakout"],
+    )
+    check(
+        "narrow box reason -> narrow_consolidation category",
+        categorize_failure_reason(classify_failure_reason({"box_high": 100.5, "box_low": 100, "ema": 90, "entry_price": 101}, bars_to_sl=10)),
+        ["narrow_consolidation"],
+    )
+    check(
+        "ema edge reason -> weak_trend_confirmation category",
+        categorize_failure_reason("進場當下價格離 20 EMA 只有 0.10%，趨勢過濾條件在邊緣，訊號強度本來就偏弱。"),
+        ["weak_trend_confirmation"],
+    )
+    check(
+        "fallback reason -> unclear category",
+        categorize_failure_reason("找不到明顯的結構性弱點，可能單純是短期雜訊或整體市場氣氛轉變，不代表策略邏輯本身有誤。"),
+        ["unclear"],
+    )
+    check("None failure_reason -> empty list (nothing to recommend)", categorize_failure_reason(None), [])
+    check("empty string failure_reason -> empty list", categorize_failure_reason(""), [])
+
+    # 23) 同時符合多種型態的複合理由字串 -> 回傳多個分類代碼
+    combo_reason = "突破後 1~2 根 K 線內就立刻反轉觸及停損，動能沒有延續，很可能是插針假突破。 盤整盒子過窄（僅 0.50%），突破後波動容易被放大，雜訊很容易就觸發停損。"
+    check(
+        "combined reason -> both categories present",
+        categorize_failure_reason(combo_reason),
+        ["fake_breakout", "narrow_consolidation"],
+    )
+
+    # 24) compute_portfolio_exposure -- 沒有任何未結算訊號
+    check(
+        "no open signals -> zeroed out, no warning",
+        compute_portfolio_exposure([]),
+        {"total_open": 0, "long_count": 0, "short_count": 0, "concentration_warning": None},
+    )
+
+    # 25) 只有 1 筆做多 -> 不觸發集中度警訊
+    single_long = [{"signal_type": "long"}]
+    result_single = compute_portfolio_exposure(single_long)
+    check("single open long -> no concentration warning", result_single["concentration_warning"], None)
+    check("single open long -> counts correct", (result_single["total_open"], result_single["long_count"]), (1, 0 + 1))
+
+    # 26) 2 筆同方向（做多）-> 觸發集中度警訊
+    two_longs = [{"signal_type": "long"}, {"signal_type": "long"}]
+    result_two_long = compute_portfolio_exposure(two_longs)
+    check("2 open longs -> concentration warning triggered", result_two_long["concentration_warning"] is not None, True)
+    check("2 open longs -> warning mentions count", "2 筆做多" in result_two_long["concentration_warning"], True)
+
+    # 27) 2 筆同方向（做空）-> 對稱情境也觸發
+    two_shorts = [{"signal_type": "short"}, {"signal_type": "short"}]
+    result_two_short = compute_portfolio_exposure(two_shorts)
+    check("2 open shorts -> concentration warning triggered", "2 筆做空" in result_two_short["concentration_warning"], True)
+
+    # 28) 1 做多 + 1 做空（互相對沖方向，各自都沒到 2）-> 不觸發，但 total_open 正確累加
+    mixed_directions = [{"signal_type": "long"}, {"signal_type": "short"}]
+    result_mixed_dir = compute_portfolio_exposure(mixed_directions)
+    check("1 long + 1 short -> no concentration warning (neither direction hits 2)", result_mixed_dir["concentration_warning"], None)
+    check("1 long + 1 short -> total_open is 2", result_mixed_dir["total_open"], 2)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:
