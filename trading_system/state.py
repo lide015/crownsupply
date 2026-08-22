@@ -23,6 +23,7 @@ class SystemState:
         # 訊號結果追蹤與自動優化（見 db.py / outcome_tracker.py / strategy_tuner.py）
         self.win_rate_stats: dict = {"total": 0, "wins": 0, "losses": 0, "win_rate_pct": None}
         self.recent_resolved: list[dict] = []
+        self.kelly_suggestion: dict | None = None
         self.tuning_note: str | None = None  # 這一輪如果剛好觸發自動優化，放調整理由；沒有就 None
         self.effective_min_amplitude_pct: float = 0.0  # 目前實際生效的振幅門檻（可能已被自動優化調整過）
         # 市場情緒儀表板（見 market_pulse.py）：平均 RSI、山寨季代理指標、恐懼貪婪指數

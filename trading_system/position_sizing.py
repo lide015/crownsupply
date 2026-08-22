@@ -48,6 +48,33 @@ def calc_reward_at_target(position_size: float, entry_price: float, target_price
     return round(position_size * abs(target_price - entry_price), 2)
 
 
+MIN_SAMPLE_SIZE_FOR_KELLY = 10  # 已結算訊號少於這個數字時，統計誤差太大，不給出具體建議
+
+
+def calc_kelly_suggestion(win_rate_pct: float, avg_win_r_multiple: float, sample_size: int) -> dict | None:
+    """凱利公式：f = p − q/b（p=勝率、q=1−p、b=平均獲利倍數），算出「數學上最優」的單筆風險
+    比例上限。f 是複利成長最快、但波動也最大的比例；實務上多數人會打對折甚至更保守使用，
+    這裡同時給 kelly_full_pct（全凱利）跟 kelly_half_pct（半凱利，較常被建議採用的保守版本）。
+
+    樣本數 < MIN_SAMPLE_SIZE_FOR_KELLY 或 avg_win_r_multiple <= 0 時回傳 None——樣本太少
+    算出來的勝率/賺賠比誤差太大，給出一個看似精確的數字反而會誤導使用者，不如老實說「樣本
+    不足」。has_edge=False 代表算出來的 f 是負值（照歷史數據看，這個策略目前沒有正期望值），
+    此時 kelly_*_pct 一律回傳 0，不會給出負的風險比例建議。"""
+    if sample_size < MIN_SAMPLE_SIZE_FOR_KELLY or avg_win_r_multiple <= 0:
+        return None
+    p = win_rate_pct / 100.0
+    q = 1.0 - p
+    b = avg_win_r_multiple
+    f_full = p - q / b
+    f_full_clamped = max(0.0, f_full)
+    return {
+        "kelly_full_pct": round(f_full_clamped * 100, 2),
+        "kelly_half_pct": round(f_full_clamped * 50, 2),
+        "has_edge": f_full > 0,
+        "sample_size": sample_size,
+    }
+
+
 if __name__ == "__main__":
     _passed = 0
     _total = 0
@@ -85,6 +112,23 @@ if __name__ == "__main__":
 
     # 5) 目標價獲利試算
     check("calc_reward_at_target", calc_reward_at_target(20.0, 100.0, 110.0), 200.0)
+
+    # 6) 凱利公式：勝率 60%、平均獲利倍數 2.0 -> f = 0.6 - 0.4/2 = 0.4 -> 全凱利 40%、半凱利 20%
+    kelly = calc_kelly_suggestion(60.0, 2.0, sample_size=20)
+    check("kelly_full_pct", kelly["kelly_full_pct"], 40.0)
+    check("kelly_half_pct", kelly["kelly_half_pct"], 20.0)
+    check("has_edge True when f > 0", kelly["has_edge"], True)
+
+    # 7) 樣本數不足 -> None，不給出誤導性的具體數字
+    check("sample_size below minimum -> None", calc_kelly_suggestion(60.0, 2.0, sample_size=5), None)
+
+    # 8) 沒有任何獲利倍數可用（avg_win_r_multiple<=0）-> None
+    check("avg_win_r_multiple <= 0 -> None", calc_kelly_suggestion(60.0, 0, sample_size=20), None)
+
+    # 9) 負期望值策略（勝率太低、賺賠比太差）-> f 為負，clamp 到 0，has_edge=False
+    kelly_negative = calc_kelly_suggestion(30.0, 1.0, sample_size=20)
+    check("negative edge clamps to 0, not a negative risk %", kelly_negative["kelly_full_pct"], 0.0)
+    check("has_edge False when f <= 0", kelly_negative["has_edge"], False)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

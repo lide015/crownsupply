@@ -154,6 +154,21 @@ def get_all_resolved_for_stats() -> list[dict]:
         conn.close()
 
 
+def get_resolved_trades_for_kelly() -> list[dict]:
+    """給 outcome_tracker.compute_average_win_r_multiple 用：所有已結算訊號的
+    entry_price/stop_loss/resolution/resolution_price，不限筆數（凱利公式的樣本
+    越多越準，跟 get_all_resolved_for_stats 的「不限筆數」邏輯一致）。"""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT entry_price, stop_loss, resolution, resolution_price "
+            "FROM signal_history WHERE resolution != 'open'"
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 def get_signal_history_for(inst_id: str, limit: int = 10) -> list[dict]:
     """給「單一商品詳情頁」的事件時間軸用：這檔商品過去觸發過的訊號（不管有沒有結算），
     由新到舊排序。這是目前系統唯一持續累積的「這檔商品發生過什麼事」紀錄——沒有真正
@@ -271,6 +286,32 @@ if __name__ == "__main__":
 
         check("get_signal_history_for on unknown inst_id returns empty list",
               get_signal_history_for("NOPE-USDT-SWAP"), [])
+
+        # get_resolved_trades_for_kelly：目前 3 筆都還是 open，先確認回傳空清單，
+        # 再實際結算兩筆（一勝一敗），確認已結算的才會出現、還沒結算的不會混進來。
+        check("get_resolved_trades_for_kelly excludes still-open signals", get_resolved_trades_for_kelly(), [])
+
+        win_id = insert_signal({
+            "inst_id": "SOL-USDT-SWAP", "name": "SOL-USDT", "asset_class": "crypto",
+            "signal_type": "long", "created_at": 3000, "entry_price": 100.0,
+            "stop_loss": 95.0, "take_profit_1": 110.0, "take_profit_2": 120.0,
+            "ema": 98.0, "box_high": 101.0, "box_low": 99.0,
+            "ai_sentiment": "BULLISH", "action_label": "強烈做多", "color": "green",
+        })
+        resolve_signal(win_id, "hit_tp1", 3100, 110.0, None)
+        loss_id = insert_signal({
+            "inst_id": "SOL-USDT-SWAP", "name": "SOL-USDT", "asset_class": "crypto",
+            "signal_type": "long", "created_at": 4000, "entry_price": 100.0,
+            "stop_loss": 95.0, "take_profit_1": 110.0, "take_profit_2": 120.0,
+            "ema": 98.0, "box_high": 101.0, "box_low": 99.0,
+            "ai_sentiment": "BULLISH", "action_label": "強烈做多", "color": "green",
+        })
+        resolve_signal(loss_id, "hit_sl", 4100, 95.0, None)
+
+        kelly_rows = get_resolved_trades_for_kelly()
+        check("get_resolved_trades_for_kelly returns only resolved signals", len(kelly_rows), 2)
+        check("get_resolved_trades_for_kelly rows carry the fields Kelly math needs",
+              set(kelly_rows[0].keys()), {"entry_price", "stop_loss", "resolution", "resolution_price"})
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

@@ -81,6 +81,30 @@ def compute_win_rate(resolved_rows: list[dict]) -> dict:
     return {"total": total, "wins": wins, "losses": losses, "win_rate_pct": win_rate_pct}
 
 
+def compute_average_win_r_multiple(resolved_rows: list[dict]) -> float | None:
+    """算「平均獲利倍數」（凱利公式裡的 b）：只看真的中停利的交易，用每一筆的
+    「實際獲利距離 ÷ 進場到停損的風險距離」算出這一筆的 R 倍數，全部平均。
+
+    resolved_rows 需含 entry_price / stop_loss / resolution / resolution_price
+    （db.get_resolved_trades_for_kelly() 的格式）。用實際的 resolution_price 而不是
+    直接假設等於 take_profit_1/2，避免任何未來調整結算邏輯時兩邊對不起來。
+
+    一筆都沒中停利時回傳 None（凱利公式需要至少一筆正報酬樣本才算得出有意義的 b，
+    不能瞎猜一個數字）。"""
+    win_r_multiples = []
+    for row in resolved_rows:
+        if row["resolution"] not in ("hit_tp1", "hit_tp2"):
+            continue
+        risk = abs(row["entry_price"] - row["stop_loss"])
+        if risk <= 0:
+            continue
+        reward = abs(row["resolution_price"] - row["entry_price"])
+        win_r_multiples.append(reward / risk)
+    if not win_r_multiples:
+        return None
+    return sum(win_r_multiples) / len(win_r_multiples)
+
+
 if __name__ == "__main__":
     _passed = 0
     _total = 0
@@ -153,6 +177,20 @@ if __name__ == "__main__":
 
     # 12) compute_win_rate -- 沒有已結算紀錄
     check("no resolved rows -> win_rate_pct None", compute_win_rate([]), {"total": 0, "wins": 0, "losses": 0, "win_rate_pct": None})
+
+    # 13) compute_average_win_r_multiple -- 兩筆中停利，R倍數分別是 1.5 跟 2.0，平均 1.75
+    kelly_rows = [
+        {"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_tp1", "resolution_price": 107.5},  # risk=5, reward=7.5 -> R=1.5
+        {"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_tp2", "resolution_price": 110.0},   # risk=5, reward=10 -> R=2.0
+        {"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_sl", "resolution_price": 95.0},     # 停損不計入 b
+    ]
+    check("compute_average_win_r_multiple averages only winning trades", compute_average_win_r_multiple(kelly_rows), 1.75)
+
+    # 14) compute_average_win_r_multiple -- 一筆中停利都沒有 -> None（不瞎猜）
+    check("no winning trades -> None", compute_average_win_r_multiple([{"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_sl", "resolution_price": 95.0}]), None)
+
+    # 15) compute_average_win_r_multiple -- 空清單 -> None
+    check("empty rows -> None", compute_average_win_r_multiple([]), None)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

@@ -22,7 +22,7 @@ import time
 
 import httpx
 
-from . import brain, config, db, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, ranking, strategy, strategy_tuner
+from . import brain, config, db, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, position_sizing, ranking, strategy, strategy_tuner
 from .state import STATE
 
 BTC_INST_ID = "BTC-USDT-SWAP"  # 山寨季代理指標的比較基準（見 market_pulse.py 說明）
@@ -213,6 +213,15 @@ async def _refresh_signals(client: httpx.AsyncClient):
     # 訊號歷史純讀 DB、跟 OKX 網路呼叫無關，先設好——就算接下來的 OKX 篩選失敗，
     # 使用者還是看得到歷史成效，不會因為這次分析失敗就連歷史紀錄都不見了。
     STATE.recent_resolved = db.get_recent_resolved(20)
+
+    # 🧮 倉位計算機的凱利公式建議：用「本系統自己歷史上真的中停利/停損過幾次」算出來的
+    # 勝率＋平均獲利倍數，不是憑空給一個數字。零額外 AI/API 成本，純讀 DB + 純函式計算。
+    avg_win_r = outcome_tracker.compute_average_win_r_multiple(db.get_resolved_trades_for_kelly())
+    STATE.kelly_suggestion = (
+        position_sizing.calc_kelly_suggestion(win_rate_stats["win_rate_pct"], avg_win_r, win_rate_stats["total"])
+        if avg_win_r is not None and win_rate_stats["win_rate_pct"] is not None
+        else None
+    )
 
     tickers = await okx_client.fetch_swap_tickers(client)
     # OKX 上「全部」永續合約的基本報價（不套門檻、不截斷）——零額外 API 成本，這份資料本來

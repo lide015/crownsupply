@@ -113,6 +113,7 @@ def _dashboard_payload() -> dict:
         "last_error": STATE.last_error,
         "win_rate_stats": STATE.win_rate_stats,
         "recent_resolved": STATE.recent_resolved,
+        "kelly_suggestion": STATE.kelly_suggestion,
         "tuning_note": STATE.tuning_note,
         "effective_min_amplitude_pct": STATE.effective_min_amplitude_pct,
         "market_pulse": STATE.market_pulse,

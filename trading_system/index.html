@@ -197,6 +197,7 @@
               class="mt-1 w-full bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-gray-100 font-mono" />
           </label>
         </div>
+        <div id="calc-kelly-suggestion" class="hidden bg-amber-950/20 border border-amber-800/40 rounded-lg p-3 text-xs text-amber-200 leading-relaxed"></div>
         <div id="calc-result" class="bg-gray-950 border border-gray-800 rounded-lg p-3 text-xs font-mono text-gray-500 leading-relaxed">
           填入進場價／停損價後會自動試算，也可以直接點下方任一訊號卡片的「🧮 用此訊號試算倉位」帶入數字。
         </div>
@@ -552,6 +553,34 @@ function renderResolvedList(rows) {
   }
 }
 
+/* 🧮 倉位計算機的凱利公式建議——用本系統自己歷史上真的中停利/停損過幾次算出來的勝率＋
+   平均獲利倍數，不是憑空給一個數字；樣本不足（<10筆已結算）時後端會回傳 null，這裡就完全
+   不顯示，不會給使用者一個統計上不可靠的假象。*/
+function renderKellySuggestion(kelly) {
+  const el = document.getElementById("calc-kelly-suggestion");
+  if (!kelly) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
+  el.classList.remove("hidden");
+  if (!kelly.has_edge) {
+    el.innerHTML = `⚠️ <b>凱利公式建議</b>：根據目前累積的 ${kelly.sample_size} 筆已結算訊號，算出來的勝率跟平均獲利倍數顯示目前這套規則期望值是負的——建議先觀察、暫時不要放大單筆風險比例，等樣本更多、期望值轉正再參考這個建議。`;
+    return;
+  }
+  el.innerHTML = `
+    💡 <b>凱利公式建議</b>（根據 ${kelly.sample_size} 筆已結算訊號的實際勝率／平均獲利倍數算出）：
+    全凱利 <span class="font-mono font-bold">${kelly.kelly_full_pct}%</span>、
+    半凱利（較保守，多數紀律型交易者建議採用）
+    <span class="font-mono font-bold">${kelly.kelly_half_pct}%</span>
+    <button id="calc-kelly-apply-btn" type="button" class="ml-1 underline hover:text-amber-100">套用半凱利到單筆風險%</button>
+    <div class="text-amber-400/70 mt-1">⚠️ 這是「數學上最優」的參考值，不是保證獲利的建議；樣本數還不夠多時波動會很大，實務上通常會用比這更保守的比例，不建議直接套用全凱利。</div>`;
+  document.getElementById("calc-kelly-apply-btn").addEventListener("click", () => {
+    document.getElementById("calc-risk-pct").value = kelly.kelly_half_pct;
+    debouncedCalc();
+  });
+}
+
 let lastDashboardData = null;
 const signalsFilter = { assetClass: "all", search: "" };
 
@@ -568,6 +597,7 @@ function renderDashboard(data) {
   renderTuningBanner(data.tuning_note);
   renderWinRate(data.win_rate_stats);
   renderResolvedList(data.recent_resolved);
+  renderKellySuggestion(data.kelly_suggestion);
   renderMarketPulse(data.market_pulse);
   renderRankingBoard(data.ranking);
   document.getElementById("signals-count-hint").textContent = (data.signals || []).length;
