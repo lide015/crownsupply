@@ -10,6 +10,7 @@ def compute_signal(
     box_lookback: int = 15,
     tp1_rr: float = 1.5,
     tp2_rr: float = 2.0,
+    volume_confirm_multiple: float = 0.0,
 ) -> dict | None:
     """candles: 升冪（舊到新）的 [{o,h,l,c}, ...]，全部是已收盤的 K 線。
 
@@ -19,6 +20,12 @@ def compute_signal(
     停利用風報比（reward:risk）算：risk = |進場價 - 停損價|，
     TP1 = 進場價 ± risk * tp1_rr（可先減碼）、TP2 = 進場價 ± risk * tp2_rr（留給趨勢延續）。
     回傳 None 代表資料不夠（還沒收集滿 EMA 週期 + 盒子回看窗）。
+
+    volume_confirm_multiple：量能突破確認——真正有動能的突破通常伴隨成交量放大，雜訊
+    假突破的量能往往稀薄，這是很基本的技術分析常識。0（預設）代表不啟用，維持原本
+    行為；> 0 時，突破那根 K 線的成交量必須達到「盒子回看窗」平均成交量的這個倍數以上，
+    否則視為量能不足、不觸發訊號。candles 沒有 "vol" 欄位時（例如舊測試資料、或資料源
+    沒提供）一律優雅放行、視為無法判斷，不會因為缺資料就擋掉原本該有的訊號。
     """
     min_len = max(ema_period, box_lookback + 1)
     if len(candles) < min_len:
@@ -36,17 +43,29 @@ def compute_signal(
     price = float(last["c"])
     ema = float(last["ema"])
 
+    volume_confirmed = True
+    avg_vol = None
+    current_vol = None
+    if volume_confirm_multiple > 0 and "vol" in df.columns:
+        current_vol = float(last["vol"])
+        avg_vol = float(box_df["vol"].mean())
+        if avg_vol > 0:
+            volume_confirmed = current_vol >= avg_vol * volume_confirm_multiple
+
+    raw_long_breakout = price > box_high and price > ema
+    raw_short_breakout = price < box_low and price < ema
+
     signal = None
     stop_loss = None
     take_profit_1 = None
     take_profit_2 = None
-    if price > box_high and price > ema:
+    if raw_long_breakout and volume_confirmed:
         signal = "long"
         stop_loss = box_mid
         risk = price - stop_loss
         take_profit_1 = price + risk * tp1_rr
         take_profit_2 = price + risk * tp2_rr
-    elif price < box_low and price < ema:
+    elif raw_short_breakout and volume_confirmed:
         signal = "short"
         stop_loss = box_mid
         risk = stop_loss - price
@@ -64,7 +83,35 @@ def compute_signal(
         "take_profit_2": take_profit_2,
         "tp1_rr": tp1_rr,
         "tp2_rr": tp2_rr,
+        "volume_confirmed": volume_confirmed,
+        "avg_vol": avg_vol,
+        "current_vol": current_vol,
+        # 技術面上有效突破（價格+EMA都符合），但量能不足被擋下來——跟「根本沒有突破」
+        # 是不同的情況，brain.fuse() 用這個欄位給使用者一個具體的理由，不是含糊的「觀望中」。
+        "blocked_by_volume": (raw_long_breakout or raw_short_breakout) and not volume_confirmed,
     }
+
+
+def compute_trend_bias(candles: list[dict], ema_period: int = 20) -> str | None:
+    """更高週期的簡單趨勢判斷，給多時間週期共振用（見 brain.fuse() 的 htf_trend 參數）。
+    不是另一套複雜指標——就是同一套「收盤價 vs EMA」邏輯，只是套用在更長的 K 線週期上
+    （例如 1 小時線），跟 5 分鐘線判斷方向的思路一致，只是看的時間尺度不同：5 分鐘線
+    決定「現在要不要進場」，1 小時線決定「大方向站在哪一邊」，兩者同向才是真正值得跟隨
+    的動能，逆著大方向做短線突破容易被雜訊洗出場。
+
+    回傳 "up"/"down"；資料不夠（不到一個 EMA 週期）或剛好持平（極罕見）回傳 None，
+    代表無法判斷、呼叫端應該優雅忽略這個維度，不要當作明確反向。
+    """
+    if len(candles) < ema_period:
+        return None
+    df = pd.DataFrame(candles)
+    ema = df["c"].ewm(span=ema_period, adjust=False).mean().iloc[-1]
+    price = df["c"].iloc[-1]
+    if price > ema:
+        return "up"
+    if price < ema:
+        return "down"
+    return None
 
 
 if __name__ == "__main__":
@@ -93,6 +140,8 @@ if __name__ == "__main__":
     # entry=105, stop_loss=100 -> risk=5 -> tp1=105+5*1.5=112.5, tp2=105+5*2.0=115.0
     check("take_profit_1 at 1.5R", sig_long["take_profit_1"], 112.5)
     check("take_profit_2 at 2.0R", sig_long["take_profit_2"], 115.0)
+    check("no volume data -> volume_confirmed defaults True", sig_long["volume_confirmed"], True)
+    check("no volume data -> not blocked_by_volume", sig_long["blocked_by_volume"], False)
 
     # 3) 對稱情境：跌破盒子低點且跌破 EMA -> short
     breakout_down = flat + [{"o": 100.0, "h": 100.0, "l": 94.0, "c": 95.0}]
@@ -107,6 +156,32 @@ if __name__ == "__main__":
     sig_none = compute_signal(still_inside, ema_period=20, box_lookback=15)
     check("price inside box -> no signal", sig_none["signal"], None)
     check("no signal -> no take_profit", sig_none["take_profit_1"], None)
+    check("no breakout at all -> not blocked_by_volume", sig_none["blocked_by_volume"], False)
+
+    # 5) 量能突破確認：突破但量能不足 -> 不觸發訊號，且明確標示 blocked_by_volume
+    flat_low_vol = [{"o": 100.0, "h": 101.0, "l": 99.0, "c": 100.0, "vol": 1000.0} for _ in range(20)]
+    weak_breakout = flat_low_vol + [{"o": 100.0, "h": 106.0, "l": 100.0, "c": 105.0, "vol": 500.0}]  # 量能只有均量的一半
+    sig_weak = compute_signal(weak_breakout, ema_period=20, box_lookback=15, volume_confirm_multiple=1.2)
+    check("breakout with weak volume -> no signal", sig_weak["signal"], None)
+    check("breakout with weak volume -> volume_confirmed False", sig_weak["volume_confirmed"], False)
+    check("breakout with weak volume -> blocked_by_volume True", sig_weak["blocked_by_volume"], True)
+
+    # 6) 量能突破確認：突破且量能充足 -> 正常觸發訊號
+    strong_breakout = flat_low_vol + [{"o": 100.0, "h": 106.0, "l": 100.0, "c": 105.0, "vol": 2000.0}]  # 量能是均量的 2 倍
+    sig_strong = compute_signal(strong_breakout, ema_period=20, box_lookback=15, volume_confirm_multiple=1.2)
+    check("breakout with strong volume -> long signal", sig_strong["signal"], "long")
+    check("breakout with strong volume -> volume_confirmed True", sig_strong["volume_confirmed"], True)
+
+    # 7) volume_confirm_multiple=0（預設）-> 完全不啟用量能過濾，就算量能極低也照樣觸發
+    sig_disabled = compute_signal(weak_breakout, ema_period=20, box_lookback=15, volume_confirm_multiple=0.0)
+    check("volume_confirm_multiple=0 -> filter disabled, signal still fires", sig_disabled["signal"], "long")
+
+    # 8) compute_trend_bias：站上 EMA -> up；跌破 -> down；資料不足 -> None
+    up_candles = [{"c": 100.0} for _ in range(19)] + [{"c": 110.0}]
+    check("trend bias: price above EMA -> up", compute_trend_bias(up_candles, ema_period=20), "up")
+    down_candles = [{"c": 100.0} for _ in range(19)] + [{"c": 90.0}]
+    check("trend bias: price below EMA -> down", compute_trend_bias(down_candles, ema_period=20), "down")
+    check("trend bias: insufficient data -> None", compute_trend_bias([{"c": 100.0}] * 5, ema_period=20), None)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

@@ -33,6 +33,7 @@ trading_system/
 ├─ ai_coach.py                # AI 辯論空間：多輪對話，走 Anthropic/OpenAI（內建自測）
 ├─ position_sizing.py          # 🧮 倉位計算機：資金/風險%/進場停損價 → 建議部位大小（純函式，內建自測）
 ├─ backtest.py                 # 📊 歷史回測：策略規則套在過去K線重播，統計勝率/獲利因子/最大連續虧損（純函式，內建自測）
+├─ telegram_notify.py          # 📨 訊號觸發通知：Telegram Bot 推播，沒設定金鑰時優雅跳過（內建自測）
 ├─ ranking.py                    # 📊 推薦強度榜：技術/籌碼/情緒/量能四維度評分排名（純函式，內建自測）
 ├─ market_pulse.py                # 🌡️ 市場情緒：平均 RSI、山寨季代理指標、恐懼貪婪指數（內建自測）
 ├─ oi_tracker.py                    # 合約未平倉量（OI）追蹤，當「籌碼面」替代指標（純函式，內建自測）
@@ -213,8 +214,9 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/config` | GET | 給「知識宇宙」分頁的 Supabase URL／anon key（公開金鑰，非機密） |
 | `/api/v1/coach` | POST | AI 辯論空間一輪對話。body：`{"node": {...知識卡}, "history": [{"role","content"}, ...]}`，回傳 `{"reply", "error"}` |
 | `/api/v1/position-size` | POST | 🧮 倉位計算機，純本地計算、零外部 API 成本。body：`{"account_balance","risk_pct","entry_price","stop_loss_price","leverage_cap"?,"take_profit_1"?,"take_profit_2"?}` |
-| `/api/v1/backtest` | POST | 📊 歷史回測，**零 AI 成本**，只多打一次免費的 OKX 歷史K線查詢。body：`{"inst_id","bar"?,"limit"?}`，任何商品都可以直接跑，不用先做過技術分析；資料不夠跑一次完整 EMA+盒子週期回 `422` |
+| `/api/v1/backtest` | POST | 📊 歷史回測，**零 AI 成本**，只多打一次免費的 OKX 歷史K線查詢。body：`{"inst_id","bar"?,"limit"?,"ema_period"?,"box_lookback"?,"tp1_rr"?,"tp2_rr"?,"volume_confirm_multiple"?}`（後 5 項不帶就用 config.py 預設值，帶了就覆蓋——互動式參數實驗室用），任何商品都可以直接跑，不用先做過技術分析；資料不夠跑一次完整 EMA+盒子週期回 `422` |
 | `/api/v1/candles/{inst_id}` | GET | 📈 K線走勢圖資料，**零 AI 成本**，只是把 OKX 免費公開的歷史K線包一層。query：`bar`?、`limit`?（不帶就用 `config.CANDLE_BAR`/`BACKTEST_CANDLE_LIMIT`）|
+| `/api/v1/backtest-all` | POST | 📊 批次回測排行榜，對監控清單逐一跑歷史回測、依獲利因子排序，**零 AI 成本**。body：`{"bar"?,"limit"?}` |
 
 `/api/v1/dashboard`、`/api/v1/analyze` 的回傳現在還多了 `market_pulse`（市場情緒儀表板資料）
 跟 `ranking`（推薦強度榜資料），見下一節。
@@ -320,6 +322,17 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 停損固定設在盒子中線；停利用風報比算：risk = │進場價 − 停損價│，TP1 = 進場價 ± risk × `TP1_RR`
 （預設 1.5，可先減碼）、TP2 = 進場價 ± risk × `TP2_RR`（預設 2.0，留給趨勢延續的部位）。
 
+**量能突破確認**（`strategy.compute_signal` 的 `volume_confirm_multiple`）：真正有動能的
+突破通常伴隨成交量放大，雜訊假突破的量能往往稀薄。突破那根 K 線的成交量沒有達到盒子
+回看窗平均量的 `VOLUME_CONFIRM_MULTIPLE`（預設 1.1）倍以上，就不觸發訊號，畫面上會標示
+「⚠️ 量能不足，暫不觸發 (WEAK VOLUME)」而不是含糊的「觀望中」。設成 0 可以完全關閉這個
+過濾（回到舊行為）。
+
+**多時間週期共振**（`strategy.compute_trend_bias` / `brain.fuse` 的 `htf_trend`）：技術面
+在 5 分鐘線觸發突破時，額外抓一次更高週期（預設 `HTF_BAR=1H`）K 線，確認大方向沒有明顯
+反向——逆著大趨勢做的短線突破特別容易被回歸主趨勢的走勢洗出場。方向衝突時標示
+「⚠️ 高週期趨勢逆向，觀望 (HTF CONFLICT)」。零額外 AI 成本，只多一次免費的 OKX K 線查詢。
+
 **AI 新聞情緒**（`news_client.py`）：分兩層。整體市場情緒抓 CoinDesk／CoinTelegraph 公開 RSS
 頭條判斷；**每一檔實際被監控的商品另外各自查一次 Google News RSS**（免費公開、不需金鑰），
 讓「大腦研判」的新聞脈絡真的對到那一檔商品，而不是不管哪一檔訊號都套用同一份籠統的市場
@@ -351,6 +364,17 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 「💸 淨盈虧比（已扣來回手續費 X%）」跟「手續費吃掉停利1獲利的 Y%」兩個數字，全部透明，
 不是黑箱判斷。手續費費率（`TAKER_FEE_PCT`）可在 `.env` 依自己實際帳號等級調整。
 
+## 🛑 每日虧損斷路器
+
+`outcome_tracker.compute_daily_circuit_breaker`：每一輪分析先檢查「今天」（UTC 日曆日）
+已結算的訊號有沒有觸及虧損上限——今天觸及停損（`hit_sl`）的次數達到 `MAX_DAILY_LOSS_COUNT`
+（預設 3 次），或今天累積 R 倍數低於 `MAX_DAILY_LOSS_R`（預設 -5.0），任一項先達到就觸發。
+觸發後這一輪**所有**新訊號都會被 `brain.fuse()` 攔截成「🛑 今日已達虧損上限 (DAILY
+LIMIT)」，不管技術面/新聞面/淨盈虧比再好看都一樣——這是跟單一訊號品質無關、更上層的
+紀律把關，避免連續虧損後越輸越想凹單。頁面上方也會顯示「今日戰績」（今天觸及停損次數＋
+累積R倍數），沒觸發也看得到數字，不是只有觸發時才有資訊。兩個門檻各自可以設成 0（次數）
+或 0 以上（R）關閉。
+
 ## 📈 K線走勢圖（詳情頁自動載入、定時刷新）
 
 任一商品詳情頁打開就自動畫出 K 線走勢圖（1 分鐘線，約近 3 小時），純 Canvas 繪製，
@@ -365,6 +389,13 @@ OKX 免費公開的歷史 K 線包一層；走勢圖每 20 秒自動重新抓取
 刷新，關閉就停止，不是背景輪詢），讓使用者不用手動重整就能看到最新收盤K線。走勢圖
 用的 1 分鐘週期跟訊號分析用的 `CANDLE_BAR`（預設 5 分鐘）是兩件互不影響的獨立設定——
 一個是「畫面看起來多即時」，一個是「策略邏輯用哪個週期判斷突破」。
+
+**走勢圖總覽**：「🎯 當沖訊號」主畫面的每張訊號卡片也各自畫一張小型走勢圖（同樣疊加
+停損/停利/進場參考線），不用逐檔點開詳情頁才看得到走勢，一次分析就能瀏覽監控清單
+全部商品的圖形。刻意設計成**靜態快照**（不像詳情頁那張大圖會每 20 秒自動刷新）——
+每次重新按「立即分析」或重新篩選才會更新，避免同時對監控清單全部商品開一堆定時
+輪詢；K 線本身雖是免費公開資料，但無節制地同時開好幾個 `setInterval` 對瀏覽器/伺服器
+都是不必要的負擔，想看即時更新的版本，點開該商品的詳情頁即可。
 
 ## 📊 歷史回測
 
@@ -382,6 +413,29 @@ OKX 歷史 K 線上逐根重播，統計勝率／平均獲利倍數（R）／獲
 可以互相對照。方法論精神參考 [gauss314/skills](https://github.com/gauss314/skills)
 的 `backtesting` skill（MIT License）——完整說明見
 `.claude/skills/backtest-strategy/SKILL.md`。
+
+**互動式參數回測實驗室**：詳情頁的回測區塊有一個「🔧 進階：調整回測參數」摺疊面板，
+可以直接改 EMA週期／盒子回看根數／停利1/2倍數／量能確認倍數，重新按「執行歷史回測」
+就會用這組參數重新跑，方便直接比較不同參數在同一檔商品上的歷史表現，不用改 `.env`
+重啟伺服器才能測試一組新參數。表單預設值來自 `/api/v1/config` 回傳的
+`backtest_defaults`，跟後端目前實際生效的參數一致。
+
+**批次回測排行榜**：「🎯 當沖訊號」主畫面新增「📊 對監控清單全部跑一次回測」按鈕
+（`POST /api/v1/backtest-all`），對監控清單（自動篩選出的 TOP_N 檔，不是全部商品
+總覽那兩三百檔）逐一跑歷史回測，依獲利因子排序，一次看出這套策略在哪些商品歷史
+表現最好。零 AI 成本，單一商品查不到K線就跳過，不讓一檔失敗擋住其他商品的結果。
+
+## 📨 訊號觸發通知（Telegram，選用）
+
+`telegram_notify.py`：新產生的「強烈多空共振」訊號（STRONG LONG/SHORT，也就是沒有
+被手續費/高週期趨勢/每日斷路器攔截成警告的那種）會主動推播一則 Telegram 訊息，不用
+一直開著網頁盯著看。沒設定 `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` 時完全停用、優雅
+跳過，不影響任何其他功能。
+
+建立方式：跟 Telegram 的 [@BotFather](https://t.me/BotFather) 對話建立一個 Bot 拿到
+Token；chat_id 最簡單的取得方式是先跟這個 Bot 隨便說一句話，再打開瀏覽器連到
+`https://api.telegram.org/bot<TOKEN>/getUpdates` 查回應裡的 `message.chat.id`，兩個
+都填進 `.env` 即可。
 
 ## 股票永續合約（Stock Perpetuals）支援狀況
 

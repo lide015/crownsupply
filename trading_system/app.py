@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai_coach, background, backtest, config, db, news_client, okx_client, position_sizing, stock_fundamentals
+from . import ai_coach, background, backtest, config, db, news_client, okx_client, outcome_tracker, position_sizing, stock_fundamentals
 from .state import STATE
 
 
@@ -52,6 +52,18 @@ class AnalyzeInstrumentRequest(BaseModel):
 
 class BacktestRequest(BaseModel):
     inst_id: str
+    bar: str | None = None
+    limit: int | None = None
+    # 互動式參數回測實驗室用：不帶就用 config.py 的預設值，帶了就用這組覆蓋，方便使用者
+    # 在網頁上直接試不同的 EMA週期/盒子回看根數/停利倍數/量能過濾門檻，即時比較回測結果。
+    ema_period: int | None = None
+    box_lookback: int | None = None
+    tp1_rr: float | None = None
+    tp2_rr: float | None = None
+    volume_confirm_multiple: float | None = None
+
+
+class BacktestAllRequest(BaseModel):
     bar: str | None = None
     limit: int | None = None
 
@@ -124,15 +136,28 @@ def _dashboard_payload() -> dict:
         "effective_min_amplitude_pct": STATE.effective_min_amplitude_pct,
         "market_pulse": STATE.market_pulse,
         "ranking": STATE.ranking,
+        "circuit_breaker": STATE.circuit_breaker,
         "disclaimer": "僅供訊號監控參考，非投資建議；本系統不執行任何自動化下單，也不會自動在背景分析。",
     }
 
 
 @app.get("/api/v1/config")
 async def frontend_config():
-    """給前端「知識宇宙」分頁用的公開設定——anon/publishable key 本來就設計成給前端直接
-    使用，不是密鑰，這裡回傳完全沒有資安疑慮（真正的機密如 service role key 從不會出現在這）。"""
-    return {"supabase_url": config.SUPABASE_URL, "supabase_anon_key": config.SUPABASE_ANON_KEY}
+    """給前端用的公開設定——anon/publishable key 本來就設計成給前端直接使用，不是密鑰，
+    這裡回傳完全沒有資安疑慮（真正的機密如 service role key 從不會出現在這）。
+    也一併回傳目前生效的策略參數預設值，給「互動式參數回測實驗室」的表單預填初始值用，
+    不用在前端另外寫死一份可能跟後端對不上的數字。"""
+    return {
+        "supabase_url": config.SUPABASE_URL,
+        "supabase_anon_key": config.SUPABASE_ANON_KEY,
+        "backtest_defaults": {
+            "ema_period": config.EMA_PERIOD,
+            "box_lookback": config.BOX_LOOKBACK,
+            "tp1_rr": config.TP1_RR,
+            "tp2_rr": config.TP2_RR,
+            "volume_confirm_multiple": config.VOLUME_CONFIRM_MULTIPLE,
+        },
+    }
 
 
 @app.get("/api/v1/health")
@@ -186,7 +211,12 @@ async def analyze_instrument(req: AnalyzeInstrumentRequest):
         [{"instId": item["instId"], "query": item["instId"].split("-")[0], "label": item["name"]}],
     )
     sentiment = news["by_instrument"].get(item["instId"], news["market"])
-    signal, _candles = await background.analyze_one_instrument(_http_client, item, sentiment, now_ms)
+    # 每日虧損斷路器獨立算一次（純讀 DB，零成本）——這是使用者自己點的單一商品分析，
+    # 不是走 `_refresh_signals` 那輪，一樣要套用同一個「今天」的斷路器狀態，標準不能兩套。
+    circuit_breaker = outcome_tracker.compute_daily_circuit_breaker(
+        db.get_resolved_today(now_ms), config.MAX_DAILY_LOSS_COUNT, config.MAX_DAILY_LOSS_R
+    )
+    signal, _candles = await background.analyze_one_instrument(_http_client, item, sentiment, now_ms, circuit_breaker)
     if signal is None:
         return JSONResponse(
             {"ok": False, "message": "這檔商品目前抓不到 K 線資料，稍後再試一次。"}, status_code=502
@@ -202,25 +232,86 @@ async def run_backtest_endpoint(req: BacktestRequest):
     """📊 歷史回測：把 strategy.py 的規則套在這檔商品「已經發生過」的歷史 K 線上重播，
     統計勝率/獲利因子/最大連續虧損（見 backtest.py 說明）。不呼叫任何 AI，只多打一次
     免費的 OKX 歷史 K 線查詢——用量可控，讓使用者不用等 outcome_tracker 累積出足夠的
-    「即時」樣本，就能先看到這套規則在過去一段歷史上表現如何。"""
+    「即時」樣本，就能先看到這套規則在過去一段歷史上表現如何。
+
+    ema_period/box_lookback/tp1_rr/tp2_rr/volume_confirm_multiple 都可以在請求裡覆蓋
+    掉 config.py 的預設值（互動式參數回測實驗室用）——不帶就照常用線上分析同一組參數。"""
     assert _http_client is not None
     bar = req.bar or config.CANDLE_BAR
     limit = min(req.limit or config.BACKTEST_CANDLE_LIMIT, config.BACKTEST_CANDLE_LIMIT)
+    ema_period = req.ema_period or config.EMA_PERIOD
+    box_lookback = req.box_lookback or config.BOX_LOOKBACK
+    tp1_rr = req.tp1_rr or config.TP1_RR
+    tp2_rr = req.tp2_rr or config.TP2_RR
+    volume_confirm_multiple = req.volume_confirm_multiple if req.volume_confirm_multiple is not None else config.VOLUME_CONFIRM_MULTIPLE
 
     try:
         candles = await okx_client.fetch_confirmed_candles(_http_client, req.inst_id, bar=bar, limit=limit)
     except Exception as exc:  # noqa: BLE001 — 單一商品查不到不該讓整個端點掛掉
         return JSONResponse({"ok": False, "message": f"抓不到 {req.inst_id} 的歷史 K 線：{exc}"}, status_code=502)
 
-    min_len = max(config.EMA_PERIOD, config.BOX_LOOKBACK + 1)
+    min_len = max(ema_period, box_lookback + 1)
     if len(candles) < min_len:
         return JSONResponse(
             {"ok": False, "message": f"這檔商品在 {bar} 週期只抓到 {len(candles)} 根已收盤K線，不夠跑一次完整的 EMA+盒子週期（至少要 {min_len} 根），換更長的K線週期再試一次。"},
             status_code=422,
         )
 
-    result = backtest.run_backtest(candles, config.EMA_PERIOD, config.BOX_LOOKBACK, config.TP1_RR, config.TP2_RR)
-    return {"ok": True, "inst_id": req.inst_id, "bar": bar, "candle_count": len(candles), **result}
+    result = backtest.run_backtest(candles, ema_period, box_lookback, tp1_rr, tp2_rr, volume_confirm_multiple)
+    return {
+        "ok": True, "inst_id": req.inst_id, "bar": bar, "candle_count": len(candles),
+        "params": {
+            "ema_period": ema_period, "box_lookback": box_lookback,
+            "tp1_rr": tp1_rr, "tp2_rr": tp2_rr, "volume_confirm_multiple": volume_confirm_multiple,
+        },
+        **result,
+    }
+
+
+@app.post("/api/v1/backtest-all")
+async def run_backtest_all_endpoint(req: BacktestAllRequest):
+    """📊 批次回測排行榜：對目前監控清單（`STATE.monitored`，自動篩選出的 TOP_N 檔）
+    逐一跑歷史回測，依獲利因子排序，一次看出「這套策略在哪些商品歷史表現最好」。
+
+    刻意**不是**對「全部商品總覽」（可能兩三百檔）跑，只對監控清單那幾檔——監控清單
+    本來就是通過成交額/振幅門檻篩選過的，回測這幾檔才有意義；全部商品一起跑不但慢，
+    大多數商品也早就被篩選機制排除在外，回測意義不大。單一商品查不到K線就跳過，不讓
+    一檔失敗擋住其他商品的結果。"""
+    assert _http_client is not None
+    if not STATE.monitored:
+        return {"ok": True, "results": [], "message": "目前沒有監控中的商品，請先按「立即分析」跑一輪。"}
+
+    bar = req.bar or config.CANDLE_BAR
+    limit = min(req.limit or config.BACKTEST_CANDLE_LIMIT, config.BACKTEST_CANDLE_LIMIT)
+    min_len = max(config.EMA_PERIOD, config.BOX_LOOKBACK + 1)
+
+    results = []
+    for item in STATE.monitored:
+        inst_id = item["instId"]
+        try:
+            candles = await okx_client.fetch_confirmed_candles(_http_client, inst_id, bar=bar, limit=limit)
+        except Exception as exc:  # noqa: BLE001 — 單一商品失敗不能拖垮整個排行榜
+            logger.warning("batch backtest candle fetch failed for %s: %s", inst_id, exc)
+            continue
+        if len(candles) < min_len:
+            continue
+        result = backtest.run_backtest(
+            candles, config.EMA_PERIOD, config.BOX_LOOKBACK, config.TP1_RR, config.TP2_RR,
+            config.VOLUME_CONFIRM_MULTIPLE,
+        )
+        if result["total_trades"] == 0:
+            continue
+        results.append({"inst_id": inst_id, "name": item["name"], "candle_count": len(candles), **result})
+
+    # 依獲利因子排序：沒有虧損交易（profit_factor=None）理論上表現最好，排最前面；
+    # 其餘依獲利因子由高到低排序。樣本數可能偏少，前端會另外顯示交易次數讓使用者自己
+    # 判斷參考價值，不會讓「剛好一筆全勝」的商品看起來比「10筆穩定正期望值」更可信。
+    def _sort_key(r):
+        pf = r["profit_factor"]
+        return (0, 0.0) if pf is None else (1, -pf)
+
+    results.sort(key=_sort_key)
+    return {"ok": True, "bar": bar, "results": results}
 
 
 @app.get("/api/v1/candles/{inst_id}")

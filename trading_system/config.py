@@ -29,6 +29,23 @@ CANDLE_LIMIT = int(os.getenv("CANDLE_LIMIT", "50"))
 # TP1 較近、可先減碼；TP2 較遠、留給趨勢延續的部位。
 TP1_RR = float(os.getenv("TP1_RR", "1.5"))
 TP2_RR = float(os.getenv("TP2_RR", "2.0"))
+# 量能突破確認：突破那根K線成交量要達到盒子回看窗平均量的這個倍數以上才算有效突破，
+# 過濾量能稀薄的雜訊假突破。設 0 代表完全不啟用（維持舊行為）。
+VOLUME_CONFIRM_MULTIPLE = float(os.getenv("VOLUME_CONFIRM_MULTIPLE", "1.1"))
+
+# ---- 多時間週期共振（見 strategy.compute_trend_bias / brain.fuse 的 htf_trend） ----
+# 5 分鐘線技術面突破時，另外抓一次更高週期的K線，確認大方向沒有明顯反向——逆著大趨勢
+# 做的短線突破特別容易被雜訊洗出場。零額外AI成本，只是多一次免費的OKX K線查詢。
+HTF_BAR = os.getenv("HTF_BAR", "1H")
+HTF_EMA_PERIOD = int(os.getenv("HTF_EMA_PERIOD", "20"))
+HTF_CANDLE_LIMIT = int(os.getenv("HTF_CANDLE_LIMIT", "50"))
+
+# ---- 每日虧損斷路器（見 outcome_tracker.compute_daily_circuit_breaker） ----
+# 今天已結算訊號觸及停損的次數達到這個數字，或今天累積R倍數低於 MAX_DAILY_LOSS_R，
+# 之後的新訊號一律標示「今日已達虧損上限」，不管技術面/新聞面/淨盈虧比再好看都攔截。
+# 任一項設成 0（次數）或 0 以上（R，門檻本身應該是負數）代表關閉那一項門檻。
+MAX_DAILY_LOSS_COUNT = int(os.getenv("MAX_DAILY_LOSS_COUNT", "3"))
+MAX_DAILY_LOSS_R = float(os.getenv("MAX_DAILY_LOSS_R", "-5.0"))
 
 # ---- 歷史回測（見 backtest.py：把策略規則套在過去的 K 線上重播統計） ----
 # OKX /market/candles 單次查詢上限 300 根；使用者可在前端選更短的 K 線週期（bar）
@@ -42,6 +59,14 @@ TAKER_FEE_PCT = float(os.getenv("TAKER_FEE_PCT", "0.05"))
 # 淨盈虧比（扣完來回手續費後）至少要達到這個倍數才算「值得進場」；沒有達到就算技術面
 # 突破、新聞情緒也共振，一樣會被系統標示為「手續費侵蝕獲利」，提醒不要冒險進場。
 MIN_NET_RR = float(os.getenv("MIN_NET_RR", "1.0"))
+
+# ---- 訊號觸發通知（Telegram，見 telegram_notify.py） ----
+# 建立方式：跟 Telegram 的 @BotFather 對話建立一個 Bot 拿到 Token；chat_id 最簡單的
+# 取得方式是先跟這個 Bot 隨便說一句話，再打開瀏覽器連到
+# https://api.telegram.org/bot<TOKEN>/getUpdates 查回應裡的 message.chat.id。
+# 兩個都留空（預設）就完全停用，不影響任何其他功能，也不會嘗試發送任何請求。
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # ---- 知識宇宙前端用（見 knowledge_universe/README.md）----
 # anon/publishable key 設計上就是給前端直接使用的公開金鑰，不是密鑰，預設值可以直接寫在這裡；

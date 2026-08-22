@@ -232,6 +232,27 @@ def set_oi_snapshot(inst_id: str, oi: float, oi_ccy: float, updated_at: int):
         conn.close()
 
 
+def get_resolved_today(now_ms: int) -> list[dict]:
+    """給「每日虧損斷路器」用（見 background.py `_compute_circuit_breaker` 說明）：
+    「今天」以 now_ms 所在的 UTC 日曆日為準（day_start_ms 到隔天 00:00 之間結算的訊號），
+    不做使用者所在時區的轉換——這跟資料庫裡 created_at/resolved_at 儲存的 epoch ms
+    本來就是 UTC 時間戳一致，避免額外猜測使用者時區反而讓「今天」的邊界對不上。
+    只回傳 entry_price/stop_loss/resolution/resolution_price（斷路器只需要算 R 倍數），
+    跟 get_resolved_trades_for_kelly 給的欄位一致，方便共用 outcome_tracker 的計算邏輯。"""
+    conn = get_connection()
+    try:
+        day_start_ms = (now_ms // 86_400_000) * 86_400_000
+        day_end_ms = day_start_ms + 86_400_000
+        rows = conn.execute(
+            "SELECT entry_price, stop_loss, resolution, resolution_price "
+            "FROM signal_history WHERE resolution != 'open' AND resolved_at >= ? AND resolved_at < ?",
+            (day_start_ms, day_end_ms),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 def get_all_previous_oi() -> dict[str, float]:
     """跟 get_previous_oi 同樣的用途，但一次撈出「全部」商品的上一輪 OI 快照，給熱力圖
     的「📌 持倉」模式用——現在要同時比較全部合約（可能兩三百檔）的 OI 變化，逐檔各開一次
@@ -360,6 +381,44 @@ if __name__ == "__main__":
         # 空清單不該炸掉，也不該建立任何連線副作用
         set_oi_snapshots_bulk([], updated_at=7000)
         check("set_oi_snapshots_bulk with empty list is a no-op", len(get_all_previous_oi()), 2)
+
+        # get_resolved_today：每日虧損斷路器用的查詢——day_start_ms 當天（含邊界）算「今天」，
+        # 前一天最後一毫秒不算，跟「今天」之後幾小時的正常情況都要驗證到。
+        day_start_ms = 100 * 86_400_000
+        today_id = insert_signal({
+            "inst_id": "XRP-USDT-SWAP", "name": "XRP-USDT", "asset_class": "crypto",
+            "signal_type": "long", "created_at": day_start_ms - 5000, "entry_price": 1.0,
+            "stop_loss": 0.95, "take_profit_1": 1.1, "take_profit_2": 1.2,
+            "ema": 0.98, "box_high": 1.01, "box_low": 0.99,
+            "ai_sentiment": "NEUTRAL", "action_label": "做多", "color": "green",
+        })
+        resolve_signal(today_id, "hit_sl", day_start_ms, 0.95, None)  # 剛好在邊界上 -> 算今天
+
+        today_id_2 = insert_signal({
+            "inst_id": "XRP-USDT-SWAP", "name": "XRP-USDT", "asset_class": "crypto",
+            "signal_type": "long", "created_at": day_start_ms, "entry_price": 1.0,
+            "stop_loss": 0.95, "take_profit_1": 1.1, "take_profit_2": 1.2,
+            "ema": 0.98, "box_high": 1.01, "box_low": 0.99,
+            "ai_sentiment": "NEUTRAL", "action_label": "做多", "color": "green",
+        })
+        resolve_signal(today_id_2, "hit_sl", day_start_ms + 3_600_000, 0.95, None)  # 今天中午 -> 算今天
+
+        yesterday_id = insert_signal({
+            "inst_id": "XRP-USDT-SWAP", "name": "XRP-USDT", "asset_class": "crypto",
+            "signal_type": "long", "created_at": day_start_ms - 10000, "entry_price": 1.0,
+            "stop_loss": 0.95, "take_profit_1": 1.1, "take_profit_2": 1.2,
+            "ema": 0.98, "box_high": 1.01, "box_low": 0.99,
+            "ai_sentiment": "NEUTRAL", "action_label": "做多", "color": "green",
+        })
+        resolve_signal(yesterday_id, "hit_sl", day_start_ms - 1, 0.95, None)  # 前一天最後一毫秒 -> 不算今天
+
+        resolved_today = get_resolved_today(day_start_ms + 7_200_000)  # 今天下午 2 點呼叫
+        check("get_resolved_today includes boundary + same-day rows only", len(resolved_today), 2)
+        check("get_resolved_today rows carry the fields needed for R-multiple math",
+              set(resolved_today[0].keys()), {"entry_price", "stop_loss", "resolution", "resolution_price"})
+
+        check("get_resolved_today on a day with nothing resolved returns empty list",
+              get_resolved_today(day_start_ms - 30 * 86_400_000), [])
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

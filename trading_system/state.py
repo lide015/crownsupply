@@ -34,6 +34,9 @@ class SystemState:
         }
         # 推薦強度榜（見 ranking.py）：做多/做空各自依四維度總分排序
         self.ranking: dict = {"long": [], "short": []}
+        # 每日虧損斷路器（見 outcome_tracker.compute_daily_circuit_breaker）：今天已結算
+        # 訊號有沒有觸及虧損上限，前端用這個顯示「今日戰績」跟斷路器是否啟動。
+        self.circuit_breaker: dict = {"active": False, "reason": None, "loss_count": 0, "total_r": 0.0}
 
 
 STATE = SystemState()

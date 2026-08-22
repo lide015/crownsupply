@@ -12,7 +12,14 @@ COLOR_YELLOW = "yellow"
 COLOR_BLUE = "blue"
 
 
-def fuse(tech: dict | None, sentiment: dict, fee_info: dict | None = None, min_net_rr: float = 1.0) -> dict:
+def fuse(
+    tech: dict | None,
+    sentiment: dict,
+    fee_info: dict | None = None,
+    min_net_rr: float = 1.0,
+    htf_trend: str | None = None,
+    circuit_breaker: dict | None = None,
+) -> dict:
     """tech: strategy.compute_signal() 的回傳值（可能是 None）。
     sentiment: 一個帶 "sentiment" 欄位的 dict——實際上是 news_client.get_market_and_instrument_sentiment()
     裡「這一檔商品」對應的判讀結果（沒有專屬新聞時已 fallback 成整體市場判斷），也相容
@@ -22,8 +29,33 @@ def fuse(tech: dict | None, sentiment: dict, fee_info: dict | None = None, min_n
     是比純技術面/新聞面共振更後面一關的把關：就算技術面突破、新聞情緒也共振，如果
     停損盒子窄到手續費會吃光大半停利1的獲利，一樣要老實攔截，不能讓使用者衝進一筆
     「看對方向也賺不到錢」的交易。
+    htf_trend: strategy.compute_trend_bias() 在更高週期（例如1小時線）算出來的大方向
+    （"up"/"down"/None）——技術面在 5 分鐘線突破，但更高週期的大方向明確反向時，這種
+    逆勢短線突破特別容易被雜訊洗出場，一樣要攔截成警告，不是直接當作強訊號。
+    circuit_breaker: {"active": bool, "reason": str}（可能是 None，代表不啟用這個機制）——
+    「今天」已經連續虧損/累積虧損達到使用者自訂上限時，不管這筆訊號技術面/新聞面/淨盈虧比
+    再怎麼漂亮，都優先攔截成「今日建議停止交易」，這是跟單一訊號品質無關、更上層的紀律
+    把關，所以擺在所有判斷「最前面」，連「觀望中」都會被它取代（讓使用者一眼就知道今天
+    為什麼要停手，而不是看到一堆「觀望中」不知道原因）。
     回傳 {"action": str, "color": str, "reason": str}。"""
+    if circuit_breaker and circuit_breaker.get("active"):
+        return {
+            "action": "🛑 今日已達虧損上限 (DAILY LIMIT)",
+            "color": COLOR_YELLOW,
+            "reason": circuit_breaker.get("reason") or "今日累積虧損已達自訂上限，建議停止交易、等明天重新評估。",
+        }
+
     if tech is None or tech.get("signal") is None:
+        if tech is not None and tech.get("blocked_by_volume"):
+            return {
+                "action": "⚠️ 量能不足，暫不觸發 (WEAK VOLUME)",
+                "color": COLOR_YELLOW,
+                "reason": (
+                    f"價格站穩盒子邊界、也符合 20 EMA 方向，但這根K線成交量"
+                    f"（{tech.get('current_vol')}）沒有明顯放大（近期均量 {tech.get('avg_vol')}），"
+                    "真正有動能的突破通常伴隨量能放大，量能不足的突破容易是雜訊假突破，暫不觸發訊號。"
+                ),
+            }
         return {
             "action": "觀望中",
             "color": COLOR_GRAY,
@@ -45,6 +77,17 @@ def fuse(tech: dict | None, sentiment: dict, fee_info: dict | None = None, min_n
 
     mood = sentiment.get("sentiment", "NEUTRAL")
     signal = tech["signal"]
+
+    if (htf_trend == "down" and signal == "long") or (htf_trend == "up" and signal == "short"):
+        return {
+            "action": "⚠️ 高週期趨勢逆向，觀望 (HTF CONFLICT)",
+            "color": COLOR_YELLOW,
+            "reason": (
+                f"5分鐘線技術面{'突破' if signal == 'long' else '跌破'}，但更高週期的大方向是"
+                f"{'下跌' if htf_trend == 'down' else '上漲'}——逆著大方向做的短線突破特別容易被"
+                "回歸主趨勢的走勢洗出場，系統攔截以避免逆勢操作。"
+            ),
+        }
 
     if signal == "long":
         if mood == "BULLISH":
@@ -125,6 +168,45 @@ if __name__ == "__main__":
     check("healthy net_rr -> normal STRONG LONG logic applies", ok_result["color"], COLOR_GREEN)
 
     check("fee_info=None -> unaffected (backward compatible)", fuse(long_tech, {"sentiment": "BULLISH"}, fee_info=None)["color"], COLOR_GREEN)
+
+    # 量能不足：技術面有效突破（signal 已經是 None，因為 strategy.py 那邊被量能過濾擋掉了），
+    # 但 blocked_by_volume=True 時要給具體理由，不是含糊的「觀望中」。
+    weak_vol_tech = {"signal": None, "blocked_by_volume": True, "current_vol": 500.0, "avg_vol": 1000.0}
+    weak_vol_result = fuse(weak_vol_tech, {"sentiment": "NEUTRAL"})
+    check("blocked_by_volume -> WEAK VOLUME action", "WEAK VOLUME" in weak_vol_result["action"], True)
+    check("blocked_by_volume -> yellow (not gray 觀望中)", weak_vol_result["color"], COLOR_YELLOW)
+
+    check("no breakout at all (blocked_by_volume False) -> plain 觀望中",
+          fuse({"signal": None, "blocked_by_volume": False}, {"sentiment": "NEUTRAL"})["action"], "觀望中")
+
+    # 多時間週期共振：5分鐘突破做多，但高週期趨勢是下跌 -> 攔截；同向則不受影響
+    htf_conflict = fuse(long_tech, {"sentiment": "BULLISH"}, htf_trend="down")
+    check("long signal + htf_trend down -> HTF CONFLICT blocked", "HTF CONFLICT" in htf_conflict["action"], True)
+    check("htf conflict -> yellow", htf_conflict["color"], COLOR_YELLOW)
+
+    htf_aligned = fuse(long_tech, {"sentiment": "BULLISH"}, htf_trend="up")
+    check("long signal + htf_trend up (aligned) -> normal STRONG LONG", htf_aligned["color"], COLOR_GREEN)
+
+    check("htf_trend=None -> unaffected (backward compatible)",
+          fuse(long_tech, {"sentiment": "BULLISH"}, htf_trend=None)["color"], COLOR_GREEN)
+
+    short_htf_conflict = fuse(short_tech, {"sentiment": "BEARISH"}, htf_trend="up")
+    check("short signal + htf_trend up -> HTF CONFLICT blocked", "HTF CONFLICT" in short_htf_conflict["action"], True)
+
+    # 每日虧損斷路器：優先於一切，就算技術面/新聞面完美共振也一樣攔截
+    breaker_active = {"active": True, "reason": "今天已經連續 3 筆停損"}
+    breaker_result = fuse(long_tech, {"sentiment": "BULLISH"}, circuit_breaker=breaker_active)
+    check("circuit breaker active -> DAILY LIMIT overrides everything", "DAILY LIMIT" in breaker_result["action"], True)
+    check("circuit breaker reason is passed through", "連續 3 筆停損" in breaker_result["reason"], True)
+
+    # 斷路器也要能覆蓋「連 tech 都是 None」的情況（比單純的「觀望中」更有資訊量）
+    breaker_no_tech = fuse(None, {"sentiment": "NEUTRAL"}, circuit_breaker=breaker_active)
+    check("circuit breaker overrides even when tech is None", "DAILY LIMIT" in breaker_no_tech["action"], True)
+
+    check("circuit_breaker inactive dict -> no effect (backward compatible)",
+          fuse(long_tech, {"sentiment": "BULLISH"}, circuit_breaker={"active": False, "reason": None})["color"], COLOR_GREEN)
+    check("circuit_breaker=None -> no effect (backward compatible)",
+          fuse(long_tech, {"sentiment": "BULLISH"}, circuit_breaker=None)["color"], COLOR_GREEN)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

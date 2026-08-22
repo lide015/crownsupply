@@ -154,6 +154,13 @@
       ⚙️ <span id="tuning-note"></span>
     </div>
 
+    <div id="circuit-breaker-banner" class="hidden bg-red-950/40 border border-red-800/60 text-red-300 text-xs px-4 py-3 rounded-lg">
+      🛑 <span id="circuit-breaker-note"></span>
+    </div>
+    <div id="circuit-breaker-ok-banner" class="hidden bg-gray-900 border border-gray-800 text-gray-500 text-xs px-4 py-3 rounded-lg">
+      📋 今日戰績：<span id="circuit-breaker-tally"></span>
+    </div>
+
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg space-y-3">
       <div class="flex items-center justify-between">
         <h2 class="text-base font-semibold text-gray-200 flex items-center border-l-2 border-amber-500/70 pl-3">
@@ -191,6 +198,24 @@
             <div class="text-xs text-gray-500">尚無符合條件的做空訊號</div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h2 class="text-base font-semibold text-gray-200 flex items-center border-l-2 border-amber-500/70 pl-3">
+          <span class="mr-2">📊</span> 批次回測排行榜
+        </h2>
+        <button id="backtest-all-btn"
+          class="px-3 py-1.5 text-xs font-bold rounded-full border border-teal-800 text-teal-400 hover:bg-teal-950/30
+                 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">📊 對監控清單全部跑一次回測（零 AI 成本）</button>
+      </div>
+      <p class="text-xs text-gray-500 leading-relaxed">
+        對目前監控清單（自動篩選出的那幾檔，不是全部商品總覽）逐一跑歷史回測，依獲利因子排序，
+        一次看出這套策略在哪些商品歷史表現最好。零 AI 成本，只多打幾次免費的 OKX 歷史K線查詢。
+      </p>
+      <div id="backtest-all-results" class="space-y-2">
+        <div class="text-xs text-gray-500">按上面按鈕開始批次回測。</div>
       </div>
     </section>
 
@@ -467,6 +492,28 @@
         <div id="inst-modal-backtest" class="bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs space-y-2"></div>
       </div>
 
+      <details class="bg-gray-950 border border-gray-800 rounded-lg">
+        <summary class="cursor-pointer select-none px-3 py-2 text-xs text-gray-400 font-semibold">🔧 進階：調整回測參數（互動式實驗室）</summary>
+        <div class="px-3 pb-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+          <label class="block text-gray-500">EMA週期
+            <input id="bt-param-ema" type="number" min="2" step="1" class="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-200 font-mono" />
+          </label>
+          <label class="block text-gray-500">盒子回看根數
+            <input id="bt-param-box" type="number" min="2" step="1" class="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-200 font-mono" />
+          </label>
+          <label class="block text-gray-500">停利1倍數
+            <input id="bt-param-tp1" type="number" min="0.1" step="0.1" class="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-200 font-mono" />
+          </label>
+          <label class="block text-gray-500">停利2倍數
+            <input id="bt-param-tp2" type="number" min="0.1" step="0.1" class="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-200 font-mono" />
+          </label>
+          <label class="block text-gray-500">量能確認倍數
+            <input id="bt-param-vol" type="number" min="0" step="0.1" class="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-200 font-mono" />
+          </label>
+        </div>
+        <p class="px-3 pb-3 text-[10px] text-gray-600 leading-relaxed">量能確認倍數設 0 代表不啟用量能過濾。調整後按下面「執行歷史回測」會用這組參數重新跑，方便直接比較不同參數在這檔商品上的歷史表現。</p>
+      </details>
+
       <button id="inst-modal-analyze-btn"
         class="w-full text-sm px-3 py-2 rounded-lg border border-amber-800 text-amber-400 hover:bg-amber-950/30
                transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed">🔍 執行完整技術＋AI分析</button>
@@ -571,6 +618,34 @@ function renderTuningBanner(note) {
   }
 }
 
+/* 🛑 每日虧損斷路器：觸發時顯示紅色警告（蓋過所有訊號卡片本來會顯示的內容，見
+   brain.fuse() 的 DAILY LIMIT 優先序）；沒觸發但今天有結算紀錄時，顯示中性的
+   「今日戰績」讓使用者知道目前累積 R 倍數，不是只有觸發時才看得到數字。*/
+function renderCircuitBreakerBanner(cb) {
+  const activeBanner = document.getElementById("circuit-breaker-banner");
+  const okBanner = document.getElementById("circuit-breaker-ok-banner");
+  if (!cb) {
+    activeBanner.classList.add("hidden");
+    okBanner.classList.add("hidden");
+    return;
+  }
+  if (cb.active) {
+    document.getElementById("circuit-breaker-note").textContent = cb.reason || "今日已達虧損上限，建議停止交易。";
+    activeBanner.classList.remove("hidden");
+    okBanner.classList.add("hidden");
+  } else {
+    activeBanner.classList.add("hidden");
+    if (cb.loss_count > 0 || cb.total_r !== 0) {
+      const rCls = cb.total_r >= 0 ? "text-green-400" : "text-red-400";
+      document.getElementById("circuit-breaker-tally").innerHTML =
+        `今天觸及停損 ${cb.loss_count} 次，累積R倍數 <span class="${rCls} font-mono font-bold">${cb.total_r}</span>`;
+      okBanner.classList.remove("hidden");
+    } else {
+      okBanner.classList.add("hidden");
+    }
+  }
+}
+
 function renderWinRate(stats) {
   const badge = document.getElementById("win-rate-badge");
   if (!stats || stats.total === 0) {
@@ -659,6 +734,7 @@ function renderDashboard(data) {
   document.getElementById("news-reason").textContent = data.news_reason || "";
 
   renderTuningBanner(data.tuning_note);
+  renderCircuitBreakerBanner(data.circuit_breaker);
   renderWinRate(data.win_rate_stats);
   renderResolvedList(data.recent_resolved);
   renderKellySuggestion(data.kelly_suggestion);
@@ -762,6 +838,9 @@ function renderSignalsList() {
         </span>
         <span class="px-3 py-1.5 text-xs font-bold rounded-full ${style.badge} whitespace-nowrap shadow-sm">${sig.action}</span>
       </div>
+      <div class="bg-gray-950 rounded-lg border border-gray-800 p-1.5">
+        <canvas id="mini-chart-${sig.instId}" class="w-full block" style="height:100px;"></canvas>
+      </div>
       <div class="grid grid-cols-3 gap-2 text-xs font-mono bg-gray-950 p-3 rounded-lg border border-gray-800">
         <div class="text-gray-400">20 EMA <span class="text-amber-400 block">${fmt(sig.ema)}</span></div>
         <div class="text-gray-400">盒子高點 <span class="text-green-400 block">${fmt(sig.box_high)}</span></div>
@@ -789,6 +868,33 @@ function renderSignalsList() {
     card.querySelector(".watchlist-star-btn").addEventListener("click", () => toggleWatchlist(sig.instId));
     container.appendChild(card);
   }
+
+  // 📈 走勢圖總覽：每張卡片各自畫一張小型K線圖，一次分析就能看到監控清單全部商品的
+  // 走勢，不用逐檔點開詳情頁。這裡是「靜態快照」——不像詳情頁那張大圖會自動定時刷新，
+  // 每次重新按「立即分析」或重新篩選才會更新，避免同時對監控清單全部商品開一堆定時
+  // 輪詢，跟這個系統「手動觸發、用量自己掌控」的精神一致（K線本身雖是免費公開資料，
+  // 但同時開好幾個 setInterval 對瀏覽器/伺服器都是不必要的負擔）。
+  loadAllSignalCardCharts(filtered);
+}
+
+async function loadAllSignalCardCharts(signals) {
+  await Promise.all(signals.map(async (sig) => {
+    const canvas = document.getElementById(`mini-chart-${sig.instId}`);
+    if (!canvas) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/candles/${encodeURIComponent(sig.instId)}?bar=${CHART_BAR}&limit=${CHART_CANDLE_LIMIT}`);
+      const body = await res.json();
+      if (!res.ok || !body.ok) return;
+      drawCandlestickChart(canvas, body.candles, {
+        stopLoss: sig.signal_type ? sig.stop_loss : null,
+        takeProfit1: sig.signal_type ? sig.take_profit_1 : null,
+        takeProfit2: sig.signal_type ? sig.take_profit_2 : null,
+        entryPrice: sig.signal_type ? sig.price : null,
+      });
+    } catch (err) {
+      console.error(`mini chart failed for ${sig.instId}:`, err);
+    }
+  }));
 }
 
 /* ---------------------------------------------------------------- */
@@ -1254,6 +1360,14 @@ function renderInstrumentModal(data) {
   backtestBtn.textContent = "📊 執行歷史回測（零 AI 成本）";
   backtestBtn.onclick = () => runBacktestFromModal(basic.instId);
 
+  // 🔧 互動式回測參數實驗室：每次開啟新商品的詳情頁都重新用目前的預設值填一次輸入框，
+  // 讓使用者從「系統目前實際生效」的參數開始調，而不是每次都殘留上一檔商品試過的數字。
+  document.getElementById("bt-param-ema").value = backtestDefaults.ema_period;
+  document.getElementById("bt-param-box").value = backtestDefaults.box_lookback;
+  document.getElementById("bt-param-tp1").value = backtestDefaults.tp1_rr;
+  document.getElementById("bt-param-tp2").value = backtestDefaults.tp2_rr;
+  document.getElementById("bt-param-vol").value = backtestDefaults.volume_confirm_multiple;
+
   // 📈 K線走勢圖：疊加線一律直接讀 signal 已經算好、畫面其他地方也在用的同一組數字
   // （停損/停利/進場價），不會另外算一套可能兜不起來的版本——「重點資訊要正確」的
   // 前提就是只有一份真相來源。沒有訊號方向時（signal 是 null 或 signal_type 是 null）
@@ -1269,6 +1383,24 @@ function renderInstrumentModal(data) {
 /* ---------------------------------------------------------------- */
 /* 📊 歷史回測（詳情頁按鈕觸發，POST /api/v1/backtest，零 AI 成本）       */
 /* ---------------------------------------------------------------- */
+/* 讀取「進階：調整回測參數」表單目前的值——輸入框空白或打了非數字就回傳 null，
+   讓後端沿用 config.py 的預設值，不會因為使用者清空欄位就送出一個無效的請求。 */
+function _readBacktestParamOverrides() {
+  const readNum = (id) => {
+    const raw = document.getElementById(id).value;
+    if (raw === "" || raw === null) return null;
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  return {
+    ema_period: readNum("bt-param-ema"),
+    box_lookback: readNum("bt-param-box"),
+    tp1_rr: readNum("bt-param-tp1"),
+    tp2_rr: readNum("bt-param-tp2"),
+    volume_confirm_multiple: readNum("bt-param-vol"),
+  };
+}
+
 async function runBacktestFromModal(instId) {
   const btn = document.getElementById("inst-modal-backtest-btn");
   const wrap = document.getElementById("inst-modal-backtest-wrap");
@@ -1279,7 +1411,7 @@ async function runBacktestFromModal(instId) {
     const res = await fetch(`${API_BASE}/api/v1/backtest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ inst_id: instId }),
+      body: JSON.stringify({ inst_id: instId, ..._readBacktestParamOverrides() }),
     });
     const body = await res.json();
     if (!res.ok || !body.ok) throw new Error(body.message || "回測失敗，請稍後再試。");
@@ -1294,9 +1426,14 @@ async function runBacktestFromModal(instId) {
   }
 }
 
+function _backtestParamsLineHtml(params) {
+  if (!params) return "";
+  return `<div class="text-gray-600">這次用的參數：EMA${params.ema_period}／盒子${params.box_lookback}根／TP1×${params.tp1_rr}／TP2×${params.tp2_rr}／量能確認${params.volume_confirm_multiple > 0 ? `×${params.volume_confirm_multiple}` : "未啟用"}</div>`;
+}
+
 function renderBacktestResultHtml(data) {
   if (data.total_trades === 0) {
-    return `<div class="text-gray-500">過去 ${data.candle_count} 根 ${data.bar} K 線裡，這套策略規則沒有觸發任何一次完整交易（可能盤整太久，或訊號還沒走完就到資料尾端）。</div>`;
+    return `<div class="text-gray-500">過去 ${data.candle_count} 根 ${data.bar} K 線裡，這套策略規則沒有觸發任何一次完整交易（可能盤整太久，或訊號還沒走完就到資料尾端）。</div>${_backtestParamsLineHtml(data.params)}`;
   }
   const winRateCls = data.win_rate_pct >= 50 ? "text-green-400" : "text-red-400";
   const avgRCls = data.avg_r_multiple >= 0 ? "text-green-400" : "text-red-400";
@@ -1310,8 +1447,56 @@ function renderBacktestResultHtml(data) {
       <div class="text-gray-400">勝/敗 <span class="text-white block font-bold">${data.wins}/${data.losses}</span></div>
     </div>
     <div class="text-gray-600">回測範圍：過去 ${data.candle_count} 根 ${data.bar} K 線（OKX 單次查詢上限）。</div>
+    ${_backtestParamsLineHtml(data.params)}
     <p class="text-yellow-500/70">⚠️ 歷史表現不保證未來結果，樣本數（${data.total_trades} 筆）越少參考價值越低，僅供策略評估參考，不是投資建議。</p>`;
 }
+
+/* ---------------------------------------------------------------- */
+/* 📊 批次回測排行榜（POST /api/v1/backtest-all，零 AI 成本）             */
+/* ---------------------------------------------------------------- */
+async function runBacktestAll() {
+  const btn = document.getElementById("backtest-all-btn");
+  const resultsEl = document.getElementById("backtest-all-results");
+  btn.disabled = true;
+  btn.textContent = "⏳ 批次回測中…";
+  resultsEl.innerHTML = `<div class="text-xs text-gray-500">正在對監控清單逐一跑歷史回測，請稍候…</div>`;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/backtest-all`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const body = await res.json();
+    if (!res.ok || !body.ok) throw new Error(body.message || "批次回測失敗，請稍後再試。");
+    if (body.message) {
+      resultsEl.innerHTML = `<div class="text-xs text-gray-500">${body.message}</div>`;
+    } else if (!body.results.length) {
+      resultsEl.innerHTML = `<div class="text-xs text-gray-500">監控清單裡的商品目前都沒有觸發任何一次完整交易（可能盤整太久），暫時沒有排行榜可以顯示。</div>`;
+    } else {
+      resultsEl.innerHTML = body.results.map(renderBacktestAllRowHtml).join("");
+    }
+  } catch (err) {
+    resultsEl.innerHTML = `<div class="text-xs text-red-400">${err.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "📊 對監控清單全部跑一次回測（零 AI 成本）";
+  }
+}
+
+function renderBacktestAllRowHtml(r, idx) {
+  const medal = RANK_MEDALS[idx] || `#${idx + 1}`;
+  const winRateCls = r.win_rate_pct >= 50 ? "text-green-400" : "text-red-400";
+  return `
+    <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
+      <span class="text-sm font-bold text-white flex items-center gap-1.5 font-sans">
+        <span class="text-base">${medal}</span>${r.name}
+      </span>
+      <div class="flex items-center gap-4 flex-wrap">
+        <span class="text-gray-500">交易 <span class="text-white">${r.total_trades}</span></span>
+        <span class="text-gray-500">勝率 <span class="${winRateCls}">${r.win_rate_pct}%</span></span>
+        <span class="text-gray-500">獲利因子 <span class="text-white">${r.profit_factor != null ? r.profit_factor : "—"}</span></span>
+        <span class="text-gray-500">平均R <span class="text-white">${r.avg_r_multiple}</span></span>
+      </div>
+    </div>`;
+}
+
+document.getElementById("backtest-all-btn").addEventListener("click", runBacktestAll);
 
 /* ---------------------------------------------------------------- */
 /* 📈 K線走勢圖（詳情頁自動載入 + 定時刷新，零 AI 成本；純 Canvas 繪製，  */
@@ -1697,6 +1882,22 @@ async function loadLastResult() {
   }
 }
 
+/* 🔧 互動式參數回測實驗室的預設值——內建這組數字只是「連不上後端時的最後防線」，
+   正常情況下一律以 /api/v1/config 回傳的 backend_defaults 為準，兩邊要對得起來
+   不用另外維護一份可能兜不起來的數字。 */
+let backtestDefaults = { ema_period: 20, box_lookback: 15, tp1_rr: 1.5, tp2_rr: 2.0, volume_confirm_multiple: 1.1 };
+
+async function loadBacktestDefaults() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/config`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    if (body.backtest_defaults) backtestDefaults = body.backtest_defaults;
+  } catch (err) {
+    console.error("讀取回測預設參數失敗，沿用內建預設值：", err);
+  }
+}
+
 async function runAnalysis() {
   const btn = document.getElementById("analyze-btn");
   const icon = document.getElementById("analyze-btn-icon");
@@ -1736,6 +1937,7 @@ document.getElementById("all-instruments-search").addEventListener("input", debo
   renderAllInstrumentsHeatmap();
 }, 200));
 loadLastResult();
+loadBacktestDefaults();
 
 /* ---------------------------------------------------------------- */
 /* 知識宇宙分頁 —— 直接用 fetch 打 Supabase REST API（PostgREST），      */

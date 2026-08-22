@@ -105,6 +105,52 @@ def compute_average_win_r_multiple(resolved_rows: list[dict]) -> float | None:
     return sum(win_r_multiples) / len(win_r_multiples)
 
 
+def compute_daily_circuit_breaker(resolved_today: list[dict], max_loss_count: int, max_loss_r: float) -> dict:
+    """每日虧損斷路器：今天（db.get_resolved_today 篩出來的當天已結算訊號，格式跟
+    get_resolved_trades_for_kelly 一致）有沒有觸發「建議停止交易」。
+
+    兩個獨立門檻，任一個先達到就觸發（保守起見，不用等兩項都超標）：
+    - max_loss_count：今天觸及停損（hit_sl）的次數達到這個數字。
+    - max_loss_r：今天已結算訊號的 R 倍數加總（贏的算實際獲利倍數、輸的固定算 -1R，
+      跟 fee_calc/backtest.py 同一套算法）低於這個值——這個值本身應該是負數（例如 -5.0）。
+
+    max_loss_count <= 0 或 max_loss_r >= 0 代表使用者關閉了對應那一項門檻（不會誤觸發、
+    也不會因為設定成 0 這種邊界值而動不動就觸發）。
+
+    回傳 {"active": bool, "reason": str|None, "loss_count": int, "total_r": float}——
+    total_r/loss_count 就算沒觸發也會回傳，前端可以拿來做「今日戰績」的顯示，不是只有
+    觸發時才有數字。"""
+    loss_count = sum(1 for r in resolved_today if r["resolution"] == "hit_sl")
+
+    total_r = 0.0
+    for r in resolved_today:
+        risk = abs(r["entry_price"] - r["stop_loss"])
+        if risk <= 0:
+            continue
+        if r["resolution"] == "hit_sl":
+            total_r -= 1.0
+        else:
+            reward = abs(r["resolution_price"] - r["entry_price"])
+            total_r += reward / risk
+    total_r = round(total_r, 3)
+
+    if max_loss_count > 0 and loss_count >= max_loss_count:
+        return {
+            "active": True,
+            "reason": f"今天已經觸及停損 {loss_count} 次（達到上限 {max_loss_count} 次），累積R倍數 {total_r}，建議停止交易、等明天重新評估。",
+            "loss_count": loss_count,
+            "total_r": total_r,
+        }
+    if max_loss_r < 0 and total_r <= max_loss_r:
+        return {
+            "active": True,
+            "reason": f"今天已結算訊號的累積R倍數是 {total_r}（低於上限 {max_loss_r}R），建議停止交易、等明天重新評估。",
+            "loss_count": loss_count,
+            "total_r": total_r,
+        }
+    return {"active": False, "reason": None, "loss_count": loss_count, "total_r": total_r}
+
+
 if __name__ == "__main__":
     _passed = 0
     _total = 0
@@ -191,6 +237,50 @@ if __name__ == "__main__":
 
     # 15) compute_average_win_r_multiple -- 空清單 -> None
     check("empty rows -> None", compute_average_win_r_multiple([]), None)
+
+    # 16) compute_daily_circuit_breaker -- 今天連續 3 次停損（達到次數上限）-> 觸發
+    losses_only = [
+        {"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_sl", "resolution_price": 95.0},
+        {"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_sl", "resolution_price": 95.0},
+        {"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_sl", "resolution_price": 95.0},
+    ]
+    breaker = compute_daily_circuit_breaker(losses_only, max_loss_count=3, max_loss_r=-999.0)
+    check("3 losses hits max_loss_count=3 -> active", breaker["active"], True)
+    check("loss_count counted correctly", breaker["loss_count"], 3)
+    check("total_r is -3.0 (three -1R losses)", breaker["total_r"], -3.0)
+
+    # 17) 還沒到次數上限 -> 不觸發
+    two_losses = losses_only[:2]
+    check("2 losses below max_loss_count=3 -> inactive",
+          compute_daily_circuit_breaker(two_losses, max_loss_count=3, max_loss_r=-999.0)["active"], False)
+
+    # 18) 累積 R 倍數門檻：次數沒到但虧損倍數夠大一樣觸發（hit_sl 固定算 -1R，用累積
+    # 多筆達到 R 門檻來模擬）
+    accumulating_losses = [
+        {"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_sl", "resolution_price": 95.0},
+        {"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_sl", "resolution_price": 95.0},
+    ]
+    breaker_by_r = compute_daily_circuit_breaker(accumulating_losses, max_loss_count=999, max_loss_r=-1.5)
+    check("R threshold triggers even though loss_count threshold not reached", breaker_by_r["active"], True)
+    check("R threshold reason mentions total_r", "-2.0" in breaker_by_r["reason"], True)
+
+    # 19) 有贏有輸，R倍數還在正常範圍內 -> 不觸發
+    mixed_ok = [
+        {"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_tp1", "resolution_price": 107.5},  # +1.5R
+        {"entry_price": 100.0, "stop_loss": 95.0, "resolution": "hit_sl", "resolution_price": 95.0},     # -1R
+    ]
+    breaker_ok = compute_daily_circuit_breaker(mixed_ok, max_loss_count=3, max_loss_r=-5.0)
+    check("healthy day (net positive R) -> inactive", breaker_ok["active"], False)
+    check("total_r reflects net (+1.5 - 1 = 0.5)", breaker_ok["total_r"], 0.5)
+
+    # 20) 兩項門檻都關閉（max_loss_count<=0, max_loss_r>=0）-> 永遠不觸發
+    check("both thresholds disabled -> never active",
+          compute_daily_circuit_breaker(losses_only, max_loss_count=0, max_loss_r=0.0)["active"], False)
+
+    # 21) 今天完全沒有已結算訊號 -> 不觸發，數字歸零
+    empty_day = compute_daily_circuit_breaker([], max_loss_count=3, max_loss_r=-5.0)
+    check("no resolved trades today -> inactive", empty_day["active"], False)
+    check("no resolved trades today -> total_r is 0.0", empty_day["total_r"], 0.0)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

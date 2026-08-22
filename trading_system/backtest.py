@@ -40,9 +40,20 @@ def run_backtest(
     box_lookback: int = 15,
     tp1_rr: float = 1.5,
     tp2_rr: float = 2.0,
+    volume_confirm_multiple: float = 0.0,
 ) -> dict:
-    """candles：升冪（舊到新）、已收盤的 [{ts,o,h,l,c,...}, ...]，跟 strategy.compute_signal
+    """candles：升冪（舊到新）、已收盤的 [{ts,o,h,l,c,vol}, ...]，跟 strategy.compute_signal
     要求的格式一致（okx_client.fetch_confirmed_candles 的輸出可以直接餵進來）。
+
+    volume_confirm_multiple：跟 strategy.compute_signal 的同名參數一樣意思——套用同一套
+    量能突破確認規則來重播歷史，這樣「回測」跟「線上即時分析」用的是同一套判斷邏輯，
+    不是回測一套、線上又是另一套。0（預設）代表不啟用。
+
+    ⚠️ 這裡**沒有**套用多時間週期共振（htf_trend）跟每日虧損斷路器（circuit_breaker）
+    這兩個線上分析才有的把關——htf_trend 需要同步重播「第二條」更高週期的K線序列，
+    circuit_breaker 是跟「今天」這個當下日期綁定的概念，兩者都不是單純「這個策略在這批
+    歷史K線上表現如何」這個問題的一部分，硬套進來反而會讓回測結果失去單純性、難以
+    解讀。回測只驗證純技術面規則（含量能過濾）的歷史表現。
 
     回傳 {"total_trades","wins","losses","win_rate_pct","avg_r_multiple",
     "max_consecutive_losses","profit_factor","trades":[...]}；trades 依時間序列出每一筆
@@ -57,7 +68,7 @@ def run_backtest(
 
     while i < n:
         window = candles[: i + 1]
-        tech = strategy.compute_signal(window, ema_period, box_lookback, tp1_rr, tp2_rr)
+        tech = strategy.compute_signal(window, ema_period, box_lookback, tp1_rr, tp2_rr, volume_confirm_multiple)
 
         if tech is not None and tech["signal"] is not None:
             after = candles[i + 1:]
@@ -203,6 +214,23 @@ if __name__ == "__main__":
     check("mixed scenario -> avg_r_multiple is (-1.0+2.0)/2=0.5", result_mixed["avg_r_multiple"], 0.5)
     check("mixed scenario -> profit_factor is 2.0/1.0=2.0", result_mixed["profit_factor"], 2.0)
     check("mixed scenario -> max_consecutive_losses is 1", result_mixed["max_consecutive_losses"], 1)
+
+    # 7) volume_confirm_multiple 有正確傳進 strategy.compute_signal：量能不足的突破
+    # 在回測重播時也應該被過濾掉，跟線上即時分析用同一套判斷邏輯
+    flat_with_vol = [{"ts": i, "o": 100.0, "h": 101.0, "l": 99.0, "c": 100.0, "vol": 1000.0} for i in range(20)]
+    weak_vol_breakout = flat_with_vol + [
+        {"ts": 100, "o": 100.0, "h": 106.0, "l": 100.0, "c": 105.0, "vol": 500.0},  # 量能只有均量一半
+        {"ts": 101, "o": 105.0, "h": 116.0, "l": 104.0, "c": 115.0, "vol": 1000.0},
+    ]
+    result_weak_vol = run_backtest(weak_vol_breakout, ema_period=20, box_lookback=15, volume_confirm_multiple=1.2)
+    check("weak-volume breakout filtered out during backtest replay", result_weak_vol["total_trades"], 0)
+
+    strong_vol_breakout = flat_with_vol + [
+        {"ts": 100, "o": 100.0, "h": 106.0, "l": 100.0, "c": 105.0, "vol": 2000.0},  # 量能是均量兩倍
+        {"ts": 101, "o": 105.0, "h": 116.0, "l": 104.0, "c": 115.0, "vol": 1000.0},
+    ]
+    result_strong_vol = run_backtest(strong_vol_breakout, ema_period=20, box_lookback=15, volume_confirm_multiple=1.2)
+    check("strong-volume breakout still counted during backtest replay", result_strong_vol["total_trades"], 1)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:
