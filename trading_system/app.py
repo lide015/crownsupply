@@ -6,8 +6,11 @@
 ⚠️ 本系統只產生「監控訊號」，不含任何下單/自動化交易邏輯，不會使用任何交易所 API 金鑰
 去真正開倉、平倉、動用資金。所有輸出僅供研究與參考，不是投資建議。
 
-不會自動在背景輪詢：完全由使用者按下「立即分析」（POST /api/v1/analyze）觸發，
-一次點擊對應一輪 OKX＋AI 呼叫，用量自己掌控。
+不會自動在背景輪詢做「分析」：技術訊號＋AI 新聞情緒完全由使用者按下「立即分析」
+（POST /api/v1/analyze）觸發，一次點擊對應一輪 OKX＋AI 呼叫，用量自己掌控。
+唯一的例外是純報價（GET /api/v1/tickers）：這是 OKX 免費公開的 ticker 資料，
+不牽涉 AI／技術分析，前端按過一次「立即分析」之後會自動定時輪詢，讓「全部商品總覽」
+的價格/成交額/振幅保持即時，跟「分析」的用量完全脫鉤。
 """
 import asyncio
 import logging
@@ -170,6 +173,35 @@ async def health():
 async def dashboard():
     """只讀最近一次「立即分析」的結果，不會觸發新的分析、不打任何外部 API。"""
     return _dashboard_payload()
+
+
+@app.get("/api/v1/tickers")
+async def tickers_refresh():
+    """輕量報價刷新：只抓 OKX 免費公開的 ticker（24h 價格／成交額／振幅／漲跌），
+    **不**呼叫 AI、**不**重算技術訊號、**不**跟 /api/v1/analyze 搶同一把鎖——前端可以放心
+    每隔幾秒自動輪詢（見 index.html 的 TICKER_POLL_MS），跟詳情頁K線走勢圖的定時刷新是
+    同一種「零 AI 成本、純市場報價」精神，用量不會因為開著網頁不動就一直增加。
+
+    只更新報價相關欄位（price/vol_usdt/amplitude_pct/change_pct），OI 欄位刻意沿用上一次
+    「立即分析」抓到的值（見 okx_client.merge_fresh_quotes）——OI 有自己一套跟「上一輪快照」
+    比較才有意義的邏輯，這裡輪詢週期短很多，直接覆蓋會把比較基準弄亂，等下一次「立即分析」
+    才會重新算 OI 異動。使用者按過至少一次「立即分析」之前，all_instruments 是空的，
+    前端不會呼叫這個端點（沒有東西可以刷新）。"""
+    assert _http_client is not None
+    try:
+        tickers = await okx_client.fetch_swap_tickers(_http_client)
+        fresh = okx_client.parse_instruments(tickers, config.EXTRA_INSTRUMENT_KEYWORDS, product_type="swap")
+    except Exception as exc:
+        return JSONResponse({"ok": False, "message": f"抓取即時報價失敗：{exc}"}, status_code=502)
+
+    try:
+        spot_tickers = await okx_client.fetch_spot_tickers(_http_client)
+        fresh += okx_client.parse_instruments(spot_tickers, product_type="spot")
+    except Exception as exc:  # noqa: BLE001 — 現貨報價只是附加瀏覽資料，抓不到不影響合約報價
+        logger.warning("spot ticker refresh failed: %s", exc)
+
+    STATE.all_instruments = okx_client.merge_fresh_quotes(STATE.all_instruments, fresh)
+    return {"ok": True, "all_instruments": STATE.all_instruments, "updated_at": int(time.time() * 1000)}
 
 
 @app.post("/api/v1/analyze")

@@ -292,8 +292,9 @@
     </section>
 
     <section class="space-y-3">
-      <h2 class="text-base font-semibold text-gray-200 flex items-center border-l-2 border-amber-500/70 pl-3">
+      <h2 class="text-base font-semibold text-gray-200 flex items-center flex-wrap gap-x-2 gap-y-1 border-l-2 border-amber-500/70 pl-3">
         <span class="mr-2">📋</span> 全部商品總覽（<span id="all-instruments-count">0</span> 檔）
+        <span id="ticker-live-note" class="text-[11px] font-normal text-gray-600"></span>
       </h2>
       <p class="text-xs text-gray-500 leading-relaxed">
         OKX 上這輪抓到的<b>所有</b>合約（不套流動性/振幅門檻），只顯示基本報價。想看完整技術分析（EMA/突破/停損停利/OI/新聞），
@@ -318,8 +319,10 @@
       <p class="text-[11px] text-gray-600 leading-relaxed">
         ⚡ 合約（永續合約，可做多可做空）才會被「立即分析」自動選中做技術分析；💰 現貨（只能做多、沒有槓桿/爆倉概念）
         只出現在這份總覽，想看技術分析一樣可以點「🔍 分析」單獨查。熱力圖可切換「價格／成交額／持倉」三種依據，
-        點色塊會打開該商品的詳情頁（不會呼叫 AI）。全部報價／成交額／持倉量都是即時從 OKX 抓的公開資料，
-        跟自動篩選/AI 新聞情緒完全獨立，瀏覽這些資料不會消耗任何 AI 用量。
+        點色塊會打開該商品的詳情頁（不會呼叫 AI）。價格／成交額／振幅按過一次「立即分析」後，
+        每 15 秒會自動抓 OKX 最新報價刷新（見上方「📡 即時報價」字樣）；持倉異動則沿用上一次
+        「立即分析」的快照，要等下一輪分析才會更新。全部都是公開報價資料，跟 AI 新聞情緒完全
+        獨立，瀏覽/自動刷新這些資料不會消耗任何 AI 用量。
       </p>
       <div id="all-instruments-wrap" class="overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[60vh]">
         <table class="w-full text-xs">
@@ -907,7 +910,8 @@ function renderSignalsList() {
             <span class="text-2xl font-mono font-bold leading-none ${changePctTextCls(sig.change_pct)}">${fmt(sig.price)}</span>
             ${changePctHtml(sig.change_pct)}
           </span>
-          ${sig.signal_type ? `<span class="text-[11px] text-gray-500">📍 開倉價（進場）</span>` : ""}
+          ${sig.signal_type ? `<span class="text-[11px] text-gray-500">📍 開倉價（進場）</span>
+          <span id="live-price-${sig.instId}" class="text-[11px] text-gray-500 font-mono">即時報價：<span class="live-price-val text-gray-400">—</span></span>` : ""}
         </span>
         <span class="px-3 py-1.5 text-xs font-bold rounded-full ${style.badge} whitespace-nowrap shadow-sm">${sig.action}</span>
       </div>
@@ -1152,6 +1156,64 @@ function renderAllInstrumentsList() {
     tr.querySelector(".watchlist-star-btn").addEventListener("click", () => toggleWatchlist(inst.instId));
     tbody.appendChild(tr);
   }
+}
+
+/* ---------------------------------------------------------------- */
+/* 📡 即時報價輪詢——只抓 OKX 免費公開的 ticker，跟「立即分析」的 AI 用量完全脫鉤，       */
+/* 可以放心背景定時刷新（跟詳情頁 K 線走勢圖的 CHART_POLL_MS 是同一種零成本輪詢精神）。   */
+/* ---------------------------------------------------------------- */
+const TICKER_POLL_MS = 15000;
+let _tickerPollTimer = null;
+
+/* 只更新已經渲染在畫面上的訊號卡片裡那一小段「即時報價」文字，不重建整張卡片——
+   如果改叫 renderSignalsList() 整個重畫，會連帶觸發 loadAllSignalCardCharts() 幫每張
+   卡片重抓一次K線走勢圖，等於變相把「零成本輪詢」搞成「每 15 秒對監控清單全部商品
+   重打一次K線 API」，跟這個系統一貫「輪詢成本要自己看得到、算得出來」的精神衝突。 */
+function updateLivePricesOnCards(freshInstruments) {
+  const data = lastDashboardData;
+  if (!data || !data.signals) return;
+  const byId = new Map(freshInstruments.map((i) => [i.instId, i]));
+  for (const sig of data.signals) {
+    if (!sig.signal_type) continue;
+    const fresh = byId.get(sig.instId);
+    const wrap = document.getElementById(`live-price-${sig.instId}`);
+    if (!fresh || fresh.price == null || !wrap) continue;
+    const valEl = wrap.querySelector(".live-price-val");
+    if (!valEl) continue;
+    valEl.textContent = fmt(fresh.price);
+    // 現價相對「開倉價」是往有利方向還是不利方向移動（不是跟停損/停利比——那兩個
+    // 數字要對照走勢圖看才有意義，這裡只是最單純的「比開倉當下更好還是更差」提示）。
+    const favorable = sig.signal_type === "long" ? fresh.price >= sig.price : fresh.price <= sig.price;
+    valEl.className = `live-price-val font-semibold ${favorable ? "text-green-400" : "text-red-400"}`;
+  }
+}
+
+async function refreshTickersOnce() {
+  const data = lastDashboardData;
+  // 還沒按過「立即分析」，all_instruments 本來就是空的，不用白跑一趟打 API。
+  if (!data || !data.has_run) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/tickers`);
+    if (!res.ok) return;
+    const body = await res.json();
+    if (!body.ok) return;
+    lastDashboardData.all_instruments = body.all_instruments;
+    renderAllInstrumentsList();
+    renderAllInstrumentsHeatmap();
+    updateLivePricesOnCards(body.all_instruments);
+    const note = document.getElementById("ticker-live-note");
+    if (note) {
+      note.textContent = `📡 即時報價・最後更新 ${new Date(body.updated_at).toLocaleTimeString()}（每 ${TICKER_POLL_MS / 1000} 秒自動刷新，純 OKX 公開報價，不耗用 AI 額度）`;
+    }
+  } catch (err) {
+    console.error("即時報價刷新失敗（不影響其他功能，下一輪會再試）：", err);
+  }
+}
+
+function startTickerPolling() {
+  if (_tickerPollTimer) return;
+  refreshTickersOnce();
+  _tickerPollTimer = setInterval(refreshTickersOnce, TICKER_POLL_MS);
 }
 
 /* 熱力圖色塊背景色：綠漲紅跌，色塊深淺代表幅度大小（±10% 封頂，超過一樣是最深，
@@ -2100,7 +2162,10 @@ document.getElementById("all-instruments-search").addEventListener("input", debo
   renderAllInstrumentsList();
   renderAllInstrumentsHeatmap();
 }, 200));
-loadLastResult();
+// 先等第一次讀「上次分析結果」完成、確定 has_run/all_instruments 是什麼狀態，
+// 再啟動即時報價輪詢——避免兩個非同步請求平行跑，輪詢的第一次立即檢查誤判成
+// 「還沒分析過」而白白跳過（loadLastResult 完成前 lastDashboardData 還是 null）。
+loadLastResult().then(startTickerPolling);
 loadBacktestDefaults();
 
 /* ---------------------------------------------------------------- */

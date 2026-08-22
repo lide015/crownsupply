@@ -121,6 +121,35 @@ def parse_instruments(tickers: list[dict], extra_keywords: tuple = (), product_t
     return parsed
 
 
+def merge_fresh_quotes(previous: list[dict], fresh: list[dict]) -> list[dict]:
+    """把「輕量報價快照」（只有 price/vol_usdt/amplitude_pct/change_pct，供
+    /api/v1/tickers 高頻輪詢用）套進舊的 all_instruments 清單：只覆蓋報價欄位，
+    OI 欄位（oi_ccy/oi_change_pct）刻意沿用舊值不動——OI 有自己一套「跟上一輪快照比較」
+    的邏輯（見 background._refresh_signals），輪詢週期跟這裡不同，兩邊互相覆蓋只會把
+    OI 比較基準搞亂。舊清單有但這輪沒抓到的商品（極少數下架邊界情況）保留舊資料，
+    不會讓畫面上一筆商品無預警消失；新清單有但舊清單沒有的（新上架）直接併入。"""
+    fresh_by_id = {item["instId"]: item for item in fresh}
+    merged = []
+    seen = set()
+    for old in previous:
+        inst_id = old["instId"]
+        seen.add(inst_id)
+        new = fresh_by_id.get(inst_id)
+        if new is None:
+            merged.append(old)
+            continue
+        updated = dict(old)
+        updated["price"] = new["price"]
+        updated["vol_usdt"] = new["vol_usdt"]
+        updated["amplitude_pct"] = new["amplitude_pct"]
+        updated["change_pct"] = new["change_pct"]
+        merged.append(updated)
+    for item in fresh:
+        if item["instId"] not in seen:
+            merged.append(item)
+    return merged
+
+
 def screen_active_instruments(
     tickers: list[dict],
     min_vol_usdt: float = 50_000_000.0,
@@ -247,6 +276,33 @@ if __name__ == "__main__":
     check("change_pct computed correctly for a loss", change_parsed["DOWN-USDT-SWAP"]["change_pct"], -10.0)
     check("change_pct is None when open24h is missing (no guessing direction)",
           change_parsed["NOOPEN-USDT-SWAP"]["change_pct"], None)
+
+    # 8) merge_fresh_quotes：即時報價輪詢（/api/v1/tickers）只更新報價欄位，OI 沿用舊值，
+    # 舊清單獨有/新清單獨有的商品都要保留，不能無預警消失或漏掉新上架的。
+    old_list = [
+        {"instId": "BTC-USDT-SWAP", "name": "BTC-USDT", "price": 100.0, "vol_usdt": 1e8,
+         "amplitude_pct": 5.0, "change_pct": 2.0, "asset_class": "crypto", "product_type": "swap",
+         "oi_ccy": 500.0, "oi_change_pct": 3.5},
+        {"instId": "DELISTED-USDT-SWAP", "name": "DELISTED-USDT", "price": 1.0, "vol_usdt": 1e7,
+         "amplitude_pct": 1.0, "change_pct": 0.0, "asset_class": "crypto", "product_type": "swap"},
+    ]
+    fresh_list = [
+        {"instId": "BTC-USDT-SWAP", "name": "BTC-USDT", "price": 103.0, "vol_usdt": 1.1e8,
+         "amplitude_pct": 5.5, "change_pct": 3.0, "asset_class": "crypto", "product_type": "swap"},
+        {"instId": "NEW-USDT-SWAP", "name": "NEW-USDT", "price": 10.0, "vol_usdt": 6e7,
+         "amplitude_pct": 4.0, "change_pct": 1.0, "asset_class": "crypto", "product_type": "swap"},
+    ]
+    merged = {c["instId"]: c for c in merge_fresh_quotes(old_list, fresh_list)}
+    check("merge_fresh_quotes updates price from fresh snapshot", merged["BTC-USDT-SWAP"]["price"], 103.0)
+    check("merge_fresh_quotes keeps oi_ccy from old snapshot (not refreshed by ticker poll)",
+          merged["BTC-USDT-SWAP"]["oi_ccy"], 500.0)
+    check("merge_fresh_quotes keeps oi_change_pct from old snapshot",
+          merged["BTC-USDT-SWAP"]["oi_change_pct"], 3.5)
+    check("merge_fresh_quotes keeps an instrument missing from this round's fresh snapshot",
+          "DELISTED-USDT-SWAP" in merged, True)
+    check("merge_fresh_quotes adds a newly-listed instrument not in the old snapshot",
+          "NEW-USDT-SWAP" in merged, True)
+    check("merge_fresh_quotes result count is old ∪ fresh (no duplicates, nothing dropped)", len(merged), 3)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

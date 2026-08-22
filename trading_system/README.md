@@ -163,6 +163,26 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 （`background.analyze_one_instrument`），結果一樣會記錄進訊號歷史、參與勝率追蹤，
 不會有「自動選的」跟「自己點的」兩套不同標準。分析結果會直接併入上方的訊號面板。
 
+### 📡 即時報價自動刷新（零 AI 成本）
+
+按過一次「立即分析」之後，「全部商品總覽」的價格／24h漲跌／24h振幅／24h成交額不會
+停在那次分析當下——前端會每 15 秒自動呼叫 `GET /api/v1/tickers` 抓 OKX 最新 ticker
+刷新一次（見 `index.html` 的 `TICKER_POLL_MS`、`refreshTickersOnce()`），標題旁的
+「📡 即時報價・最後更新 HH:MM:SS」字樣就是這個輪詢的時間戳記。已經有訊號的商品，
+卡片上的「即時報價」那一行也會跟著更新，並依「相對開倉價是不是往有利方向移動」上色
+（做多現價比開倉價高、做空現價比開倉價低都算有利，顯示綠色，反之顯示紅色）。
+
+這支端點**不會**呼叫 AI、**不會**重新計算技術訊號，跟 `/api/v1/analyze` 的用量完全
+脫鉤——OKX 的 ticker 本來就是免費公開資料，跟詳情頁K線走勢圖的定時刷新
+（`CHART_POLL_MS`）是同一種「零成本、可以放心背景輪詢」的設計。持倉異動（OI）**不**
+包含在這個輪詢裡，仍然只在「立即分析」時更新——OI 有自己一套跟「上一輪快照」比較才有
+意義的邏輯（見下方「全市場未平倉量」說明），跟報價輪詢週期混在一起會讓比較基準失真。
+
+已產生的訊號本身（開倉價／停損／停利／R倍數）**不會**被這個輪詢覆蓋——那些數字是
+分析當下的計算結果，卡片上明確標「📍 開倉價（進場）」跟「即時報價」是兩個不同的數字，
+不會因為報價持續跳動就讓已經算好的停損停利跟著亂動。使用者在頁面按過一次「立即分析」
+之前，`all_instruments` 是空的，前端不會呼叫這個端點白跑一趟。
+
 ### 🔥 熱力圖：價格／成交額／持倉三種模式
 
 「全部商品總覽」右上角可切換「📋 列表」跟「🔥 熱力圖」，熱力圖裡再細分三種依據
@@ -218,6 +238,7 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/backtest` | POST | 📊 歷史回測，**零 AI 成本**，只多打一次免費的 OKX 歷史K線查詢。body：`{"inst_id","bar"?,"limit"?,"ema_period"?,"box_lookback"?,"tp1_rr"?,"tp2_rr"?,"volume_confirm_multiple"?}`（後 5 項不帶就用 config.py 預設值，帶了就覆蓋——互動式參數實驗室用），任何商品都可以直接跑，不用先做過技術分析；資料不夠跑一次完整 EMA+盒子週期回 `422` |
 | `/api/v1/candles/{inst_id}` | GET | 📈 K線走勢圖資料，**零 AI 成本**，只是把 OKX 免費公開的歷史K線包一層，順便算好 `ema_series` 給前端疊加畫線。query：`bar`?、`limit`?、`ema_period`?（都不帶就用 `config.CANDLE_BAR`/`BACKTEST_CANDLE_LIMIT`/`EMA_PERIOD`——刻意跟訊號分析用同一組預設值，見「K線走勢圖」一節）|
 | `/api/v1/backtest-all` | POST | 📊 批次回測排行榜，對監控清單逐一跑歷史回測、依獲利因子排序，**零 AI 成本**。body：`{"bar"?,"limit"?}` |
+| `/api/v1/tickers` | GET | 📡 輕量即時報價刷新，**零 AI 成本**，只抓 OKX 免費公開 ticker、覆蓋 `all_instruments` 的報價欄位（OI 欄位沿用上次分析的值）。前端每 15 秒自動輪詢，見「即時報價自動刷新」一節 |
 
 `/api/v1/dashboard`、`/api/v1/analyze` 的回傳現在還多了 `market_pulse`（市場情緒儀表板資料）
 跟 `ranking`（推薦強度榜資料），見下一節。
