@@ -32,6 +32,7 @@ trading_system/
 ├─ strategy_tuner.py        # 勝率偏低時自動調高篩選門檻（純函式，內建自測）
 ├─ ai_coach.py                # AI 辯論空間：多輪對話，走 Anthropic/OpenAI（內建自測）
 ├─ position_sizing.py          # 🧮 倉位計算機：資金/風險%/進場停損價 → 建議部位大小（純函式，內建自測）
+├─ backtest.py                 # 📊 歷史回測：策略規則套在過去K線重播，統計勝率/獲利因子/最大連續虧損（純函式，內建自測）
 ├─ ranking.py                    # 📊 推薦強度榜：技術/籌碼/情緒/量能四維度評分排名（純函式，內建自測）
 ├─ market_pulse.py                # 🌡️ 市場情緒：平均 RSI、山寨季代理指標、恐懼貪婪指數（內建自測）
 ├─ oi_tracker.py                    # 合約未平倉量（OI）追蹤，當「籌碼面」替代指標（純函式，內建自測）
@@ -212,6 +213,7 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/config` | GET | 給「知識宇宙」分頁的 Supabase URL／anon key（公開金鑰，非機密） |
 | `/api/v1/coach` | POST | AI 辯論空間一輪對話。body：`{"node": {...知識卡}, "history": [{"role","content"}, ...]}`，回傳 `{"reply", "error"}` |
 | `/api/v1/position-size` | POST | 🧮 倉位計算機，純本地計算、零外部 API 成本。body：`{"account_balance","risk_pct","entry_price","stop_loss_price","leverage_cap"?,"take_profit_1"?,"take_profit_2"?}` |
+| `/api/v1/backtest` | POST | 📊 歷史回測，**零 AI 成本**，只多打一次免費的 OKX 歷史K線查詢。body：`{"inst_id","bar"?,"limit"?}`，任何商品都可以直接跑，不用先做過技術分析；資料不夠跑一次完整 EMA+盒子週期回 `422` |
 
 `/api/v1/dashboard`、`/api/v1/analyze` 的回傳現在還多了 `market_pulse`（市場情緒儀表板資料）
 跟 `ranking`（推薦強度榜資料），見下一節。
@@ -347,6 +349,23 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 (THIN MARGIN)」，不會讓使用者衝進一筆扣完手續費不划算的交易。訊號卡片上也會直接顯示
 「💸 淨盈虧比（已扣來回手續費 X%）」跟「手續費吃掉停利1獲利的 Y%」兩個數字，全部透明，
 不是黑箱判斷。手續費費率（`TAKER_FEE_PCT`）可在 `.env` 依自己實際帳號等級調整。
+
+## 📊 歷史回測
+
+`backtest.py` 把 `strategy.py` 的 20 EMA + 盤整盒子突破規則，套用在「已經發生過」的
+OKX 歷史 K 線上逐根重播，統計勝率／平均獲利倍數（R）／獲利因子／最大連續虧損——不用
+像 `outcome_tracker.py` 那樣，得靠使用者一次次按「立即分析」、等好幾天累積出足夠的
+已結算樣本，馬上就能看到這套規則在過去一段歷史上表現如何。任一商品的詳情頁都有
+「📊 執行歷史回測」按鈕，**不呼叫任何 AI**，只多打一次免費的 OKX 歷史 K 線查詢
+（單次上限 300 根，`BACKTEST_CANDLE_LIMIT`），任何商品都可以直接跑，不用先做過
+技術分析。
+
+嚴格避免「未來函數」（look-ahead bias）：在歷史上的每個時間點只把「當時」已經收盤
+的 K 線餵給策略邏輯，訊號觸發後才用「當時之後」的 K 線模擬結果；結算規則跟線上
+即時追蹤共用同一套 `outcome_tracker.simulate_resolution()`，兩邊的勝率算法一致，
+可以互相對照。方法論精神參考 [gauss314/skills](https://github.com/gauss314/skills)
+的 `backtesting` skill（MIT License）——完整說明見
+`.claude/skills/backtest-strategy/SKILL.md`。
 
 ## 股票永續合約（Stock Perpetuals）支援狀況
 

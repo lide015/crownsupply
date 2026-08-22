@@ -454,11 +454,21 @@
         <div id="inst-modal-history" class="space-y-2"></div>
       </div>
 
+      <div id="inst-modal-backtest-wrap" class="hidden">
+        <div class="text-amber-400 font-semibold mb-2 text-sm">📊 歷史回測結果</div>
+        <div id="inst-modal-backtest" class="bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs space-y-2"></div>
+      </div>
+
       <button id="inst-modal-analyze-btn"
         class="w-full text-sm px-3 py-2 rounded-lg border border-amber-800 text-amber-400 hover:bg-amber-950/30
                transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed">🔍 執行完整技術＋AI分析</button>
+      <button id="inst-modal-backtest-btn"
+        class="w-full text-sm px-3 py-2 rounded-lg border border-teal-800 text-teal-400 hover:bg-teal-950/30
+               transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed">📊 執行歷史回測（零 AI 成本）</button>
       <p class="text-[11px] text-gray-600 leading-relaxed">⚠️ 上面「基本資料」跟「事件時間軸」都是已經有的資料，不會額外呼叫 AI；
-        只有按「執行完整技術＋AI分析」才會真的多打一次 AI 判斷這檔的新聞情緒。</p>
+        「執行完整技術＋AI分析」才會真的多打一次 AI 判斷這檔的新聞情緒。「歷史回測」只多抓一次
+        免費的 OKX 歷史K線，把現在這套策略規則套在過去的走勢上重播統計，不呼叫 AI、不用等；
+        任何商品都可以直接跑，不用先做過技術分析。</p>
     </div>
   </div>
 </div>
@@ -1113,6 +1123,7 @@ async function openInstrumentModal(instId) {
   document.getElementById("inst-modal-title").textContent = instId;
   document.getElementById("inst-modal-badges").innerHTML = "";
   document.getElementById("inst-modal-price-line").innerHTML = "";
+  document.getElementById("inst-modal-backtest-wrap").classList.add("hidden");
 
   try {
     const res = await fetch(`${API_BASE}/api/v1/instrument/${encodeURIComponent(instId)}`);
@@ -1227,6 +1238,58 @@ function renderInstrumentModal(data) {
   analyzeBtn.disabled = false;
   analyzeBtn.textContent = "🔍 執行完整技術＋AI分析";
   analyzeBtn.onclick = () => analyzeInstrumentFromModal(basic.instId);
+
+  const backtestBtn = document.getElementById("inst-modal-backtest-btn");
+  backtestBtn.disabled = false;
+  backtestBtn.textContent = "📊 執行歷史回測（零 AI 成本）";
+  backtestBtn.onclick = () => runBacktestFromModal(basic.instId);
+}
+
+/* ---------------------------------------------------------------- */
+/* 📊 歷史回測（詳情頁按鈕觸發，POST /api/v1/backtest，零 AI 成本）       */
+/* ---------------------------------------------------------------- */
+async function runBacktestFromModal(instId) {
+  const btn = document.getElementById("inst-modal-backtest-btn");
+  const wrap = document.getElementById("inst-modal-backtest-wrap");
+  const resultEl = document.getElementById("inst-modal-backtest");
+  btn.disabled = true;
+  btn.textContent = "⏳ 回測中…";
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/backtest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inst_id: instId }),
+    });
+    const body = await res.json();
+    if (!res.ok || !body.ok) throw new Error(body.message || "回測失敗，請稍後再試。");
+    wrap.classList.remove("hidden");
+    resultEl.innerHTML = renderBacktestResultHtml(body);
+  } catch (err) {
+    wrap.classList.remove("hidden");
+    resultEl.innerHTML = `<div class="text-red-400">${err.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "📊 執行歷史回測（零 AI 成本）";
+  }
+}
+
+function renderBacktestResultHtml(data) {
+  if (data.total_trades === 0) {
+    return `<div class="text-gray-500">過去 ${data.candle_count} 根 ${data.bar} K 線裡，這套策略規則沒有觸發任何一次完整交易（可能盤整太久，或訊號還沒走完就到資料尾端）。</div>`;
+  }
+  const winRateCls = data.win_rate_pct >= 50 ? "text-green-400" : "text-red-400";
+  const avgRCls = data.avg_r_multiple >= 0 ? "text-green-400" : "text-red-400";
+  return `
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono">
+      <div class="text-gray-400">交易次數 <span class="text-white block font-bold">${data.total_trades}</span></div>
+      <div class="text-gray-400">勝率 <span class="${winRateCls} block font-bold">${data.win_rate_pct}%</span></div>
+      <div class="text-gray-400">平均R倍數 <span class="${avgRCls} block font-bold">${data.avg_r_multiple}</span></div>
+      <div class="text-gray-400">獲利因子 <span class="text-white block font-bold">${data.profit_factor != null ? data.profit_factor : "—"}</span></div>
+      <div class="text-gray-400">最大連續虧損 <span class="text-white block font-bold">${data.max_consecutive_losses} 次</span></div>
+      <div class="text-gray-400">勝/敗 <span class="text-white block font-bold">${data.wins}/${data.losses}</span></div>
+    </div>
+    <div class="text-gray-600">回測範圍：過去 ${data.candle_count} 根 ${data.bar} K 線（OKX 單次查詢上限）。</div>
+    <p class="text-yellow-500/70">⚠️ 歷史表現不保證未來結果，樣本數（${data.total_trades} 筆）越少參考價值越低，僅供策略評估參考，不是投資建議。</p>`;
 }
 
 async function analyzeInstrumentFromModal(instId) {

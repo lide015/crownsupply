@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai_coach, background, config, db, news_client, okx_client, position_sizing, stock_fundamentals
+from . import ai_coach, background, backtest, config, db, news_client, okx_client, position_sizing, stock_fundamentals
 from .state import STATE
 
 
@@ -48,6 +48,12 @@ class PositionSizeRequest(BaseModel):
 
 class AnalyzeInstrumentRequest(BaseModel):
     inst_id: str
+
+
+class BacktestRequest(BaseModel):
+    inst_id: str
+    bar: str | None = None
+    limit: int | None = None
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("app")
@@ -189,6 +195,32 @@ async def analyze_instrument(req: AnalyzeInstrumentRequest):
     # 併入目前的訊號清單：同一個 instId 已存在就覆蓋掉舊的，不會重複顯示兩張卡片。
     STATE.signals = [s for s in STATE.signals if s["instId"] != signal["instId"]] + [signal]
     return {"ok": True, "signal": signal}
+
+
+@app.post("/api/v1/backtest")
+async def run_backtest_endpoint(req: BacktestRequest):
+    """📊 歷史回測：把 strategy.py 的規則套在這檔商品「已經發生過」的歷史 K 線上重播，
+    統計勝率/獲利因子/最大連續虧損（見 backtest.py 說明）。不呼叫任何 AI，只多打一次
+    免費的 OKX 歷史 K 線查詢——用量可控，讓使用者不用等 outcome_tracker 累積出足夠的
+    「即時」樣本，就能先看到這套規則在過去一段歷史上表現如何。"""
+    assert _http_client is not None
+    bar = req.bar or config.CANDLE_BAR
+    limit = min(req.limit or config.BACKTEST_CANDLE_LIMIT, config.BACKTEST_CANDLE_LIMIT)
+
+    try:
+        candles = await okx_client.fetch_confirmed_candles(_http_client, req.inst_id, bar=bar, limit=limit)
+    except Exception as exc:  # noqa: BLE001 — 單一商品查不到不該讓整個端點掛掉
+        return JSONResponse({"ok": False, "message": f"抓不到 {req.inst_id} 的歷史 K 線：{exc}"}, status_code=502)
+
+    min_len = max(config.EMA_PERIOD, config.BOX_LOOKBACK + 1)
+    if len(candles) < min_len:
+        return JSONResponse(
+            {"ok": False, "message": f"這檔商品在 {bar} 週期只抓到 {len(candles)} 根已收盤K線，不夠跑一次完整的 EMA+盒子週期（至少要 {min_len} 根），換更長的K線週期再試一次。"},
+            status_code=422,
+        )
+
+    result = backtest.run_backtest(candles, config.EMA_PERIOD, config.BOX_LOOKBACK, config.TP1_RR, config.TP2_RR)
+    return {"ok": True, "inst_id": req.inst_id, "bar": bar, "candle_count": len(candles), **result}
 
 
 @app.get("/api/v1/instrument/{inst_id}")

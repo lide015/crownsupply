@@ -30,6 +30,11 @@ CANDLE_LIMIT = int(os.getenv("CANDLE_LIMIT", "50"))
 TP1_RR = float(os.getenv("TP1_RR", "1.5"))
 TP2_RR = float(os.getenv("TP2_RR", "2.0"))
 
+# ---- 歷史回測（見 backtest.py：把策略規則套在過去的 K 線上重播統計） ----
+# OKX /market/candles 單次查詢上限 300 根；使用者可在前端選更短的 K 線週期（bar）
+# 換取更長的實際回測時間跨度，但單次抓取根數本身受 OKX API 限制，不能無限加大。
+BACKTEST_CANDLE_LIMIT = int(os.getenv("BACKTEST_CANDLE_LIMIT", "300"))
+
 # ---- 當沖手續費（見 fee_calc.py：把風報比換算成扣掉來回手續費的「淨盈虧比」） ----
 # OKX 永續合約一般用戶預設費率參考值（%）；如果你的帳號等級/回饋比率不同，改這裡即可。
 # 當沖假設進出場都用市價單（Taker）搶時間，比只算 Maker 更保守，不會低估手續費成本。
