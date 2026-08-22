@@ -30,6 +30,14 @@ CANDLE_LIMIT = int(os.getenv("CANDLE_LIMIT", "50"))
 TP1_RR = float(os.getenv("TP1_RR", "1.5"))
 TP2_RR = float(os.getenv("TP2_RR", "2.0"))
 
+# ---- 當沖手續費（見 fee_calc.py：把風報比換算成扣掉來回手續費的「淨盈虧比」） ----
+# OKX 永續合約一般用戶預設費率參考值（%）；如果你的帳號等級/回饋比率不同，改這裡即可。
+# 當沖假設進出場都用市價單（Taker）搶時間，比只算 Maker 更保守，不會低估手續費成本。
+TAKER_FEE_PCT = float(os.getenv("TAKER_FEE_PCT", "0.05"))
+# 淨盈虧比（扣完來回手續費後）至少要達到這個倍數才算「值得進場」；沒有達到就算技術面
+# 突破、新聞情緒也共振，一樣會被系統標示為「手續費侵蝕獲利」，提醒不要冒險進場。
+MIN_NET_RR = float(os.getenv("MIN_NET_RR", "1.0"))
+
 # ---- 知識宇宙前端用（見 knowledge_universe/README.md）----
 # anon/publishable key 設計上就是給前端直接使用的公開金鑰，不是密鑰，預設值可以直接寫在這裡；
 # 之後如果換了 Supabase 專案，改這兩個環境變數即可，不用動程式碼。

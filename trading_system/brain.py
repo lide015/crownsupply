@@ -12,17 +12,35 @@ COLOR_YELLOW = "yellow"
 COLOR_BLUE = "blue"
 
 
-def fuse(tech: dict | None, sentiment: dict) -> dict:
+def fuse(tech: dict | None, sentiment: dict, fee_info: dict | None = None, min_net_rr: float = 1.0) -> dict:
     """tech: strategy.compute_signal() 的回傳值（可能是 None）。
     sentiment: 一個帶 "sentiment" 欄位的 dict——實際上是 news_client.get_market_and_instrument_sentiment()
     裡「這一檔商品」對應的判讀結果（沒有專屬新聞時已 fallback 成整體市場判斷），也相容
     get_market_sentiment() 的整體市場回傳值。
+    fee_info: fee_calc.compute_fee_adjusted_rr() 的回傳值（可能是 None，代表沒有 TP1 目標
+    可以算，或呼叫端選擇不計算）——扣掉當沖來回手續費之後，這筆訊號是不是還「划算」，
+    是比純技術面/新聞面共振更後面一關的把關：就算技術面突破、新聞情緒也共振，如果
+    停損盒子窄到手續費會吃光大半停利1的獲利，一樣要老實攔截，不能讓使用者衝進一筆
+    「看對方向也賺不到錢」的交易。
     回傳 {"action": str, "color": str, "reason": str}。"""
     if tech is None or tech.get("signal") is None:
         return {
             "action": "觀望中",
             "color": COLOR_GRAY,
             "reason": "價格仍在盒子整理區間內，或尚未站上/跌破 20 EMA，技術面尚無訊號。",
+        }
+
+    if fee_info and fee_info.get("net_rr") is not None and fee_info["net_rr"] < min_net_rr:
+        trapped = fee_info["net_reward_pct"] <= 0
+        return {
+            "action": "⚠️ 手續費侵蝕獲利，不建議進場 (FEE TRAP)" if trapped else "⚠️ 淨盈虧比過薄，謹慎評估 (THIN MARGIN)",
+            "color": COLOR_YELLOW,
+            "reason": (
+                f"停利1目標獲利 {fee_info['gross_reward_pct']}%，扣掉來回手續費 {fee_info['round_trip_fee_pct']}% "
+                f"後淨盈虧比只剩 {fee_info['net_rr']}"
+                + ("（幾乎無利可圖）" if trapped else f"（低於門檻 {min_net_rr}）")
+                + "，這種盤整幅度太窄的當沖機會扣完手續費不划算，不建議進場。"
+            ),
         }
 
     mood = sentiment.get("sentiment", "NEUTRAL")
@@ -89,6 +107,24 @@ if __name__ == "__main__":
     short_tech = {"signal": "short", "box_high": 100.0, "box_low": 90.0}
     check("short + BEARISH -> STRONG SHORT", fuse(short_tech, {"sentiment": "BEARISH"})["color"], COLOR_RED)
     check("short + BULLISH -> STANDBY (假跌破攔截)", fuse(short_tech, {"sentiment": "BULLISH"})["color"], COLOR_YELLOW)
+
+    # 手續費把關：就算技術面+新聞面完美共振，淨盈虧比太薄/為負一樣要攔截，不能讓使用者
+    # 衝進一筆「看對方向也賺不到錢」的交易。
+    fee_trap = {"gross_reward_pct": 0.15, "round_trip_fee_pct": 0.1, "net_reward_pct": -0.05, "net_rr": -0.5}
+    trapped_result = fuse(long_tech, {"sentiment": "BULLISH"}, fee_info=fee_trap, min_net_rr=1.0)
+    check("perfect confluence but fee eats all profit -> still blocked", trapped_result["color"], COLOR_YELLOW)
+    check("fee trap action mentions FEE TRAP", "FEE TRAP" in trapped_result["action"], True)
+
+    fee_thin = {"gross_reward_pct": 3.0, "round_trip_fee_pct": 0.1, "net_reward_pct": 2.9, "net_rr": 0.6}
+    thin_result = fuse(long_tech, {"sentiment": "BULLISH"}, fee_info=fee_thin, min_net_rr=1.0)
+    check("thin net_rr below floor -> blocked (not FEE TRAP wording)", thin_result["color"], COLOR_YELLOW)
+    check("thin margin action mentions THIN MARGIN", "THIN MARGIN" in thin_result["action"], True)
+
+    fee_ok = {"gross_reward_pct": 7.5, "round_trip_fee_pct": 0.1, "net_reward_pct": 7.4, "net_rr": 1.45}
+    ok_result = fuse(long_tech, {"sentiment": "BULLISH"}, fee_info=fee_ok, min_net_rr=1.0)
+    check("healthy net_rr -> normal STRONG LONG logic applies", ok_result["color"], COLOR_GREEN)
+
+    check("fee_info=None -> unaffected (backward compatible)", fuse(long_tech, {"sentiment": "BULLISH"}, fee_info=None)["color"], COLOR_GREEN)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>交易大腦｜當沖訊號 + 知識宇宙</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>" />
+<title>Gold Trader LITE｜當沖訊號 + 知識宇宙</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👑</text></svg>" />
 <link rel="stylesheet" href="/static/tailwind.css" />
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans min-h-screen bg-[radial-gradient(ellipse_90%_45%_at_50%_-10%,rgba(245,158,11,0.10),rgba(3,7,18,0)_70%)] bg-fixed">
 
 <header class="sticky top-0 z-20 border-b border-amber-900/30 bg-gradient-to-b from-gray-900 to-gray-950/95 backdrop-blur px-6 py-4 flex flex-wrap justify-between items-center gap-3 shadow-[0_2px_20px_rgba(0,0,0,0.4)]">
   <div class="flex items-center space-x-3">
-    <span class="text-2xl drop-shadow-[0_0_6px_rgba(245,158,11,0.5)]">🧠</span>
-    <h1 class="text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-amber-300">交易大腦</h1>
+    <span class="text-2xl drop-shadow-[0_0_6px_rgba(245,158,11,0.5)]">👑</span>
+    <h1 class="text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-amber-300">Gold Trader LITE</h1>
   </div>
   <nav class="flex items-center gap-1 bg-gray-950 border border-amber-900/30 rounded-full p-1">
     <button id="tab-btn-signals" class="tab-btn px-4 py-1.5 rounded-full text-sm font-semibold transition-colors">
@@ -56,8 +56,9 @@
         <p><b class="text-amber-400">20 EMA（20 週期指數移動平均線）</b>：把最近 20 根 K 線的收盤價取一個「越近期權重越高」的平均，用來判斷短線趨勢方向。價格在 EMA 之上通常視為偏多、之下視為偏空——這也是本系統「只做多不做空 / 只做空不做多」的判斷依據，不會兩邊都猜。</p>
         <p><b class="text-amber-400">盤整盒子（Box）</b>：價格在一段時間內上下小幅震盪，用最近 15 根已收盤 K 線的最高點與最低點框出一個區間。當某根 K 線的收盤價「站穩」盒子外面（不是影線碰到，是實體收盤價突破），才視為有效突破，避免插針假訊號。</p>
         <p><b class="text-amber-400">停損（Stop-Loss）</b>：這筆交易願意承受的最大虧損價位，固定設在盒子的中線。一旦價格跌破/漲破停損，代表原本的技術面假設不成立了，應該出場，不要心存僥倖。</p>
-        <p><b class="text-amber-400">停利1 / 停利2（Take-Profit）</b>：用「風報比」（reward : risk）算出來的目標價——risk 是「進場價到停損價」的距離，停利1＝risk × 1.5 倍、停利2＝risk × 2 倍（皆可在 `.env` 調整）。常見做法是價格到停利1先減碼一半、剩下留到停利2，讓獲利部位有機會跟上更大的走勢。</p>
-        <p><b class="text-amber-400">AI 新聞情緒</b>：抓即時財經新聞頭條，讓 AI 判斷市場整體氣氛是利多（BULLISH）、利空（BEARISH）還是中性（NEUTRAL）。</p>
+        <p><b class="text-amber-400">開倉價 / 停利1 / 停利2（Take-Profit）</b>：開倉價就是訊號出現當下的價格；停利價用「風報比」（reward : risk）算出來——risk 是「進場價到停損價」的距離，停利1＝risk × 1.5 倍、停利2＝risk × 2 倍（皆可在 `.env` 調整）。常見做法是價格到停利1先減碼一半、剩下留到停利2，讓獲利部位有機會跟上更大的走勢。</p>
+        <p><b class="text-amber-400">💸 淨盈虧比（扣手續費後）</b>：當沖進出場通常都用市價單搶時間，來回兩趟都要付手續費——盤整盒子窄的商品，帳面上好看的風報比可能被手續費吃掉一大塊，甚至倒虧。系統會把停利1的目標獲利扣掉來回手續費，算出「淨盈虧比」；如果太薄（低於門檻）或已經倒虧，就算技術面突破、新聞情緒也共振，一樣會標示「⚠️ 手續費侵蝕獲利」或「⚠️ 淨盈虧比過薄」，提醒不建議進場。</p>
+        <p><b class="text-amber-400">AI 即時新聞情緒</b>：每次按「立即分析」都重新抓取當下即時的財經新聞頭條（CoinDesk／CoinTelegraph 整體市場 + 每檔商品各自的 Google News 專屬新聞），讓 AI 判斷市場氣氛是利多（BULLISH）、利空（BEARISH）還是中性（NEUTRAL），並據此產生對應的多空訊號方向。</p>
         <p><b class="text-amber-400">多空共振</b>：技術面訊號（突破/跌破）跟 AI 新聞情緒方向一致時，才標記「強烈做多/做空」；如果技術面突破了但新聞情緒明確反向，會標記「潛在假突破，觀望」——這是系統刻意設計的煞車機制，避免逆著大方向硬做技術面訊號。</p>
         <p class="text-yellow-500/80">⚠️ 以上全部是規則式技術分析的參考資訊，不是投資建議，過去的訊號不保證未來獲利，進場前務必自己再三確認。</p>
       </div>
@@ -490,6 +491,15 @@ function changePctTextCls(pct) {
   return pct >= 0 ? "text-green-400" : "text-red-400";
 }
 
+/* 💸 淨盈虧比（扣掉當沖來回手續費之後）——沒有訊號方向（net_rr 為 null）就不顯示；
+   數值 <=0 代表手續費吃光獲利甚至倒虧，跟 brain.fuse() 標示「⚠️ 手續費侵蝕獲利」
+   對應的同一份資料，卡片上再單獨標一行數字，方便使用者一眼看到實際倍數。*/
+function netRrHtml(sig) {
+  if (sig.net_rr == null) return "";
+  const cls = sig.net_rr < 1.0 ? "text-yellow-400" : "text-green-400";
+  return `<div class="text-xs text-gray-500 font-mono">💸 淨盈虧比（已扣來回手續費 ${fmt(sig.round_trip_fee_pct, 2)}%）：<span class="${cls} font-bold">${fmt(sig.net_rr, 2)}</span>${sig.fee_eats_pct != null ? `　手續費吃掉停利1獲利的 ${fmt(sig.fee_eats_pct, 1)}%` : ""}</div>`;
+}
+
 const sentimentClass = {
   BULLISH: "px-3 py-1 text-xs font-bold rounded-full bg-green-950 text-green-400 border border-green-800",
   BEARISH: "px-3 py-1 text-xs font-bold rounded-full bg-red-950 text-red-400 border border-red-800",
@@ -702,6 +712,7 @@ function renderSignalsList() {
             <span class="text-2xl font-mono font-bold leading-none ${changePctTextCls(sig.change_pct)}">${fmt(sig.price)}</span>
             ${changePctHtml(sig.change_pct)}
           </span>
+          ${sig.signal_type ? `<span class="text-[11px] text-gray-500">📍 開倉價（進場）</span>` : ""}
         </span>
         <span class="px-3 py-1.5 text-xs font-bold rounded-full ${style.badge} whitespace-nowrap shadow-sm">${sig.action}</span>
       </div>
@@ -715,6 +726,7 @@ function renderSignalsList() {
         <div class="text-gray-400">停利1 <span class="text-green-400 block font-bold">${fmt(sig.take_profit_1)}</span></div>
         <div class="text-gray-400">停利2 <span class="text-green-300 block font-bold">${fmt(sig.take_profit_2)}</span></div>
       </div>
+      ${netRrHtml(sig)}
       <div class="text-xs text-gray-500 font-mono">24h 振幅：${fmt(sig.amplitude_pct, 2)}%${sig.oi_label ? `　OI：<span class="${changePctTextCls(sig.oi_change_pct)}">${sig.oi_label}</span>` : ""}</div>
       <div class="text-xs text-gray-400 bg-gray-950/50 p-2.5 rounded border border-gray-800/60 leading-relaxed">
         <span class="font-semibold text-amber-400">大腦研判：</span>${sig.reason}
@@ -1153,6 +1165,7 @@ function renderInstrumentModal(data) {
   if (signal && signal.signal_type) {
     techWrap.classList.remove("hidden");
     document.getElementById("inst-modal-technical").innerHTML = `
+      <div class="text-[11px] text-gray-500">📍 開倉價（進場）<span class="text-gray-300 font-mono font-bold ml-1">${fmt(signal.price)}</span></div>
       <div class="grid grid-cols-3 gap-2 font-mono">
         <div class="text-gray-400">20 EMA <span class="text-amber-400 block">${fmt(signal.ema)}</span></div>
         <div class="text-gray-400">盒子高點 <span class="text-green-400 block">${fmt(signal.box_high)}</span></div>
@@ -1163,6 +1176,7 @@ function renderInstrumentModal(data) {
         <div class="text-gray-400">停利1 <span class="text-green-400 block font-bold">${fmt(signal.take_profit_1)}</span></div>
         <div class="text-gray-400">停利2 <span class="text-green-300 block font-bold">${fmt(signal.take_profit_2)}</span></div>
       </div>
+      ${netRrHtml(signal)}
       <div class="text-gray-400 leading-relaxed"><span class="font-semibold text-amber-400">大腦研判：</span>${signal.reason}</div>`;
   } else {
     techWrap.classList.add("hidden");

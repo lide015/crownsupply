@@ -11,6 +11,9 @@ state.STATE。刻意**不是**背景排程——沒有 while True + sleep 的自
    打一次免費公開的恐懼貪婪指數 API——零 AI 成本。
 5. 抓每檔商品的合約未平倉量（OI），跟上次分析週期比較出變化幅度（見 oi_tracker.py），
    當「推薦強度榜」籌碼面維度的資料來源（見 ranking.py）。
+6. 技術面真的有突破方向時，把停利1的目標獲利換算成扣掉當沖來回手續費之後的「淨盈虧比」
+   （見 fee_calc.py）——太薄甚至倒虧就算技術面/新聞面完美共振，brain.fuse() 一樣會攔截
+   成警告，不讓使用者衝進一筆「看對方向也賺不到錢」的交易。
 
 新聞情緒判讀刻意放在「OKX 篩選出這輪實際監控哪些商品」**之後**才做（不是開頭第一步）：
 要先知道這輪到底在看哪幾檔商品，才能各自搜尋「這檔」的專屬新聞，而不是每一檔訊號都套用
@@ -22,7 +25,7 @@ import time
 
 import httpx
 
-from . import brain, config, db, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, position_sizing, ranking, strategy, strategy_tuner
+from . import brain, config, db, fee_calc, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, position_sizing, ranking, strategy, strategy_tuner
 from .state import STATE
 
 BTC_INST_ID = "BTC-USDT-SWAP"  # 山寨季代理指標的比較基準（見 market_pulse.py 說明）
@@ -156,7 +159,16 @@ async def analyze_one_instrument(
 
     rsi = market_pulse.compute_rsi([c["c"] for c in candles])
     oi_delta = await _fetch_oi_delta(client, inst_id, now_ms)
-    fused = brain.fuse(tech, sentiment)
+
+    # 💸 當沖手續費把關：技術面真的有突破方向時，才需要算「扣掉來回手續費之後」的淨盈虧比
+    # （見 fee_calc.py 說明）——沒有訊號方向就沒有進場價/停利價，算了也沒有意義。
+    fee_info = None
+    if tech is not None and tech.get("signal") is not None and tech.get("take_profit_1") is not None:
+        fee_info = fee_calc.compute_fee_adjusted_rr(
+            tech["price"], tech["stop_loss"], tech["take_profit_1"], config.TAKER_FEE_PCT
+        )
+
+    fused = brain.fuse(tech, sentiment, fee_info, config.MIN_NET_RR)
     signal = {
         "name": item["name"],
         "instId": inst_id,
@@ -179,6 +191,9 @@ async def analyze_one_instrument(
         "rsi": rsi,
         "oi_change_pct": oi_delta["oi_change_pct"],
         "oi_label": oi_delta["label"],
+        "net_rr": fee_info["net_rr"] if fee_info else None,
+        "round_trip_fee_pct": fee_info["round_trip_fee_pct"] if fee_info else None,
+        "fee_eats_pct": fee_info["fee_eats_pct"] if fee_info else None,
         **fused,
     }
 
