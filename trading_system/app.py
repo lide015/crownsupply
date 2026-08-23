@@ -6,11 +6,16 @@
 ⚠️ 本系統只產生「監控訊號」，不含任何下單/自動化交易邏輯，不會使用任何交易所 API 金鑰
 去真正開倉、平倉、動用資金。所有輸出僅供研究與參考，不是投資建議。
 
-不會自動在背景輪詢做「分析」：技術訊號＋AI 新聞情緒完全由使用者按下「立即分析」
+預設不會自動在背景輪詢做「分析」：技術訊號＋AI 新聞情緒完全由使用者按下「立即分析」
 （POST /api/v1/analyze）觸發，一次點擊對應一輪 OKX＋AI 呼叫，用量自己掌控。
-唯一的例外是純報價（GET /api/v1/tickers）：這是 OKX 免費公開的 ticker 資料，
-不牽涉 AI／技術分析，前端按過一次「立即分析」之後會自動定時輪詢，讓「全部商品總覽」
-的價格/成交額/振幅保持即時，跟「分析」的用量完全脫鉤。
+純報價（GET /api/v1/tickers）是例外：這是 OKX 免費公開的 ticker 資料，不牽涉 AI／
+技術分析，前端按過一次「立即分析」之後會自動定時輪詢，讓「全部商品總覽」的價格/
+成交額/振幅保持即時，跟「分析」的用量完全脫鉤。
+
+**背景排程是選用功能，預設關閉**（見 scheduler.py／POST /api/v1/scheduler）：開啟後
+會定時自動觸發跟「立即分析」一樣的分析，但規則大腦（技術面）每輪都跑、AI 新聞情緒則
+由 ai_governor.py 決定要不要問（每日上限、連續失敗斷路器、優先給新訊號、預設每 N 輪
+才問一次）——自動化不等於無上限燒 AI token。
 """
 import asyncio
 import logging
@@ -25,7 +30,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai_coach, background, backtest, config, db, news_client, okx_client, outcome_tracker, position_sizing, stock_fundamentals, strategy
+from . import ai_coach, background, backtest, config, db, news_client, okx_client, outcome_tracker, position_sizing, scheduler, stock_fundamentals, strategy
 from .state import STATE
 
 
@@ -70,6 +75,13 @@ class BacktestAllRequest(BaseModel):
     bar: str | None = None
     limit: int | None = None
 
+
+class SchedulerConfigRequest(BaseModel):
+    # 兩個欄位都選填：只想開關就只帶 enabled，只想調間隔就只帶 interval_seconds，
+    # 兩個都帶就一次改好。不帶的欄位維持原樣。
+    enabled: bool | None = None
+    interval_seconds: int | None = None
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("app")
 
@@ -97,9 +109,13 @@ async def lifespan(app: FastAPI):
     # 只是建立可重複使用的連線池，開機當下不打任何 OKX/AI API——完全被動，等按鈕觸發。
     _http_client = httpx.AsyncClient(timeout=15.0, headers={"User-Agent": "Mozilla/5.0"})
     logger.info("http client ready, waiting for manual /api/v1/analyze trigger (no auto background polling)")
+    # 背景排程任務一律建立（方便隨時用 POST /api/v1/scheduler 開啟），但預設是暫停狀態
+    # （見 scheduler.start 說明）——開機當下同樣不會因為這一行多打任何 OKX/AI API。
+    scheduler.start(_http_client, _analyze_lock)
     try:
         yield
     finally:
+        scheduler.stop()
         await _http_client.aclose()
 
 
@@ -141,6 +157,7 @@ def _dashboard_payload() -> dict:
         "ranking": STATE.ranking,
         "circuit_breaker": STATE.circuit_breaker,
         "portfolio_exposure": STATE.portfolio_exposure,
+        "scheduler": scheduler.status(),
         "disclaimer": "僅供訊號監控參考，非投資建議；本系統不執行任何自動化下單，也不會自動在背景分析。",
     }
 
@@ -204,10 +221,34 @@ async def tickers_refresh():
     return {"ok": True, "all_instruments": STATE.all_instruments, "updated_at": int(time.time() * 1000)}
 
 
+@app.get("/api/v1/scheduler")
+async def scheduler_status():
+    """背景排程狀態面板：開關、間隔、上次／下次執行時間與結果、今日 AI 呼叫次數與上限、
+    AI 連續失敗次數、這一輪 AI 有沒有被跳過及原因——一次看到，不用查伺服器 log。"""
+    return {"ok": True, **scheduler.status()}
+
+
+@app.post("/api/v1/scheduler")
+async def scheduler_configure(req: SchedulerConfigRequest):
+    """開啟／關閉背景排程，或調整間隔（實際套用的間隔會被強制夾到
+    config.SCHEDULER_MIN_INTERVAL_SECONDS 以上，防止設太短變成失控迴圈）。設定存進
+    SQLite，跨重啟持續生效，不用改 .env、不用重啟伺服器。"""
+    now_ms = int(time.time() * 1000)
+    if req.enabled is True:
+        scheduler.enable(now_ms)
+    elif req.enabled is False:
+        scheduler.disable(now_ms)
+    if req.interval_seconds is not None:
+        scheduler.update_interval(req.interval_seconds, now_ms)
+    return {"ok": True, **scheduler.status()}
+
+
 @app.post("/api/v1/analyze")
 async def analyze():
     """使用者按下「立即分析」時呼叫：跑一輪 OKX 篩選＋K線＋AI 新聞情緒，即時回傳結果。
-    用 lock 擋掉短時間內重複點擊造成的同時兩輪請求（浪費 API 用量、且會互踩 STATE）。"""
+    用 lock 擋掉短時間內重複點擊造成的同時兩輪請求（浪費 API 用量、且會互踩 STATE）。
+    不帶 skip_ai_reason，一律照舊呼叫 AI——手動點擊不受背景排程的用量治理限制（見
+    background.refresh_cycle／ai_governor.py 說明）。"""
     if _analyze_lock.locked():
         return JSONResponse({"ok": False, "message": "上一輪分析還在進行中，請稍候再試。"}, status_code=409)
 
@@ -218,6 +259,12 @@ async def analyze():
             await background.refresh_cycle(_http_client)
         finally:
             STATE.is_analyzing = False
+
+    # 手動「立即分析」一律重置背景排程的 AI 連續失敗斷路器計數（見 state.py 說明）：
+    # 手動點擊不受這個斷路器限制，本身就是一次真實的 AI 呼叫嘗試，讓排程模式帶著乾淨的
+    # 計數繼續——不管這次手動呼叫本身成功與否，都不該讓排程模式一直卡在使用者已經介入過
+    # 的舊狀態裡。
+    STATE.ai_consecutive_failures = 0
 
     return _dashboard_payload()
 
@@ -249,7 +296,7 @@ async def analyze_instrument(req: AnalyzeInstrumentRequest):
     circuit_breaker = outcome_tracker.compute_daily_circuit_breaker(
         db.get_resolved_today(now_ms), config.MAX_DAILY_LOSS_COUNT, config.MAX_DAILY_LOSS_R
     )
-    signal, _candles = await background.analyze_one_instrument(_http_client, item, sentiment, now_ms, circuit_breaker)
+    signal, _candles, _is_new = await background.analyze_one_instrument(_http_client, item, sentiment, now_ms, circuit_breaker)
     if signal is None:
         return JSONResponse(
             {"ok": False, "message": "這檔商品目前抓不到 K 線資料，稍後再試一次。"}, status_code=502

@@ -41,5 +41,15 @@ class SystemState:
         # 幾筆未結算訊號、有沒有同方向集中度警訊。
         self.portfolio_exposure: dict = {"total_open": 0, "long_count": 0, "short_count": 0, "concentration_warning": None}
 
+        # ---- 背景排程 + AI 用量治理（見 scheduler.py／ai_governor.py） ----
+        self.ai_skip_reason: str | None = None  # 這一輪(排程模式)AI 新聞情緒有沒有被跳過、跳過的原因；手動分析恆為 None
+        self.last_ai_call_attempted: bool = False  # 這一輪是否真的呼叫了 AI（供 scheduler 判斷要不要累計每日用量）
+        self.last_ai_call_failed: bool = False  # 這一輪 AI 呼叫是否失敗（供 scheduler 判斷連續失敗斷路器）
+        self.had_new_signal_last_cycle: bool = False  # 上一輪排程是否有新技術訊號（供下一輪 AI 節流判斷優先問）
+        self.ai_consecutive_failures: int = 0  # 背景排程模式下 AI 連續失敗次數；手動點擊「立即分析」會重置這個計數
+        self.scheduler_last_run_at: str | None = None
+        self.scheduler_last_run_status: str | None = None  # "ok" | "error" | None（還沒跑過）
+        self.scheduler_last_run_error: str | None = None
+
 
 STATE = SystemState()

@@ -38,12 +38,14 @@ trading_system/
 ├─ ranking.py                    # 📊 推薦強度榜：技術/籌碼/情緒/量能四維度評分排名（純函式，內建自測）
 ├─ market_pulse.py                # 🌡️ 市場情緒：平均 RSI、山寨季代理指標、恐懼貪婪指數（內建自測）
 ├─ oi_tracker.py                    # 合約未平倉量（OI）追蹤，當「籌碼面」替代指標（純函式，內建自測）
+├─ scheduler.py                       # 🤖 選用背景排程（預設關閉）：APScheduler 定時跑 refresh_cycle
+├─ ai_governor.py                      # 🤖 背景排程模式的 AI 用量治理：每日上限/連續失敗斷路器/新訊號優先/節流週期（純函式，內建自測）
 ├─ db.py                     # SQLite：訊號歷史 + 自動優化後的參數，跨重啟持續累積
 ├─ state.py                   # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
 ├─ index.html                # 網頁前端：🎯當沖訊號／📚知識宇宙 兩個分頁的單一 SPA
 ├─ static/tailwind.css        # 編譯好的樣式表（已 commit，見下方「前端樣式」），伺服器直接掛載 /static
 ├─ package.json                # 只用來跑 Tailwind CLI 編譯 static/tailwind.css，非必要不用裝
-├─ requirements.txt           # fastapi / uvicorn / httpx / pandas / python-dotenv
+├─ requirements.txt           # fastapi / uvicorn / httpx / pandas / python-dotenv / apscheduler
 └─ .env.example                # 環境變數範本
 ```
 
@@ -75,10 +77,10 @@ Supabase 的 PostgREST API（`{SUPABASE_URL}/rest/v1/knowledge_nodes` 等），�
 代理端點——因為 `knowledge_nodes`／`knowledge_edges`／`missions` 這三張表在 Supabase 上本來
 就設成公開唯讀（見 `../knowledge_universe/README.md`）。
 
-> **沒有背景排程。** 舊版本會在背景每 30 秒自動重算一次、每 10 分鐘自動打一次 AI，
-> 現在改成純手動：伺服器啟動後**完全不會**呼叫任何 OKX／AI API，只有你在網頁上按下
-> 「🔍 立即分析」，前端才會打 `POST /api/v1/analyze`，後端才跑一輪分析。用量（尤其是
-> AI token）完全由你點擊的次數決定，不會有背景空轉的隱藏消耗。
+> **預設沒有背景排程。** 伺服器啟動後**預設完全不會**呼叫任何 OKX／AI API，只有你在網頁
+> 上按下「🔍 立即分析」，前端才會打 `POST /api/v1/analyze`，後端才跑一輪分析。用量（尤其
+> 是 AI token）完全由你點擊的次數決定，不會有背景空轉的隱藏消耗。如果你想要自動化，見
+> 「🤖 背景排程自動分析」一節——刻意需要主動開啟，開啟後 AI 用量仍然有三道防線把關。
 
 ## 啟動方式
 
@@ -116,6 +118,7 @@ python -m trading_system.position_sizing  # 倉位計算機公式自測
 python -m trading_system.ranking          # 推薦強度榜四維度評分自測
 python -m trading_system.market_pulse     # RSI / 山寨季代理指標自測
 python -m trading_system.oi_tracker       # OI 變化判斷自測
+python -m trading_system.ai_governor      # 背景排程 AI 用量治理（節流週期/每日上限/斷路器）自測
 ```
 
 ## AI 新聞情緒 — 如何啟用
@@ -239,9 +242,11 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/candles/{inst_id}` | GET | 📈 K線走勢圖資料，**零 AI 成本**，只是把 OKX 免費公開的歷史K線包一層，順便算好 `ema_series` 給前端疊加畫線。query：`bar`?、`limit`?、`ema_period`?（都不帶就用 `config.CANDLE_BAR`/`BACKTEST_CANDLE_LIMIT`/`EMA_PERIOD`——刻意跟訊號分析用同一組預設值，見「K線走勢圖」一節）|
 | `/api/v1/backtest-all` | POST | 📊 批次回測排行榜，對監控清單逐一跑歷史回測、依獲利因子排序，**零 AI 成本**。body：`{"bar"?,"limit"?}` |
 | `/api/v1/tickers` | GET | 📡 輕量即時報價刷新，**零 AI 成本**，只抓 OKX 免費公開 ticker、覆蓋 `all_instruments` 的報價欄位（OI 欄位沿用上次分析的值）。前端每 15 秒自動輪詢，見「即時報價自動刷新」一節 |
+| `/api/v1/scheduler` | GET | 🤖 背景排程狀態面板：開關、間隔、上次/下次執行時間與結果、今日 AI 呼叫次數與上限、AI 連續失敗次數、這一輪 AI 有沒有被跳過及原因，見「背景排程自動分析」一節 |
+| `/api/v1/scheduler` | POST | 🤖 開啟/關閉背景排程、調整間隔。body：`{"enabled"?, "interval_seconds"?}`（兩個都選填，不帶的欄位維持原樣）；間隔會被強制夾到 900 秒以上 |
 
-`/api/v1/dashboard`、`/api/v1/analyze` 的回傳現在還多了 `market_pulse`（市場情緒儀表板資料）
-跟 `ranking`（推薦強度榜資料），見下一節。
+`/api/v1/dashboard`、`/api/v1/analyze` 的回傳現在還多了 `market_pulse`（市場情緒儀表板資料）、
+`ranking`（推薦強度榜資料）跟 `scheduler`（背景排程狀態，同 `GET /api/v1/scheduler`），見下一節。
 
 ## 🧮 倉位計算機、📊 推薦強度榜、🌡️ 市場情緒儀表板
 
@@ -335,6 +340,73 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 歷史資料存在 `data/trading_system.db`（跟 `backend/` 共用 repo 根目錄的 `data/` 資料夾，
 已在 `.gitignore` 排除）——這是本地檔案，純粹讓「訊號有沒有用」這件事跨重啟持續累積，
 不會傳到任何外部服務。
+
+## 🤖 背景排程自動分析（選用，預設關閉）
+
+預設情況下這個系統完全不會自動在背景做任何事——分析只在你按下「立即分析」時才觸發一輪
+OKX＋AI 呼叫，這是刻意的設計（見上方各節）。但如果你想要「不用手動點，系統自己定時掃描」，
+可以透過 `POST /api/v1/scheduler` 開啟一個選用的背景排程：
+
+```bash
+# 開啟排程，間隔 1800 秒（30 分鐘）
+curl -X POST http://127.0.0.1:8000/api/v1/scheduler \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "interval_seconds": 1800}'
+
+# 查看目前狀態
+curl http://127.0.0.1:8000/api/v1/scheduler
+```
+
+開關跟間隔存進 SQLite（`db.py` 的 `strategy_params` 表），跨重啟持續生效，不用改 `.env`、
+不用重啟伺服器就能調整。不管透過 API 設多短，實際套用的間隔都不會低於
+`SCHEDULER_MIN_INTERVAL_SECONDS`（900 秒，寫死在 `config.py`，不開放調整）——防止設定
+錯誤或誤觸 API 變成失控的高頻迴圈。排程觸發時如果剛好使用者正在手動「立即分析」，這一輪
+排程直接跳過（不排隊等待），下一個間隔會再試，兩邊不會互踩。
+
+### 🧠 自動化不等於無上限燒 AI token——規則大腦優先，AI 按需觸發
+
+開啟背景排程之後，**每一輪排程都會跑規則大腦**（`strategy.py`／`brain.py` 的 EMA、盒子
+突破、量能確認、多時間週期趨勢共振、每日虧損斷路器）——這些全部是純數學計算，吃 OKX 免費
+公開 K 線，零額外成本，不管排程間隔多短都可以放心跑。
+
+**AI 新聞情緒則不是每輪都問**，由 `ai_governor.py` 決定這一輪要不要呼叫，三道防線疊加：
+
+1. **節流週期**（`AI_REFRESH_EVERY_N_CYCLES`，預設 3）：預設每 3 輪排程才問一次 AI，
+   而不是每次排程觸發都無條件燒一次 AI 呼叫。
+2. **新技術訊號優先**：不管節流週期算到哪，只要上一輪排程真的出現新的技術突破訊號，
+   這一輪就一律允許問 AI——新訊號的新聞情緒判讀對使用者最有價值，不該被固定週期卡住。
+   （這裡故意是「上一輪」而不是「同一輪」：AI 新聞情緒判讀排在整體新聞抓取之後、逐檔跑
+   之前，此刻還不知道這一輪誰是新訊號；用「下一輪」換取不用整批K線多抓一次，划算。）
+3. **每日呼叫上限**（`AI_DAILY_CALL_CAP`，預設 48）跟**連續失敗斷路器**
+   （`AI_FAILURE_THRESHOLD`，預設 3）：達到每日上限，或 AI 連續失敗達門檻，這天／
+   這段期間剩餘的排程週期一律只跑規則大腦，不再呼叫 AI，直到隔天（UTC）或使用者下一次
+   手動「立即分析」（會重置連續失敗計數）。
+
+**這三道防線只套用在背景排程觸發的 AI 呼叫**——使用者自己手動按「立即分析」一律照舊每次
+都問 AI，不受這裡任何限制（手動點擊本來就已經被點擊次數天然節流，不該因為排程用掉了
+額度就連手動分析也被擋）。
+
+每一輪排程跳過 AI 時，都會把跳過的原因寫進 `GET /api/v1/scheduler` 的 `ai_skip_reason`
+欄位（例如「省 token 週期：規則大腦每輪都跑，AI 新聞情緒每 3 輪才問一次」或「已達每日
+AI 呼叫上限（48/48）」）——不會悶著不說，讓使用者隨時看得到「這一輪為什麼沒有 AI 新聞
+情緒」。
+
+### 環境變數
+
+```
+SCHEDULER_ENABLED=false            # 開機時的起始狀態；SQLite 有存過值就以 SQLite 為準
+SCHEDULER_INTERVAL_SECONDS=1800    # 起始間隔（秒），實際下限 900
+AI_REFRESH_EVERY_N_CYCLES=3        # 每幾輪排程才問一次 AI（0/1 代表每輪都問）
+AI_DAILY_CALL_CAP=48               # 每日 AI 呼叫上限（0 代表不限制）
+AI_FAILURE_THRESHOLD=3             # AI 連續失敗幾次觸發斷路器（0 代表不啟用）
+```
+
+### 現況：只有後端，前端還沒有排程控制面板
+
+這一輪先把排程／用量治理的後端機制做完整、測試覆蓋（見 `ai_governor.py` 的自我測試），
+目前只能透過 `curl`／`POST /api/v1/scheduler` 操作，網頁上還沒有對應的開關/狀態面板 UI
+——`GET /api/v1/scheduler` 的完整狀態已經可以在 `/api/v1/dashboard` 的 `scheduler` 欄位
+拿到，前端呈現（動態「最後掃描：N秒前」、系統狀態面板、開關按鈕）是下一輪的工作。
 
 ## 訊號邏輯
 

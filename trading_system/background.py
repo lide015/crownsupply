@@ -1,7 +1,10 @@
 """分析迴圈：「OKX 篩選 → 抓 K 線 → 技術面訊號 → 融合 AI 新聞情緒」跑一輪，結果寫進
-state.STATE。刻意**不是**背景排程——沒有 while True + sleep 的自動輪詢，只有 app.py 的
-`POST /api/v1/analyze` 端點在使用者按下「立即分析」時才會呼叫 refresh_cycle() 一次。
-這樣 OKX／AI API 的用量完全由使用者手動觸發次數決定，不會有背景空轉的隱藏消耗。
+state.STATE。核心邏輯不假設任何觸發方式——app.py 的 `POST /api/v1/analyze` 端點在
+使用者按下「立即分析」時呼叫 refresh_cycle() 一次（不帶 skip_ai_reason，行為跟這個
+系統原本的設計完全一樣：每次點擊對應一輪完整的 OKX＋AI 呼叫，用量由點擊次數決定）；
+`scheduler.py` 的選用背景排程（預設關閉，見該模組說明）也呼叫同一個函式，但規則大腦
+（技術面）每輪都跑、AI 新聞情緒則由 `ai_governor.py` 決定要不要問（傳入 skip_ai_reason），
+避免自動化等於無上限燒 AI token。
 
 每一輪也會順便：
 1. 回頭檢查之前產生、還沒結算的訊號後來是中停利還是停損（純看 OKX 歷史 K 線，零 AI 成本）。
@@ -163,8 +166,13 @@ async def _fetch_btc_pct_change(client: httpx.AsyncClient, already_fetched: dict
 
 async def analyze_one_instrument(
     client: httpx.AsyncClient, item: dict, sentiment: dict, now_ms: int, circuit_breaker: dict | None = None
-) -> tuple[dict | None, list]:
-    """對單一商品跑完整的「K線→技術訊號→OI→多空共振」流程，回傳 (訊號 dict 或 None, candles)。
+) -> tuple[dict | None, list, bool]:
+    """對單一商品跑完整的「K線→技術訊號→OI→多空共振」流程，回傳
+    (訊號 dict 或 None, candles, is_new_signal)。第三個值供呼叫端（見 _refresh_signals）
+    判斷這一輪有沒有真正新產生的技術訊號，給背景排程模式的 AI 節流節奏參考（見
+    ai_governor.py：新訊號應該優先問 AI，不該被固定週期卡住）——K線抓取失敗時第三個值
+    固定回傳 False。
+
     item 需含 instId/name/asset_class/price/vol_usdt/amplitude_pct（parse_instruments() 的格式）；
     sentiment 是這檔的新聞情緒（{"sentiment","headline","reason"}）。
     circuit_breaker：outcome_tracker.compute_daily_circuit_breaker() 的回傳值（可能是
@@ -189,7 +197,7 @@ async def analyze_one_instrument(
         )
     except Exception as exc:  # noqa: BLE001 — 單一商品失敗不能拖垮整輪更新
         logger.warning("signal calc failed for %s: %s", inst_id, exc)
-        return None, []
+        return None, [], False
 
     rsi = market_pulse.compute_rsi([c["c"] for c in candles])
     oi_delta = await _fetch_oi_delta(client, inst_id, now_ms)
@@ -259,10 +267,14 @@ async def analyze_one_instrument(
         except Exception as exc:  # noqa: BLE001 — 通知失敗不該讓分析流程掛掉
             logger.warning("email notification failed for %s: %s", inst_id, exc)
 
-    return signal, candles
+    return signal, candles, is_new_signal
 
 
-async def _refresh_signals(client: httpx.AsyncClient):
+async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None = None):
+    """skip_ai_reason：非 None 時這一輪完全不呼叫 AI 新聞情緒，沿用上一輪的市場情緒
+    （見 ai_governor.py／scheduler.py 說明）。手動「立即分析」（app.py 的
+    POST /api/v1/analyze）呼叫時這個參數維持預設 None，行為跟原本完全一樣——這個節流
+    只在背景排程模式下才會被傳入非 None 的值。"""
     now_ms = int(time.time() * 1000)
 
     # 自動優化過的門檻（如果有）存在 SQLite 裡，跨重啟持續生效；沒調整過就用 config.py 預設值。
@@ -371,12 +383,26 @@ async def _refresh_signals(client: httpx.AsyncClient):
         {"instId": item["instId"], "query": item["instId"].split("-")[0], "label": item["name"]}
         for item in monitored
     ]
-    try:
-        news = await news_client.get_market_and_instrument_sentiment(client, news_targets)
-    except Exception as exc:  # noqa: BLE001 — 新聞失敗不影響技術面訊號照常更新，維持上一輪的情緒
-        logger.warning("news refresh failed, keeping previous sentiment: %s", exc)
+    if skip_ai_reason:
+        # 🧠 背景排程模式：這一輪省 token，不呼叫 AI，規則大腦（技術面）照常運作、沿用上一輪
+        # 的市場情緒（見 ai_governor.should_skip_ai_this_cycle 說明）。不算「失敗」，
+        # 不會累計進 AI 連續失敗斷路器。
         stale = {"sentiment": STATE.market_sentiment, "headline": STATE.news_headline, "reason": STATE.news_reason}
-        news = {"market": stale, "by_instrument": {t["instId"]: stale for t in news_targets}}
+        news = {"market": stale, "by_instrument": {t["instId"]: stale for t in news_targets}, "status": "skipped"}
+        STATE.ai_skip_reason = skip_ai_reason
+        STATE.last_ai_call_attempted = False
+        STATE.last_ai_call_failed = False
+    else:
+        STATE.ai_skip_reason = None
+        STATE.last_ai_call_attempted = True
+        try:
+            news = await news_client.get_market_and_instrument_sentiment(client, news_targets)
+            STATE.last_ai_call_failed = news.get("status") == "error"
+        except Exception as exc:  # noqa: BLE001 — 新聞失敗不影響技術面訊號照常更新，維持上一輪的情緒
+            logger.warning("news refresh failed, keeping previous sentiment: %s", exc)
+            stale = {"sentiment": STATE.market_sentiment, "headline": STATE.news_headline, "reason": STATE.news_reason}
+            news = {"market": stale, "by_instrument": {t["instId"]: stale for t in news_targets}, "status": "error"}
+            STATE.last_ai_call_failed = True
     STATE.market_sentiment = news["market"]["sentiment"]
     STATE.news_headline = news["market"]["headline"]
     STATE.news_reason = news["market"]["reason"]
@@ -385,10 +411,12 @@ async def _refresh_signals(client: httpx.AsyncClient):
     signals = []
     rsi_values = []
     pct_changes_by_inst = {}
+    any_new_signal = False
     for item in monitored:
         inst_id = item["instId"]
         sentiment = sentiment_by_inst.get(inst_id, news["market"])
-        signal, candles = await analyze_one_instrument(client, item, sentiment, now_ms, circuit_breaker)
+        signal, candles, is_new_signal = await analyze_one_instrument(client, item, sentiment, now_ms, circuit_breaker)
+        any_new_signal = any_new_signal or is_new_signal
         if signal is None:
             continue
         signals.append(signal)
@@ -397,6 +425,13 @@ async def _refresh_signals(client: httpx.AsyncClient):
         if signal["rsi"] is not None:
             rsi_values.append(signal["rsi"])
         pct_changes_by_inst[inst_id] = _pct_change(candles)
+
+    # 🧠 給下一輪背景排程的 AI 節流判斷用（見 ai_governor.py）：這一輪有沒有真正新產生的
+    # 技術訊號。故意記在「這一輪」結束時給「下一輪」用，而不是同一輪內搶快問 AI——AI 新聞
+    # 情緒判讀排在整體新聞抓取「之後」才逐檔跑（見本函式上半段的說明），此刻才知道這一輪
+    # 誰是新訊號已經太晚，下一輪排程間隔通常只有幾十分鐘，一輪的延遲換取不用整檔重抓兩次
+    # K線，划算。
+    STATE.had_new_signal_last_cycle = any_new_signal
 
     STATE.signals = signals
     STATE.last_update = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -424,18 +459,19 @@ async def _refresh_signals(client: httpx.AsyncClient):
         db.set_oi_snapshots_bulk(oi_rows, now_ms)
 
 
-async def refresh_cycle(client: httpx.AsyncClient):
+async def refresh_cycle(client: httpx.AsyncClient, skip_ai_reason: str | None = None):
     """完整跑一輪分析：回頭結算舊訊號 → 商品篩選（可能已被自動優化調整）→ 逐檔新聞情緒
     （見 _refresh_signals 內部說明，故意排在篩選「之後」才做）→ 每檔的技術訊號 → 多空共振
-    → 記錄新訊號。由 app.py 在收到 POST /api/v1/analyze 時呼叫，一次請求對應一輪，
-    不重複、不背景自動跑。"""
+    → 記錄新訊號。由 app.py 在收到 POST /api/v1/analyze（手動「立即分析」，skip_ai_reason
+    維持預設 None，行為跟原本完全一樣）或 scheduler.py 的背景排程任務（可能傳入非 None 的
+    skip_ai_reason，見 ai_governor.py）呼叫。"""
     try:
         await _resolve_open_signals(client)
     except Exception as exc:  # noqa: BLE001 — 舊訊號結算失敗不該擋住本輪新訊號的產生
         logger.warning("resolving open signals failed: %s", exc)
 
     try:
-        await _refresh_signals(client)
+        await _refresh_signals(client, skip_ai_reason=skip_ai_reason)
         STATE.last_error = None
     except Exception as exc:  # noqa: BLE001 — 失敗要讓使用者在儀表板上看到原因，不能悶掉
         logger.warning("signal refresh cycle failed: %s", exc)

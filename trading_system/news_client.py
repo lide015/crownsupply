@@ -300,14 +300,21 @@ async def get_market_and_instrument_sentiment(client: httpx.AsyncClient, instrum
     instruments: [{"instId": str, "query": str, "label": str}, ...]——query 是拿去搜尋
     Google News 的關鍵字（通常是基礎代號，例如 "BTC"、"TSLA"），label 是顯示用名稱。
 
-    回傳 {"market": {...}, "by_instrument": {instId: {...}}}——by_instrument 對每一個傳入
-    的 instId 都保證有值：查得到專屬新聞、AI 也判讀出來就用專屬的；查不到新聞、AI 停用、
-    或呼叫失敗，一律 fallback 套用 market 的判斷，呼叫端不用另外處理「這檔沒資料」的分支。
+    回傳 {"market": {...}, "by_instrument": {instId: {...}}, "status": str}——by_instrument
+    對每一個傳入的 instId 都保證有值：查得到專屬新聞、AI 也判讀出來就用專屬的；查不到新聞、
+    AI 停用、或呼叫失敗，一律 fallback 套用 market 的判斷，呼叫端不用另外處理「這檔沒資料」
+    的分支。
+
+    "status" 給背景排程模式的 AI 用量治理用（見 ai_governor.py／scheduler.py）：
+    "disabled"（AI 沒設定/停用，不算失敗，不該累計進連續失敗斷路器）、"no_headlines"
+    （抓不到任何新聞，不是 AI 本身的錯，同樣不算失敗）、"error"（AI 呼叫或解析真的失敗，
+    這個才該累計進連續失敗斷路器）、"ok"（AI 正常回應）。手動「立即分析」流程目前不讀
+    這個欄位，純粹是附加資訊，不影響既有呼叫端的行為。
     """
     disabled_reason = _ai_disabled_reason()
     if disabled_reason:
         market = _no_ai_result(disabled_reason)
-        return {"market": market, "by_instrument": {i["instId"]: market for i in instruments}}
+        return {"market": market, "by_instrument": {i["instId"]: market for i in instruments}, "status": "disabled"}
 
     try:
         market_headlines = await fetch_headlines(client)
@@ -327,7 +334,7 @@ async def get_market_and_instrument_sentiment(client: httpx.AsyncClient, instrum
     has_any_headline = bool(market_headlines) or any(v["headlines"] for v in instrument_headlines.values())
     if not has_any_headline:
         fallback = {"sentiment": "NEUTRAL", "headline": "目前無法取得新聞頭條", "reason": "RSS 來源暫時無法連線"}
-        return {"market": fallback, "by_instrument": {i["instId"]: fallback for i in instruments}}
+        return {"market": fallback, "by_instrument": {i["instId"]: fallback for i in instruments}, "status": "no_headlines"}
 
     prompt = _build_multi_prompt(market_headlines, instrument_headlines)
     # 每個標的的 JSON 條目（含 key、標點、40 字中文理由）實際觀察起來比原本抓的還要長，
@@ -344,12 +351,12 @@ async def get_market_and_instrument_sentiment(client: httpx.AsyncClient, instrum
         logger.warning("AI multi-sentiment call failed: %s", exc)
         market_headline = market_headlines[0] if market_headlines else "（無整體市場新聞）"
         fallback = {"sentiment": "NEUTRAL", "headline": market_headline, "reason": f"AI 分析暫時失敗：{_describe_error(exc)}"}
-        return {"market": fallback, "by_instrument": {i["instId"]: fallback for i in instruments}}
+        return {"market": fallback, "by_instrument": {i["instId"]: fallback for i in instruments}, "status": "error"}
 
     if not parsed:
         market_headline = market_headlines[0] if market_headlines else "（無整體市場新聞）"
         fallback = {"sentiment": "NEUTRAL", "headline": market_headline, "reason": "AI 回覆格式無法解析，暫以中性處理"}
-        return {"market": fallback, "by_instrument": {i["instId"]: fallback for i in instruments}}
+        return {"market": fallback, "by_instrument": {i["instId"]: fallback for i in instruments}, "status": "error"}
 
     market_headline = market_headlines[0] if market_headlines else "（無整體市場新聞）"
     market = {"sentiment": parsed["market"]["sentiment"], "headline": market_headline, "reason": parsed["market"]["reason"]}
@@ -369,7 +376,7 @@ async def get_market_and_instrument_sentiment(client: httpx.AsyncClient, instrum
                 "reason": "沒有找到該標的專屬新聞，套用整體市場情緒。",
             }
 
-    return {"market": market, "by_instrument": by_instrument}
+    return {"market": market, "by_instrument": by_instrument, "status": "ok"}
 
 
 if __name__ == "__main__":

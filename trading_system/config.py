@@ -106,6 +106,32 @@ FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 # ---- 推薦強度榜（見 ranking.py） ----
 RANKING_TOP_N = int(os.getenv("RANKING_TOP_N", "5"))  # 做多/做空各顯示前幾名
 
+# ---- 背景排程自動分析（選用，預設關閉，見 scheduler.py） ----
+# 開啟後系統會照下面的間隔自動觸發一輪分析（跟按「立即分析」一樣的邏輯），不用手動點擊。
+# 這跟本系統原本「用量完全由使用者點擊次數決定」的設計精神不同，所以刻意預設關閉，需要
+# 透過 POST /api/v1/scheduler 主動開啟——開關/間隔實際存在 SQLite（跨重啟持續生效，
+# 可以不重啟伺服器就調整），這裡的環境變數只是「資料庫裡還沒被設定過時」的起始值。
+SCHEDULER_ENABLED_DEFAULT = os.getenv("SCHEDULER_ENABLED", "false").lower() == "true"
+SCHEDULER_INTERVAL_SECONDS_DEFAULT = int(os.getenv("SCHEDULER_INTERVAL_SECONDS", "1800"))
+# 強制下限：不管使用者透過 API 設多短，實際排程間隔都不會短於這個值，防止設定錯誤
+# （或誤觸 API）變成失控的高頻迴圈，把 OKX／AI 用量燒爆。
+SCHEDULER_MIN_INTERVAL_SECONDS = 900
+
+# ---- 背景排程模式下的 AI 用量治理（見 ai_governor.py） ----
+# 規則大腦（技術面 EMA/突破/量能/趨勢，見 strategy.py／brain.py）每一輪排程都會跑，
+# 零額外成本；AI 新聞情緒（見 news_client.py）不是每輪都問，靠以下三道防線把關：
+# 1. 節流週期：預設每 3 輪才問一次 AI，除非這輪剛好偵測到新技術訊號，那種情況一律優先問
+#    （新訊號的新聞情緒判讀對使用者最有價值，不該被固定週期卡住）。
+AI_REFRESH_EVERY_N_CYCLES = int(os.getenv("AI_REFRESH_EVERY_N_CYCLES", "3"))
+# 2. 每日呼叫上限：0 代表不限制。這個上限只套用在「背景排程」觸發的 AI 呼叫；使用者自己
+#    手動按「立即分析」一律照舊不受這個上限影響——手動點擊本來就已經被點擊次數天然節流，
+#    不該因為背景排程用掉了額度就連手動分析也被擋。
+AI_DAILY_CALL_CAP = int(os.getenv("AI_DAILY_CALL_CAP", "48"))
+# 3. 連續失敗斷路器：背景排程觸發的 AI 呼叫連續失敗達這個次數，之後幾輪暫停呼叫 AI（只跑
+#    規則大腦），避免對著故障中的 AI API 一直重試燒 token；使用者下一次手動「立即分析」
+#    會重置這個計數（見 background.refresh_cycle 說明）。0 代表不啟用這道防線。
+AI_FAILURE_THRESHOLD = int(os.getenv("AI_FAILURE_THRESHOLD", "3"))
+
 # ---- 訊號結果追蹤與自動優化（見 db.py / outcome_tracker.py / strategy_tuner.py） ----
 # 每次分析時回頭檢查未結算訊號要抓多少根已收盤 K 線（OKX /market/candles 單次上限 300）
 RESOLUTION_LOOKBACK_CANDLES = int(os.getenv("RESOLUTION_LOOKBACK_CANDLES", "300"))
