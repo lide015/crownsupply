@@ -16,6 +16,10 @@
 會定時自動觸發跟「立即分析」一樣的分析，但規則大腦（技術面）每輪都跑、AI 新聞情緒則
 由 ai_governor.py 決定要不要問（每日上限、連續失敗斷路器、優先給新訊號、預設每 N 輪
 才問一次）——自動化不等於無上限燒 AI token。
+
+**警報是選用功能**（見 alerts.py／POST /api/v1/alerts）：對特定商品自訂價格漲破/跌破
+門檻、或新技術訊號出現時，透過 Telegram／Email 通知。價格警報／訊號警報都是每輪分析
+（手動或已開啟的背景排程）的附加檢查，不是逐秒即時監控。
 """
 import asyncio
 import logging
@@ -30,7 +34,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai_coach, background, backtest, config, db, news_client, okx_client, outcome_tracker, position_sizing, scheduler, stock_fundamentals, strategy
+from . import ai_coach, alerts, background, backtest, config, db, email_notify, news_client, okx_client, outcome_tracker, position_sizing, scheduler, stock_fundamentals, strategy, telegram_notify
 from .state import STATE
 
 
@@ -81,6 +85,21 @@ class SchedulerConfigRequest(BaseModel):
     # 兩個都帶就一次改好。不帶的欄位維持原樣。
     enabled: bool | None = None
     interval_seconds: int | None = None
+
+
+class CreateAlertRequest(BaseModel):
+    inst_id: str
+    name: str | None = None
+    alert_type: str
+    threshold: float | None = None
+    # 只有 price_above/price_below 有意義；signal 類型一律強制為 "repeating"（一次性
+    # 訊號警報觸發完就不會再通知未來的新訊號，沒有意義，見 app.py 建立端點的說明）。
+    repeat_mode: str | None = None
+    channels: list[str]
+
+
+class UpdateAlertRequest(BaseModel):
+    enabled: bool
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("app")
@@ -179,6 +198,10 @@ async def frontend_config():
             "tp2_rr": config.TP2_RR,
             "volume_confirm_multiple": config.VOLUME_CONFIRM_MULTIPLE,
         },
+        # 🔔 警報表單只顯示使用者實際能用的通知管道（沒設定金鑰的管道選了也送不到，
+        # 不該讓使用者以為選了就有效），不是機密值，純布林旗標。
+        "telegram_configured": telegram_notify.is_configured(),
+        "email_configured": email_notify.is_configured(),
     }
 
 
@@ -242,6 +265,72 @@ async def scheduler_configure(req: SchedulerConfigRequest):
     if req.interval_seconds is not None:
         scheduler.update_interval(req.interval_seconds, now_ms)
     return {"ok": True, **scheduler.status()}
+
+
+@app.get("/api/v1/alerts")
+async def list_alerts():
+    """🔔 警報清單，供管理面板用。零 AI 成本，純讀資料庫。"""
+    return {"ok": True, "alerts": db.get_alerts()}
+
+
+@app.post("/api/v1/alerts")
+async def create_alert_endpoint(req: CreateAlertRequest):
+    """🔔 新增警報：對特定商品自訂價格漲破/跌破門檻、或新技術訊號出現的通知。⚠️ 不是逐秒
+    即時監控——價格/訊號警報都是每輪分析（手動「立即分析」或已開啟的背景排程）的附加
+    檢查，見 alerts.py 說明。"""
+    if req.alert_type not in alerts.ALERT_TYPES:
+        return JSONResponse({"ok": False, "message": f"不支援的警報類型：{req.alert_type}"}, status_code=400)
+    if req.alert_type in ("price_above", "price_below") and req.threshold is None:
+        return JSONResponse({"ok": False, "message": "價格警報需要填寫門檻價位。"}, status_code=400)
+    if not req.channels:
+        return JSONResponse({"ok": False, "message": "請至少選擇一個通知管道。"}, status_code=400)
+    for ch in req.channels:
+        if ch not in ("telegram", "email"):
+            return JSONResponse({"ok": False, "message": f"不支援的通知管道：{ch}"}, status_code=400)
+        if ch == "telegram" and not telegram_notify.is_configured():
+            return JSONResponse({"ok": False, "message": "尚未設定 Telegram Bot，無法選擇這個管道。"}, status_code=400)
+        if ch == "email" and not email_notify.is_configured():
+            return JSONResponse({"ok": False, "message": "尚未設定 Email SMTP，無法選擇這個管道。"}, status_code=400)
+    if db.count_alerts() >= config.ALERT_MAX_TOTAL:
+        return JSONResponse(
+            {"ok": False, "message": f"警報數量已達上限（{config.ALERT_MAX_TOTAL}），請先刪除不需要的警報。"},
+            status_code=400,
+        )
+
+    # signal 類型的「一次性」沒有意義（觸發完就不會再通知未來的新訊號，等於警報形同虛設），
+    # 一律強制成 repeating；price_* 類型才照使用者選的（不帶就預設 once，比較安全的預設值）。
+    repeat_mode = "repeating" if req.alert_type == "signal" else (req.repeat_mode or "once")
+    if repeat_mode not in ("once", "repeating"):
+        return JSONResponse({"ok": False, "message": f"不支援的重複模式：{repeat_mode}"}, status_code=400)
+
+    created = db.create_alert({
+        "inst_id": req.inst_id,
+        "name": req.name or req.inst_id,
+        "alert_type": req.alert_type,
+        "threshold": req.threshold,
+        "repeat_mode": repeat_mode,
+        "channels": req.channels,
+        "created_at": int(time.time() * 1000),
+    })
+    return {"ok": True, "alert": created}
+
+
+@app.patch("/api/v1/alerts/{alert_id}")
+async def update_alert_endpoint(alert_id: int, req: UpdateAlertRequest):
+    """🔔 啟用/停用一個既有警報（目前只支援這個欄位；改條件請刪除重建，管理面板刻意
+    精簡，見 README）。"""
+    ok = db.set_alert_enabled(alert_id, req.enabled)
+    if not ok:
+        return JSONResponse({"ok": False, "message": "找不到這個警報。"}, status_code=404)
+    return {"ok": True}
+
+
+@app.delete("/api/v1/alerts/{alert_id}")
+async def delete_alert_endpoint(alert_id: int):
+    ok = db.delete_alert(alert_id)
+    if not ok:
+        return JSONResponse({"ok": False, "message": "找不到這個警報。"}, status_code=404)
+    return {"ok": True}
 
 
 @app.post("/api/v1/analyze")

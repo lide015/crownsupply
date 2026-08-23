@@ -28,6 +28,25 @@ def is_configured() -> bool:
     return bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
 
 
+async def send_text(client: httpx.AsyncClient, text: str) -> bool:
+    """低階發送：純文字，訊號通知（send_signal_notification）跟警報（alerts.py／
+    background.py）共用同一份發送邏輯，只是組出來的文字內容不一樣。回傳是否真的送出；
+    沒設定金鑰、或發送失敗都回傳 False，自己吞掉所有例外——通知只是附加功能，絕對不能
+    拖垮主要的分析流程。"""
+    if not is_configured():
+        return False
+    try:
+        resp = await client.post(
+            TELEGRAM_API_URL.format(token=config.TELEGRAM_BOT_TOKEN),
+            json={"chat_id": config.TELEGRAM_CHAT_ID, "text": text},
+        )
+        resp.raise_for_status()
+        return True
+    except Exception as exc:  # noqa: BLE001 — 通知失敗不能讓分析流程掛掉
+        logger.warning("Telegram notification failed: %s", exc)
+        return False
+
+
 def build_signal_message(signal: dict) -> str:
     """把訊號 dict 組成一則簡潔的 Telegram 通知文字。純函式，不牽涉網路呼叫，方便測試。"""
     direction = "🟢 做多" if signal.get("signal_type") == "long" else "🔴 做空"
@@ -46,18 +65,7 @@ def build_signal_message(signal: dict) -> str:
 async def send_signal_notification(client: httpx.AsyncClient, signal: dict) -> bool:
     """回傳是否真的送出。沒設定金鑰、或發送失敗都回傳 False——呼叫端不需要另外處理
     例外，這個函式自己吞掉所有失敗情況，通知只是附加功能，絕對不能拖垮主要分析流程。"""
-    if not is_configured():
-        return False
-    try:
-        resp = await client.post(
-            TELEGRAM_API_URL.format(token=config.TELEGRAM_BOT_TOKEN),
-            json={"chat_id": config.TELEGRAM_CHAT_ID, "text": build_signal_message(signal)},
-        )
-        resp.raise_for_status()
-        return True
-    except Exception as exc:  # noqa: BLE001 — 通知失敗不能讓分析流程掛掉
-        logger.warning("Telegram notification failed: %s", exc)
-        return False
+    return await send_text(client, build_signal_message(signal))
 
 
 if __name__ == "__main__":

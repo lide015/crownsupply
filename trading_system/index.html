@@ -97,6 +97,82 @@
       </div>
     </details>
 
+    <details id="alerts-panel" class="bg-gray-900 border border-gray-800 rounded-xl shadow-lg group">
+      <summary class="cursor-pointer select-none px-5 py-4 flex items-center justify-between text-gray-300 font-semibold">
+        <span class="flex items-center gap-2">
+          <span class="mr-1">🔔</span> 警報
+          <span id="alerts-count-badge" class="text-[10px] px-2 py-0.5 rounded-full border border-gray-700 text-gray-500">0 筆</span>
+        </span>
+        <span class="text-xs text-gray-500 group-open:hidden">點開設定</span>
+      </summary>
+      <div class="px-5 pb-5 space-y-4 border-t border-gray-800 pt-4">
+        <p class="text-[11px] text-gray-600 leading-relaxed">
+          ⚠️ 不是逐秒即時監控——價格/訊號警報都是每輪分析（手動「🔍 立即分析」或已開啟的背景排程）的附加檢查，
+          條件成立要等下一輪分析才會被發現、通知。
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-6 gap-2 items-end bg-gray-950 border border-gray-800 rounded-lg p-3">
+          <div class="sm:col-span-2">
+            <label class="text-[10px] text-gray-500 block mb-1">商品代號</label>
+            <input id="alert-inst-id" list="alert-inst-datalist" placeholder="例如 BTC-USDT-SWAP"
+              class="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-xs text-gray-200 font-mono
+                     placeholder-gray-600 focus:outline-none focus:border-amber-600" />
+            <datalist id="alert-inst-datalist"></datalist>
+          </div>
+          <div>
+            <label class="text-[10px] text-gray-500 block mb-1">條件</label>
+            <select id="alert-type-select"
+              class="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-xs text-gray-200
+                     focus:outline-none focus:border-amber-600">
+              <option value="price_above">價格漲破</option>
+              <option value="price_below">價格跌破</option>
+              <option value="signal">出現新技術訊號</option>
+            </select>
+          </div>
+          <div id="alert-threshold-wrap">
+            <label class="text-[10px] text-gray-500 block mb-1">門檻價位</label>
+            <input id="alert-threshold" type="number" step="any" placeholder="價格"
+              class="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-xs text-gray-200 font-mono text-right
+                     placeholder-gray-600 focus:outline-none focus:border-amber-600" />
+          </div>
+          <div id="alert-repeat-wrap">
+            <label class="text-[10px] text-gray-500 block mb-1">觸發後</label>
+            <select id="alert-repeat-select"
+              class="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-xs text-gray-200
+                     focus:outline-none focus:border-amber-600">
+              <option value="once">通知一次就關閉</option>
+              <option value="repeating">持續提醒（間隔至少 1 小時）</option>
+            </select>
+          </div>
+          <div id="alert-channels-wrap" class="flex items-center gap-3 text-xs text-gray-400"></div>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <div id="alert-form-error" class="hidden text-xs text-red-400"></div>
+          <button id="alert-create-btn" type="button"
+            class="ml-auto px-3 py-1.5 rounded-lg border border-amber-800 text-amber-400 hover:bg-amber-950/30 text-xs font-semibold transition-colors">
+            ➕ 新增警報
+          </button>
+        </div>
+
+        <div id="alerts-empty" class="text-xs text-gray-500 text-center py-4">目前沒有設定任何警報。</div>
+        <div id="alerts-table-wrap" class="hidden overflow-auto border border-gray-800 rounded-lg">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-950 text-gray-500">
+              <tr>
+                <th class="text-left px-3 py-2 font-semibold">商品</th>
+                <th class="text-left px-3 py-2 font-semibold">條件</th>
+                <th class="text-left px-3 py-2 font-semibold">管道</th>
+                <th class="text-center px-3 py-2 font-semibold">已觸發</th>
+                <th class="text-center px-3 py-2 font-semibold">啟用</th>
+                <th class="text-center px-3 py-2 font-semibold">刪除</th>
+              </tr>
+            </thead>
+            <tbody id="alerts-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </details>
+
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
       <h2 class="text-sm font-semibold text-gray-300 mb-1">用三層資料建立交易觀察</h2>
       <p class="text-xs text-gray-500 mb-4 leading-relaxed">先縮小範圍、再看結構是否一致、最後把觀察轉成具體的進出場決策——這是本系統各個功能區塊被設計成這樣的原因，不是零散功能的堆疊。</p>
@@ -1012,6 +1088,190 @@ document.getElementById("scheduler-intro-dismiss").addEventListener("click", () 
   try { localStorage.setItem(SCHEDULER_INTRO_DISMISSED_KEY, "1"); } catch (err) { /* 私密瀏覽模式，關閉一次算一次就好 */ }
 });
 
+/* ---------------------------------------------------------------- */
+/* 🔔 警報（選用）——見 alerts.py／background.py 的評估邏輯。管理面板刻意精簡：只有       */
+/* 新增／啟用停用／刪除，改條件用刪除重建，不做逐欄位編輯，避免介面過度複雜、浪費版面。    */
+/* 清單只在面板第一次展開時才拉取（<details> 的 toggle 事件），沒點開就不用打這支 API。   */
+/* ---------------------------------------------------------------- */
+let alertChannelsAvailable = { telegram: false, email: false };
+let alertsLoaded = false;
+
+function renderAlertChannelOptions() {
+  const wrap = document.getElementById("alert-channels-wrap");
+  const options = [];
+  if (alertChannelsAvailable.telegram) options.push({ key: "telegram", label: "Telegram" });
+  if (alertChannelsAvailable.email) options.push({ key: "email", label: "Email" });
+  if (options.length === 0) {
+    wrap.innerHTML = `<span class="text-gray-600">尚未設定任何通知管道（Telegram／Email），見 README</span>`;
+    return;
+  }
+  wrap.innerHTML = options
+    .map((opt) => `<label class="flex items-center gap-1 cursor-pointer">
+      <input type="checkbox" class="alert-channel-checkbox w-3.5 h-3.5 accent-amber-500" value="${opt.key}" checked /> ${opt.label}
+    </label>`)
+    .join("");
+}
+
+function updateAlertFormFields() {
+  const type = document.getElementById("alert-type-select").value;
+  const isPrice = type === "price_above" || type === "price_below";
+  document.getElementById("alert-threshold-wrap").classList.toggle("hidden", !isPrice);
+  // 訊號警報「一次性」沒有意義（觸發完就不會再通知未來的新訊號，見 app.py 建立端點的
+  // 說明），所以只有價格類型才顯示這個欄位，省略不需要的選項，不浪費版面。
+  document.getElementById("alert-repeat-wrap").classList.toggle("hidden", !isPrice);
+}
+document.getElementById("alert-type-select").addEventListener("change", updateAlertFormFields);
+updateAlertFormFields();
+
+function populateAlertInstDatalist() {
+  const datalist = document.getElementById("alert-inst-datalist");
+  const all = (lastDashboardData && lastDashboardData.all_instruments) || [];
+  datalist.innerHTML = all.slice(0, 300).map((i) => `<option value="${i.instId}">${i.name}</option>`).join("");
+}
+
+function alertTypeLabel(type) {
+  return { price_above: "漲破", price_below: "跌破", signal: "新訊號" }[type] || type;
+}
+
+function renderAlertsList(list) {
+  document.getElementById("alerts-count-badge").textContent = `${list.length} 筆`;
+  const empty = document.getElementById("alerts-empty");
+  const tableWrap = document.getElementById("alerts-table-wrap");
+  if (list.length === 0) {
+    empty.classList.remove("hidden");
+    tableWrap.classList.add("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  tableWrap.classList.remove("hidden");
+
+  const tbody = document.getElementById("alerts-tbody");
+  tbody.innerHTML = "";
+  for (const a of list) {
+    const condition = a.alert_type === "signal" ? "出現新訊號" : `${alertTypeLabel(a.alert_type)} ${fmt(a.threshold)}`;
+    const tr = document.createElement("tr");
+    tr.className = "border-t border-gray-800";
+    tr.innerHTML = `
+      <td class="px-3 py-2 text-gray-200 font-mono whitespace-nowrap">${a.name}</td>
+      <td class="px-3 py-2 text-gray-400 whitespace-nowrap">${condition}</td>
+      <td class="px-3 py-2 text-gray-500 whitespace-nowrap">${a.channels.join("／") || "—"}</td>
+      <td class="px-3 py-2 text-center font-mono text-gray-400">${a.trigger_count}</td>
+      <td class="px-3 py-2 text-center"><input type="checkbox" class="alert-enabled-toggle w-3.5 h-3.5 accent-amber-500" ${a.enabled ? "checked" : ""} /></td>
+      <td class="px-3 py-2 text-center"><button type="button" class="alert-delete-btn text-gray-600 hover:text-red-400" title="刪除">🗑</button></td>`;
+    tr.querySelector(".alert-enabled-toggle").addEventListener("change", (e) => toggleAlertEnabled(a.id, e.target.checked));
+    tr.querySelector(".alert-delete-btn").addEventListener("click", () => deleteAlert(a.id));
+    tbody.appendChild(tr);
+  }
+}
+
+async function loadAlertsOnce() {
+  if (alertsLoaded) return;
+  alertsLoaded = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/alerts`);
+    const body = await res.json();
+    if (body.ok) renderAlertsList(body.alerts);
+  } catch (err) {
+    console.error("讀取警報清單失敗：", err);
+    alertsLoaded = false; // 讓下次展開/操作有機會重試，不要卡在「已經載入過但其實失敗了」的假狀態
+  }
+}
+
+async function reloadAlertsList() {
+  alertsLoaded = false;
+  await loadAlertsOnce();
+}
+
+document.getElementById("alerts-panel").addEventListener("toggle", (e) => {
+  if (e.target.open) {
+    loadAlertsOnce();
+    populateAlertInstDatalist();
+  }
+});
+
+async function toggleAlertEnabled(id, enabled) {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/alerts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    const body = await res.json();
+    if (!res.ok || !body.ok) throw new Error(body.message || "更新失敗");
+  } catch (err) {
+    alert(`無法更新警報：${err}`);
+  } finally {
+    await reloadAlertsList();
+  }
+}
+
+async function deleteAlert(id) {
+  if (!confirm("確定要刪除這個警報嗎？")) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/alerts/${id}`, { method: "DELETE" });
+    const body = await res.json();
+    if (!res.ok || !body.ok) throw new Error(body.message || "刪除失敗");
+  } catch (err) {
+    alert(`無法刪除警報：${err}`);
+  } finally {
+    await reloadAlertsList();
+  }
+}
+
+document.getElementById("alert-create-btn").addEventListener("click", async () => {
+  const errorEl = document.getElementById("alert-form-error");
+  errorEl.classList.add("hidden");
+
+  const instId = document.getElementById("alert-inst-id").value.trim();
+  const alertType = document.getElementById("alert-type-select").value;
+  const thresholdRaw = document.getElementById("alert-threshold").value;
+  const repeatMode = document.getElementById("alert-repeat-select").value;
+  const channels = Array.from(document.querySelectorAll(".alert-channel-checkbox:checked")).map((c) => c.value);
+
+  if (!instId) {
+    errorEl.textContent = "請填寫商品代號（例如 BTC-USDT-SWAP）。";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+  const isPrice = alertType === "price_above" || alertType === "price_below";
+  if (isPrice && !thresholdRaw) {
+    errorEl.textContent = "請填寫門檻價位。";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+  if (channels.length === 0) {
+    errorEl.textContent = "請至少選擇一個通知管道。";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+
+  const body = {
+    inst_id: instId,
+    alert_type: alertType,
+    channels,
+    threshold: isPrice ? parseFloat(thresholdRaw) : null,
+    repeat_mode: isPrice ? repeatMode : null,
+  };
+  const matched = ((lastDashboardData && lastDashboardData.all_instruments) || []).find((i) => i.instId === instId);
+  if (matched) body.name = matched.name;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/alerts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const respBody = await res.json();
+    if (!res.ok || !respBody.ok) throw new Error(respBody.message || "新增失敗");
+    document.getElementById("alert-inst-id").value = "";
+    document.getElementById("alert-threshold").value = "";
+    await reloadAlertsList();
+  } catch (err) {
+    errorEl.textContent = String(err.message || err);
+    errorEl.classList.remove("hidden");
+  }
+});
+
 let lastDashboardData = null;
 const signalsFilter = { assetClass: "all", search: "" };
 
@@ -1021,6 +1281,7 @@ function renderDashboard(data) {
   lastUpdateMs = data.last_update_ms || null;
   renderSchedulerPanel(data.scheduler);
   tickLiveTimers();
+  populateAlertInstDatalist();
 
   const sentimentEl = document.getElementById("ai-sentiment");
   sentimentEl.textContent = data.has_run ? `AI 新聞情緒：${data.market_sentiment}` : "尚未分析";
@@ -2339,6 +2600,10 @@ async function loadBacktestDefaults() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     if (body.backtest_defaults) backtestDefaults = body.backtest_defaults;
+    // 警報表單只顯示使用者實際能用的通知管道（見 alert-channels-wrap），跟回測預設值
+    // 共用同一次 /api/v1/config 請求，不用多打一支 API。
+    alertChannelsAvailable = { telegram: !!body.telegram_configured, email: !!body.email_configured };
+    renderAlertChannelOptions();
   } catch (err) {
     console.error("讀取回測預設參數失敗，沿用內建預設值：", err);
   }

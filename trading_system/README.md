@@ -40,6 +40,7 @@ trading_system/
 ├─ oi_tracker.py                    # 合約未平倉量（OI）追蹤，當「籌碼面」替代指標（純函式，內建自測）
 ├─ scheduler.py                       # 🤖 選用背景排程（預設關閉）：APScheduler 定時跑 refresh_cycle
 ├─ ai_governor.py                      # 🤖 背景排程模式的 AI 用量治理：每日上限/連續失敗斷路器/新訊號優先/節流週期（純函式，內建自測）
+├─ alerts.py                            # 🔔 警報評估邏輯：價格漲破/跌破、新技術訊號（純函式，內建自測）
 ├─ db.py                     # SQLite：訊號歷史 + 自動優化後的參數，跨重啟持續累積
 ├─ state.py                   # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
 ├─ index.html                # 網頁前端：🎯當沖訊號／📚知識宇宙 兩個分頁的單一 SPA
@@ -119,6 +120,8 @@ python -m trading_system.ranking          # 推薦強度榜四維度評分自測
 python -m trading_system.market_pulse     # RSI / 山寨季代理指標自測
 python -m trading_system.oi_tracker       # OI 變化判斷自測
 python -m trading_system.ai_governor      # 背景排程 AI 用量治理（節流週期/每日上限/斷路器）自測
+python -m trading_system.alerts           # 警報評估邏輯（條件判斷/觸發規則/通知文字）自測
+python -m trading_system.db               # SQLite 儲存層（訊號歷史/警報 CRUD/OI 快照等）自測
 ```
 
 ## AI 新聞情緒 — 如何啟用
@@ -244,6 +247,10 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/tickers` | GET | 📡 輕量即時報價刷新，**零 AI 成本**，只抓 OKX 免費公開 ticker、覆蓋 `all_instruments` 的報價欄位（OI 欄位沿用上次分析的值）。前端每 15 秒自動輪詢，見「即時報價自動刷新」一節 |
 | `/api/v1/scheduler` | GET | 🤖 背景排程狀態面板：開關、間隔、上次/下次執行時間與結果、今日 AI 呼叫次數與上限、AI 連續失敗次數、這一輪 AI 有沒有被跳過及原因，見「背景排程自動分析」一節 |
 | `/api/v1/scheduler` | POST | 🤖 開啟/關閉背景排程、調整間隔。body：`{"enabled"?, "interval_seconds"?}`（兩個都選填，不帶的欄位維持原樣）；間隔會被強制夾到 900 秒以上 |
+| `/api/v1/alerts` | GET | 🔔 警報清單，供管理面板用，**零 AI 成本**，純讀資料庫 |
+| `/api/v1/alerts` | POST | 🔔 新增警報。body：`{"inst_id","name"?,"alert_type","threshold"?,"repeat_mode"?,"channels"}`；`alert_type` 為 `price_above`/`price_below`/`signal`；`channels` 只能包含目前已設定的管道，否則回 `400` |
+| `/api/v1/alerts/{id}` | PATCH | 🔔 啟用/停用一個警報。body：`{"enabled"}`；id 不存在回 `404` |
+| `/api/v1/alerts/{id}` | DELETE | 🔔 刪除一個警報；id 不存在回 `404` |
 
 `/api/v1/dashboard`、`/api/v1/analyze` 的回傳現在還多了 `market_pulse`（市場情緒儀表板資料）、
 `ranking`（推薦強度榜資料）跟 `scheduler`（背景排程狀態，同 `GET /api/v1/scheduler`），見下一節。
@@ -563,6 +570,45 @@ OKX 歷史 K 線上逐根重播，統計勝率／平均獲利倍數（R）／獲
 登入密碼本身）。⚠️ Python 標準庫的 `smtplib` 是同步阻塞 API，直接在 async 函式裡呼叫
 會卡住整個伺服器的事件迴圈——`email_notify.py` 用 `asyncio.to_thread()` 把寄信動作
 丟到獨立執行緒跑，不讓一次寄信拖慢伺服器同時處理的其他請求。
+
+兩個模組都把「組訊息」跟「發送」拆成兩層（`build_signal_message`/`build_signal_email`
+負責組文字，`send_text` 負責純發送），下面的警報功能直接複用 `send_text`，不用重寫一次
+發送邏輯。
+
+## 🔔 警報（選用，對特定商品自訂通知條件）
+
+跟上面「訊號觸發通知」的差別：訊號通知是**系統自動**對所有監控中商品的強烈訊號推播，
+警報則是**你自己指定**要盯哪一檔、什麼條件——例如只想在 BTC 漲破某個價位、或某個小幣
+出現新技術訊號時才通知，不想被監控清單裡每一檔的訊號洗版。
+
+管理面板在主頁「🔔 警報」收合區塊裡（跟排程面板同一種樣式），可以直接新增、啟用/停用、
+刪除，不用打 API。面板刻意精簡：**只有新增/啟用停用/刪除，沒有逐欄位編輯**——條件設錯
+了刪掉重建即可，避免介面過度複雜；清單也只在面板第一次展開時才拉取，不會平白浪費一次
+API 呼叫。通知管道的勾選框只會顯示你**實際已設定**的管道（Telegram/Email 兩個都沒設定
+時整條選項會顯示提示文字，而不是讓你選一個永遠送不到的管道）。
+
+**兩種警報類型**：
+- **價格漲破／跌破**（`price_above`/`price_below`）：對「全部商品總覽」這份清單（每輪
+  分析都會重新抓、涵蓋 OKX 全部合約）評估，不限於自動篩選出的監控清單——可以對任何
+  商品設價格警報，不用等它被自動選中。可選「通知一次就關閉」或「持續提醒」（後者有
+  `ALERT_MIN_RETRIGGER_SECONDS`——預設 1 小時——的冷卻時間，避免價格持續停在門檻
+  另一側時每輪分析都通知一次）。
+- **出現新技術訊號**（`signal`）：只對「這輪有跑過技術分析」的商品有效（監控清單自動
+  選中的，或你手動分析過的）——依附在既有的技術分析流程上，不是全市場即時監控新訊號。
+  這個類型固定是持續提醒（一次性對訊號警報沒有意義，觸發完就不會再通知未來的新訊號）。
+
+**⚠️ 誠實範圍說明：這不是逐秒即時監控。** 價格/訊號警報都是「每輪分析」的附加檢查——
+piggyback 在既有的分析流程上（手動「立即分析」，或已經開啟的背景排程，見上面「背景排程
+自動分析」一節），沒有另外開一個獨立的高頻輪詢迴圈。這代表：沒開背景排程時，警報只在你
+按「立即分析」的當下被評估一次；開了背景排程，評估頻率就等於排程間隔（下限 900 秒）——
+是「下一輪分析時發現條件已經成立了才通知」，不是「條件一成立馬上通知」。
+
+### 環境變數
+
+```
+ALERT_MIN_RETRIGGER_SECONDS=3600   # 「持續提醒」模式的冷卻時間（秒）
+ALERT_MAX_TOTAL=50                 # 警報總數上限（不分商品），防止無上限累積
+```
 
 ## 📦 持倉組合風險總覽
 

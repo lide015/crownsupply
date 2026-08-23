@@ -67,18 +67,25 @@ def _send_smtp_blocking(subject: str, body: str) -> None:
         server.quit()
 
 
-async def send_signal_notification(signal: dict) -> bool:
-    """回傳是否真的送出。沒設定金鑰、或發送失敗都回傳 False——呼叫端不需要另外處理
-    例外，這個函式自己吞掉所有失敗情況，通知只是附加功能，絕對不能拖垮主要分析流程。"""
+async def send_text(subject: str, body: str) -> bool:
+    """低階發送：純文字主旨/內文，訊號通知（send_signal_notification）跟警報
+    （alerts.py／background.py）共用同一份發送邏輯。回傳是否真的送出；沒設定金鑰、或
+    發送失敗都回傳 False，自己吞掉所有例外。"""
     if not is_configured():
         return False
     try:
-        subject, body = build_signal_email(signal)
         await asyncio.to_thread(_send_smtp_blocking, subject, body)
         return True
     except Exception as exc:  # noqa: BLE001 — 通知失敗不能讓分析流程掛掉
         logger.warning("Email notification failed: %s", exc)
         return False
+
+
+async def send_signal_notification(signal: dict) -> bool:
+    """回傳是否真的送出。沒設定金鑰、或發送失敗都回傳 False——呼叫端不需要另外處理
+    例外，這個函式自己吞掉所有失敗情況，通知只是附加功能，絕對不能拖垮主要分析流程。"""
+    subject, body = build_signal_email(signal)
+    return await send_text(subject, body)
 
 
 if __name__ == "__main__":

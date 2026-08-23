@@ -1,10 +1,11 @@
-"""SQLite 儲存：訊號歷史（用來驗證勝率、抓失敗原因）+ 自動調整後的策略參數。
-stdlib sqlite3、WAL 模式、不用 ORM——跟 backend/db.py 同樣的慣例。跟 backend/ 共用
-repo 根目錄的 data/ 資料夾（不同檔名），該資料夾已經在 .gitignore 裡。
+"""SQLite 儲存：訊號歷史（用來驗證勝率、抓失敗原因）+ 自動調整後的策略參數 + 使用者自訂
+警報（見 alerts.py）。stdlib sqlite3、WAL 模式、不用 ORM——跟 backend/db.py 同樣的慣例。
+跟 backend/ 共用 repo 根目錄的 data/ 資料夾（不同檔名），該資料夾已經在 .gitignore 裡。
 
 這張表讓「訊號後來到底有沒有用」這件事跨重啟持續累積，不會每次重啟伺服器就砍掉重練；
 也讓自動調整後的參數持續生效，而不是每次啟動又跑回預設值。
 """
+import json
 import sqlite3
 from pathlib import Path
 
@@ -52,6 +53,25 @@ CREATE TABLE IF NOT EXISTS oi_snapshot (
   oi_ccy REAL NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+-- 使用者自訂警報（見 alerts.py 的評估邏輯）：價格漲破/跌破門檻、或出現新技術訊號。
+-- channels 存 JSON 陣列字串（例如 '["telegram","email"]'），db.py 邊界負責 dumps/loads，
+-- 呼叫端一律拿到/傳入 Python list，不用自己處理 JSON。
+CREATE TABLE IF NOT EXISTS alerts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  inst_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  alert_type TEXT NOT NULL,
+  threshold REAL,
+  repeat_mode TEXT NOT NULL DEFAULT 'once',
+  channels TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  last_triggered_at INTEGER,
+  trigger_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS alerts_inst_idx ON alerts(inst_id);
+CREATE INDEX IF NOT EXISTS alerts_enabled_idx ON alerts(enabled);
 """
 
 
@@ -283,6 +303,110 @@ def set_oi_snapshots_bulk(rows: list[dict], updated_at: int):
         conn.close()
 
 
+def _alert_row_to_dict(row: sqlite3.Row) -> dict:
+    """統一的 alerts 表列 -> dict 轉換，channels 欄位從 JSON 字串還原成 list（呼叫端一律
+    拿到 Python list，不用自己處理 JSON），三個地方共用（create/list/get），避免各自重複
+    寫一次還原邏輯、之後改欄位漏改其中一處。"""
+    d = dict(row)
+    try:
+        d["channels"] = json.loads(d["channels"])
+    except (TypeError, ValueError):
+        d["channels"] = []
+    d["enabled"] = bool(d["enabled"])
+    return d
+
+
+def create_alert(row: dict) -> dict:
+    """row 需含 inst_id/name/alert_type/threshold(可 None)/repeat_mode/channels(list)/
+    created_at。回傳新建立的完整警報 dict（含 id），channels 已經還原成 list。"""
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            """INSERT INTO alerts
+               (inst_id, name, alert_type, threshold, repeat_mode, channels, enabled, created_at)
+               VALUES (:inst_id, :name, :alert_type, :threshold, :repeat_mode, :channels, 1, :created_at)""",
+            {**row, "channels": json.dumps(row["channels"])},
+        )
+        conn.commit()
+        new_row = conn.execute("SELECT * FROM alerts WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return _alert_row_to_dict(new_row)
+    finally:
+        conn.close()
+
+
+def get_alerts() -> list[dict]:
+    """全部警報，供管理面板用，依建立時間新到舊排序。"""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT * FROM alerts ORDER BY created_at DESC").fetchall()
+        return [_alert_row_to_dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_enabled_alerts() -> list[dict]:
+    """只讀啟用中的警報，供每輪分析的評估迴圈用（見 background.py）——停用的警報不用
+    每輪都撈出來判斷條件，省一點查詢跟迴圈開銷。"""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT * FROM alerts WHERE enabled = 1").fetchall()
+        return [_alert_row_to_dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def count_alerts() -> int:
+    """給建立警報前的總數上限檢查用（見 config.ALERT_MAX_TOTAL），避免無上限累積。"""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT COUNT(*) AS c FROM alerts").fetchone()
+        return int(row["c"])
+    finally:
+        conn.close()
+
+
+def set_alert_enabled(alert_id: int, enabled: bool) -> bool:
+    """回傳是否真的更新到一列（id 不存在就回傳 False，呼叫端可以據此回 404）。"""
+    conn = get_connection()
+    try:
+        cur = conn.execute("UPDATE alerts SET enabled = ? WHERE id = ?", (1 if enabled else 0, alert_id))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def delete_alert(alert_id: int) -> bool:
+    conn = get_connection()
+    try:
+        cur = conn.execute("DELETE FROM alerts WHERE id = ?", (alert_id,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def record_alert_trigger(alert_id: int, triggered_at: int, auto_disable: bool):
+    """警報真的觸發（should_fire 回傳 True）之後呼叫：累計次數、記下觸發時間；
+    auto_disable=True（一次性警報，見 alerts.should_fire 的 repeat_mode="once" 說明）時
+    連同 enabled 一起關掉，觸發完就停用，不用靠 should_fire 每次重新判斷 trigger_count。"""
+    conn = get_connection()
+    try:
+        if auto_disable:
+            conn.execute(
+                "UPDATE alerts SET last_triggered_at = ?, trigger_count = trigger_count + 1, enabled = 0 WHERE id = ?",
+                (triggered_at, alert_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE alerts SET last_triggered_at = ?, trigger_count = trigger_count + 1 WHERE id = ?",
+                (triggered_at, alert_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     import tempfile
 
@@ -419,6 +543,55 @@ if __name__ == "__main__":
 
         check("get_resolved_today on a day with nothing resolved returns empty list",
               get_resolved_today(day_start_ms - 30 * 86_400_000), [])
+
+        # --- 警報 CRUD（見 alerts.py 的評估邏輯，這裡只測儲存層） ---
+        check("get_alerts empty before any created", get_alerts(), [])
+        check("count_alerts starts at 0", count_alerts(), 0)
+
+        price_alert = create_alert({
+            "inst_id": "BTC-USDT-SWAP", "name": "BTC-USDT", "alert_type": "price_above",
+            "threshold": 120.0, "repeat_mode": "once", "channels": ["telegram", "email"],
+            "created_at": 1000,
+        })
+        check("create_alert returns dict with id assigned", isinstance(price_alert["id"], int), True)
+        check("create_alert channels round-trips as a list (not a JSON string)", price_alert["channels"], ["telegram", "email"])
+        check("create_alert defaults enabled=True", price_alert["enabled"], True)
+        check("create_alert trigger_count starts at 0", price_alert["trigger_count"], 0)
+        check("create_alert last_triggered_at starts as None", price_alert["last_triggered_at"], None)
+
+        signal_alert = create_alert({
+            "inst_id": "ETH-USDT-SWAP", "name": "ETH-USDT", "alert_type": "signal",
+            "threshold": None, "repeat_mode": "repeating", "channels": ["telegram"],
+            "created_at": 2000,
+        })
+        check("count_alerts reflects both created rows", count_alerts(), 2)
+
+        all_alerts = get_alerts()
+        check("get_alerts returns newest-first", all_alerts[0]["id"], signal_alert["id"])
+        check("get_alerts returns both rows", len(all_alerts), 2)
+
+        check("get_enabled_alerts returns both (both enabled by default)", len(get_enabled_alerts()), 2)
+
+        disabled_ok = set_alert_enabled(price_alert["id"], False)
+        check("set_alert_enabled on existing id returns True", disabled_ok, True)
+        check("get_enabled_alerts now excludes the disabled one", len(get_enabled_alerts()), 1)
+        check("set_alert_enabled on unknown id returns False", set_alert_enabled(999999, True), False)
+
+        record_alert_trigger(signal_alert["id"], 3000, auto_disable=False)
+        triggered_row = next(a for a in get_alerts() if a["id"] == signal_alert["id"])
+        check("record_alert_trigger (repeating) increments trigger_count", triggered_row["trigger_count"], 1)
+        check("record_alert_trigger (repeating) sets last_triggered_at", triggered_row["last_triggered_at"], 3000)
+        check("record_alert_trigger (repeating) leaves it enabled", triggered_row["enabled"], True)
+
+        record_alert_trigger(price_alert["id"], 4000, auto_disable=True)
+        auto_disabled_row = next(a for a in get_alerts() if a["id"] == price_alert["id"])
+        check("record_alert_trigger (auto_disable) also disables the alert", auto_disabled_row["enabled"], False)
+        check("record_alert_trigger (auto_disable) still increments trigger_count", auto_disabled_row["trigger_count"], 1)
+
+        deleted_ok = delete_alert(signal_alert["id"])
+        check("delete_alert on existing id returns True", deleted_ok, True)
+        check("count_alerts reflects the deletion", count_alerts(), 1)
+        check("delete_alert on unknown id returns False", delete_alert(999999), False)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

@@ -132,6 +132,14 @@ AI_DAILY_CALL_CAP = int(os.getenv("AI_DAILY_CALL_CAP", "48"))
 #    會重置這個計數（見 background.refresh_cycle 說明）。0 代表不啟用這道防線。
 AI_FAILURE_THRESHOLD = int(os.getenv("AI_FAILURE_THRESHOLD", "3"))
 
+# ---- 使用者自訂警報（選用，見 alerts.py） ----
+# repeat_mode="repeating" 的警報，距離上次觸發至少要過這麼多秒才允許再通知一次，避免
+# 同一個條件持續成立時每輪分析都推播一次（通知疲勞）。
+ALERT_MIN_RETRIGGER_SECONDS = int(os.getenv("ALERT_MIN_RETRIGGER_SECONDS", "3600"))
+# 警報總數上限（不分商品），防止無上限累積；到上限後 POST /api/v1/alerts 會拒絕新建，
+# 提示使用者先刪掉不需要的舊警報。
+ALERT_MAX_TOTAL = int(os.getenv("ALERT_MAX_TOTAL", "50"))
+
 # ---- 訊號結果追蹤與自動優化（見 db.py / outcome_tracker.py / strategy_tuner.py） ----
 # 每次分析時回頭檢查未結算訊號要抓多少根已收盤 K 線（OKX /market/candles 單次上限 300）
 RESOLUTION_LOOKBACK_CANDLES = int(os.getenv("RESOLUTION_LOOKBACK_CANDLES", "300"))

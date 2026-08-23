@@ -40,7 +40,7 @@ import time
 
 import httpx
 
-from . import brain, config, db, email_notify, fee_calc, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, position_sizing, ranking, strategy, strategy_tuner, telegram_notify
+from . import alerts, brain, config, db, email_notify, fee_calc, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, position_sizing, ranking, strategy, strategy_tuner, telegram_notify
 from .state import STATE
 
 BTC_INST_ID = "BTC-USDT-SWAP"  # 山寨季代理指標的比較基準（見 market_pulse.py 說明）
@@ -270,12 +270,59 @@ async def analyze_one_instrument(
     return signal, candles, is_new_signal
 
 
+async def _fire_alert_if_due(client: httpx.AsyncClient, alert: dict, context: dict, now_ms: int):
+    """評估單一警報這輪要不要觸發（見 alerts.py 的說明：純函式判斷條件+觸發規則），
+    真的要觸發就透過警報自己勾選的管道發送，最後一律記錄這次觸發嘗試（不管實際發送
+    成功與否——避免管道故障時每輪都重試轟炸，跟既有訊號通知「失敗就算了，不重試」的
+    慣例一致）。"""
+    condition_met = alerts.evaluate_condition(alert, context)
+    if not alerts.should_fire(alert, condition_met, now_ms, config.ALERT_MIN_RETRIGGER_SECONDS):
+        return
+
+    message = alerts.build_alert_message(alert, context)
+    channels = alert.get("channels") or []
+    if "telegram" in channels:
+        try:
+            await telegram_notify.send_text(client, message)
+        except Exception as exc:  # noqa: BLE001 — 警報通知失敗不能拖垮整輪分析
+            logger.warning("alert telegram send failed for alert %s: %s", alert["id"], exc)
+    if "email" in channels:
+        try:
+            subject = f"[Gold Trader LITE] 警報觸發：{alert.get('name') or alert.get('inst_id', '')}"
+            await email_notify.send_text(subject, message)
+        except Exception as exc:  # noqa: BLE001 — 警報通知失敗不能拖垮整輪分析
+            logger.warning("alert email send failed for alert %s: %s", alert["id"], exc)
+
+    db.record_alert_trigger(alert["id"], now_ms, auto_disable=alert.get("repeat_mode") == "once")
+
+
+async def _evaluate_price_alerts(client: httpx.AsyncClient, alerts_by_inst: dict, all_instruments: list, now_ms: int):
+    """價格警報（price_above/price_below）對「全部商品總覽」這份清單評估——這份清單每輪
+    都會重新抓（見 _refresh_signals 前半段），涵蓋 OKX 全部合約，不限於自動篩選出的監控
+    清單，價格警報可以設在任何商品上，不用等它被自動選中才有機會評估。零額外 API 成本，
+    純比較這輪已經抓好的價格。"""
+    price_by_inst = {item["instId"]: item.get("price") for item in all_instruments}
+    for inst_id, inst_alerts in alerts_by_inst.items():
+        current_price = price_by_inst.get(inst_id)
+        for alert in inst_alerts:
+            if alert["alert_type"] not in ("price_above", "price_below"):
+                continue
+            await _fire_alert_if_due(client, alert, {"current_price": current_price}, now_ms)
+
+
 async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None = None):
     """skip_ai_reason：非 None 時這一輪完全不呼叫 AI 新聞情緒，沿用上一輪的市場情緒
     （見 ai_governor.py／scheduler.py 說明）。手動「立即分析」（app.py 的
     POST /api/v1/analyze）呼叫時這個參數維持預設 None，行為跟原本完全一樣——這個節流
     只在背景排程模式下才會被傳入非 None 的值。"""
     now_ms = int(time.time() * 1000)
+
+    # 🔔 使用者自訂警報（見 alerts.py）：只讀一次啟用中的警報、依 inst_id 分組，供下面
+    # 價格警報（全部商品清單評估）跟訊號警報（監控清單逐檔評估）共用，避免每個商品各自
+    # 查一次資料庫。
+    alerts_by_inst: dict[str, list] = {}
+    for alert in db.get_enabled_alerts():
+        alerts_by_inst.setdefault(alert["inst_id"], []).append(alert)
 
     # 自動優化過的門檻（如果有）存在 SQLite 裡，跨重啟持續生效；沒調整過就用 config.py 預設值。
     effective_min_amplitude = db.get_param("MIN_AMPLITUDE_PCT", config.MIN_AMPLITUDE_PCT)
@@ -368,6 +415,9 @@ async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None
         logger.warning("bulk OI fetch failed: %s", exc)
 
     STATE.all_instruments = all_instruments
+    if alerts_by_inst:
+        await _evaluate_price_alerts(client, alerts_by_inst, all_instruments, now_ms)
+
     monitored = okx_client.screen_active_instruments(
         tickers,
         min_vol_usdt=config.MIN_VOL_USDT,
@@ -417,6 +467,14 @@ async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None
         sentiment = sentiment_by_inst.get(inst_id, news["market"])
         signal, candles, is_new_signal = await analyze_one_instrument(client, item, sentiment, now_ms, circuit_breaker)
         any_new_signal = any_new_signal or is_new_signal
+
+        # 🔔 訊號警報：只對「這輪有跑過技術分析」的商品有效（監控清單自動選中的、或使用者
+        # 手動分析過的），不是全市場即時監控——訊號警報依附在技術分析本身，沒被分析到的
+        # 商品沒有 is_new_signal 這個判斷依據可用。這個限制在前端文案裡會明確說明。
+        for alert in alerts_by_inst.get(inst_id, []):
+            if alert["alert_type"] == "signal":
+                await _fire_alert_if_due(client, alert, {"is_new_signal": is_new_signal}, now_ms)
+
         if signal is None:
             continue
         signals.append(signal)
