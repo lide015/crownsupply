@@ -1,0 +1,16 @@
+{
+  "name": "Gold Trader LITE",
+  "short_name": "Gold Trader",
+  "description": "加密貨幣/股票永續合約當沖訊號監控 + 投資知識宇宙——技術面＋AI新聞情緒＋籌碼面融合判斷，不自動下單。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#030712",
+  "orientation": "any",
+  "icons": [
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

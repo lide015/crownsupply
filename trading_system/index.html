@@ -6,6 +6,16 @@
 <title>Gold Trader LITE｜當沖訊號 + 知識宇宙</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👑</text></svg>" />
 <link rel="stylesheet" href="/static/tailwind.css" />
+
+<!-- PWA 可安裝性：加到主畫面後圖示/啟動體驗像一個真正的 App，不用真的上架 App Store
+     （見 README「可加到主畫面」一節）。iOS Safari 認的是 apple-touch-icon，不會讀
+     manifest 裡的圖示，兩個都要放，缺一個某個平台就會顯示不正確的圖示。 -->
+<link rel="manifest" href="/static/manifest.json" />
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Gold Trader" />
+<meta name="theme-color" content="#030712" />
 </head>
 <body class="bg-gray-950 text-gray-100 font-sans min-h-screen bg-[radial-gradient(ellipse_90%_45%_at_50%_-10%,rgba(245,158,11,0.10),rgba(3,7,18,0)_70%)] bg-fixed">
 
@@ -595,7 +605,10 @@
 
     <div id="inst-modal-body" class="hidden space-y-5">
       <div id="inst-modal-chart-wrap" class="hidden">
-        <div class="text-amber-400 font-semibold mb-2 text-sm">📈 K線走勢圖</div>
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+          <div class="text-amber-400 font-semibold text-sm">📈 K線走勢圖</div>
+          <div id="inst-modal-chart-pills" class="flex flex-wrap gap-1"></div>
+        </div>
         <div class="bg-gray-950 rounded-lg border border-gray-800 p-2">
           <canvas id="inst-modal-chart-canvas" class="w-full block" style="height:200px;"></canvas>
         </div>
@@ -1411,6 +1424,7 @@ function renderSignalsList() {
       </div>
       ${netRrHtml(sig)}
       <div class="text-xs text-gray-500 font-mono">24h 振幅：${fmt(sig.amplitude_pct, 2)}%${sig.oi_label ? `　OI：<span class="${changePctTextCls(sig.oi_change_pct)}">${sig.oi_label}</span>` : ""}</div>
+      ${sig.funding_rate_pct != null ? `<div class="text-xs text-gray-500 font-mono">資金費率：<span class="${changePctTextCls(sig.funding_rate_pct)}">${fmt(sig.funding_rate_pct, 4)}%</span>　${sig.funding_rate_label}</div>` : ""}
       <div class="text-xs text-gray-400 bg-gray-950/50 p-2.5 rounded border border-gray-800/60 leading-relaxed">
         <span class="font-semibold text-amber-400">大腦研判：</span>${sig.reason}
       </div>
@@ -1894,6 +1908,9 @@ function renderInstrumentModal(data) {
   if (signal) {
     basicItems.push(["RSI", signal.rsi != null ? signal.rsi.toFixed(1) : "—"]);
     basicItems.push(["OI 變化", signal.oi_label ? `<span class="${changePctTextCls(signal.oi_change_pct)}">${signal.oi_label}</span>` : "—"]);
+    basicItems.push(["資金費率", signal.funding_rate_pct != null
+      ? `<span class="${changePctTextCls(signal.funding_rate_pct)}">${fmt(signal.funding_rate_pct, 4)}%</span>　${signal.funding_rate_label}`
+      : "—"]);
   }
   document.getElementById("inst-modal-basic-grid").innerHTML = basicItems.map(([label, value]) =>
     `<div class="text-gray-400">${label} <span class="text-white block">${value}</span></div>`
@@ -2194,10 +2211,15 @@ function stopInstrumentChartPolling() {
    的位置，不如只畫「這幾個價位」——每一條線的數值都直接來自 signal 本身，保證跟畫面其他
    地方顯示的數字一致，不會有第二套可能兜不起來的版本。
    emaSeries：跟 candles 等長的 EMA 數值陣列（來自 /api/v1/candles 回傳的 ema_series，
-   跟後端 strategy.compute_ema_series 同一份公式算出來的，等於「技術分析結果」顯示的
-   20 EMA 用同一個K線週期）——可以是 null/undefined（資料不足時），該情況下就不畫這條線。
+   跟後端 strategy.compute_ema_series 同一份公式算出來的）——可以是 null/undefined
+   （資料不足時），該情況下就不畫這條線。
+   emaLabel：EMA 圖例文字，呼叫端負責組（見 loadInstrumentChart）——切換時間週期時，
+   只有跟訊號判斷同一個週期的 EMA 數字才等於「技術分析結果」顯示的那個 20 EMA，其餘
+   週期是純瀏覽參考，文字要老實區分開來，不能讓兩個不同週期算出來的數字都掛同一個
+   「20 EMA」標籤、看起來像同一件事。不帶就用預設文字（給沒有週期切換概念的呼叫端，
+   例如訊號卡片的小走勢圖，用同一份簡短標籤）。
    回傳 false 代表資料不足以繪圖。*/
-function drawCandlestickChart(canvas, candles, overlays, emaSeries) {
+function drawCandlestickChart(canvas, candles, overlays, emaSeries, emaLabel) {
   const ctx = canvas.getContext("2d");
   if (!candles || candles.length < 2) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2287,7 +2309,7 @@ function drawCandlestickChart(canvas, candles, overlays, emaSeries) {
     ctx.fillStyle = "#38bdf8";
     ctx.font = "10px ui-monospace, monospace";
     ctx.textBaseline = "top";
-    ctx.fillText("— 20 EMA", 2, 2);
+    ctx.fillText(emaLabel || "— 20 EMA", 2, 2);
   }
 
   const drawLevel = (price, color, label) => {
@@ -2314,19 +2336,56 @@ function drawCandlestickChart(canvas, candles, overlays, emaSeries) {
   return true;
 }
 
-async function loadInstrumentChart(instId, overlays) {
+/* 時間週期切換鈕——純瀏覽參考，只有跟 configuredCandleBar（後端 config.CANDLE_BAR，
+   見 /api/v1/config）相同的那個週期，EMA 數字才跟「技術分析結果」顯示的一致，標★標註。
+   刻意只給常見的幾檔，不是 OKX 支援的全部週期——夠用就好，不用做成落落長的下拉選單。 */
+const CHART_TIMEFRAMES = ["5m", "15m", "30m", "1H", "4H", "1D"];
+let _chartCurrentInstId = null;
+let _chartCurrentOverlays = null;
+let _chartCurrentBar = null;  // null = 沿用後端預設（config.CANDLE_BAR，跟訊號同週期）
+
+function renderChartTimeframePills() {
+  const wrap = document.getElementById("inst-modal-chart-pills");
+  const effectiveBar = _chartCurrentBar || configuredCandleBar;
+  wrap.innerHTML = "";
+  for (const tf of CHART_TIMEFRAMES) {
+    const isSelected = tf === effectiveBar;
+    const isSignalBar = tf === configuredCandleBar;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className =
+      "px-2 py-0.5 rounded text-[11px] font-mono border transition-colors " +
+      (isSelected ? "bg-amber-500 border-amber-400 text-gray-950" : "border-gray-700 text-gray-400 hover:text-gray-200");
+    btn.textContent = tf + (isSignalBar ? " ★" : "");
+    btn.title = isSignalBar ? "跟訊號判斷同一個K線週期" : "僅供瀏覽參考，不是訊號判斷依據";
+    btn.addEventListener("click", () => loadInstrumentChart(_chartCurrentInstId, _chartCurrentOverlays, tf));
+    wrap.appendChild(btn);
+  }
+}
+
+async function loadInstrumentChart(instId, overlays, bar = null) {
   stopInstrumentChartPolling();
+  _chartCurrentInstId = instId;
+  _chartCurrentOverlays = overlays;
+  _chartCurrentBar = bar;
+
   const wrap = document.getElementById("inst-modal-chart-wrap");
   const canvas = document.getElementById("inst-modal-chart-canvas");
   const statusEl = document.getElementById("inst-modal-chart-status");
   wrap.classList.remove("hidden");
+  renderChartTimeframePills();
 
   const fetchAndDraw = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/candles/${encodeURIComponent(instId)}?limit=${CHART_CANDLE_LIMIT}`);
+      const barParam = _chartCurrentBar ? `&bar=${encodeURIComponent(_chartCurrentBar)}` : "";
+      const res = await fetch(`${API_BASE}/api/v1/candles/${encodeURIComponent(instId)}?limit=${CHART_CANDLE_LIMIT}${barParam}`);
       const body = await res.json();
       if (!res.ok || !body.ok) throw new Error(body.message || "抓不到K線資料");
-      const ok = drawCandlestickChart(canvas, body.candles, overlays, body.ema_series);
+      const isSignalBar = body.bar === configuredCandleBar;
+      const emaLabel = isSignalBar
+        ? "— 20 EMA（與訊號同週期）"
+        : `— 20 EMA（${body.bar}，僅供參考，非訊號依據）`;
+      const ok = drawCandlestickChart(canvas, body.candles, overlays, body.ema_series, emaLabel);
       const last = body.candles[body.candles.length - 1];
       statusEl.textContent = ok && last
         ? `${body.bar} K線・最新收盤 ${fmt(last.c)}（${fmtTime(last.ts)}）・每 ${CHART_POLL_MS / 1000} 秒自動刷新`
@@ -2593,6 +2652,10 @@ async function loadLastResult() {
    正常情況下一律以 /api/v1/config 回傳的 backend_defaults 為準，兩邊要對得起來
    不用另外維護一份可能兜不起來的數字。 */
 let backtestDefaults = { ema_period: 20, box_lookback: 15, tp1_rr: 1.5, tp2_rr: 2.0, volume_confirm_multiple: 1.1 };
+// 走勢圖時間週期切換鈕的「訊號依據」標記用（見 renderChartTimeframePills）——連不上
+// 後端前先猜一個最常見的預設值，跟 config.py 的 CANDLE_BAR 預設一致，之後拿到真正的
+// 值會覆蓋掉。
+let configuredCandleBar = "5m";
 
 async function loadBacktestDefaults() {
   try {
@@ -2604,6 +2667,7 @@ async function loadBacktestDefaults() {
     // 共用同一次 /api/v1/config 請求，不用多打一支 API。
     alertChannelsAvailable = { telegram: !!body.telegram_configured, email: !!body.email_configured };
     renderAlertChannelOptions();
+    if (body.candle_bar) configuredCandleBar = body.candle_bar;
   } catch (err) {
     console.error("讀取回測預設參數失敗，沿用內建預設值：", err);
   }
@@ -2655,6 +2719,18 @@ loadBacktestDefaults();
 // 排程狀態輪詢不用等 loadLastResult 完成——不像報價輪詢要看 has_run 才有意義，排程
 // 設定本身在使用者第一次按「立即分析」之前就可能已經是開啟的（例如上次連線設定過）。
 startSchedulerPolling();
+
+// PWA 可安裝性：註冊一個純被動的 service worker（見 static/sw.js，不快取任何東西，
+// 只為了滿足瀏覽器的可安裝技術要求）。註冊失敗（例如非 HTTPS、瀏覽器不支援）就安靜
+// 略過，不影響網站任何其他功能——加到主畫面本來就是錦上添花，不是必要功能。
+if ("serviceWorker" in navigator) {
+  // 特意從網站根目錄 /sw.js 註冊（不是 /static/sw.js）：瀏覽器規定 service worker 的
+  // 控制範圍(scope)不能超出它自己所在的路徑，掛在 /static/ 底下就只能控制 /static/
+  // 路徑，等於白註冊——見 app.py 的 GET /sw.js 端點說明。
+  navigator.serviceWorker.register("/sw.js").catch((err) => {
+    console.warn("Service worker 註冊失敗（不影響網站功能）：", err);
+  });
+}
 
 /* ---------------------------------------------------------------- */
 /* 知識宇宙分頁 —— 直接用 fetch 打 Supabase REST API（PostgREST），      */

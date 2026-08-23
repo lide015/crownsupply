@@ -38,13 +38,17 @@ trading_system/
 ├─ ranking.py                    # 📊 推薦強度榜：技術/籌碼/情緒/量能四維度評分排名（純函式，內建自測）
 ├─ market_pulse.py                # 🌡️ 市場情緒：平均 RSI、山寨季代理指標、恐懼貪婪指數（內建自測）
 ├─ oi_tracker.py                    # 合約未平倉量（OI）追蹤，當「籌碼面」替代指標（純函式，內建自測）
+├─ funding_rate.py                    # 💰 資金費率追蹤，加密貨幣永續合約特有指標（純函式，內建自測）
 ├─ scheduler.py                       # 🤖 選用背景排程（預設關閉）：APScheduler 定時跑 refresh_cycle
 ├─ ai_governor.py                      # 🤖 背景排程模式的 AI 用量治理：每日上限/連續失敗斷路器/新訊號優先/節流週期（純函式，內建自測）
 ├─ alerts.py                            # 🔔 警報評估邏輯：價格漲破/跌破、新技術訊號（純函式，內建自測）
-├─ db.py                     # SQLite：訊號歷史 + 自動優化後的參數，跨重啟持續累積
+├─ db.py                     # SQLite：訊號歷史 + 自動優化後的參數 + 警報，跨重啟持續累積
 ├─ state.py                   # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
 ├─ index.html                # 網頁前端：🎯當沖訊號／📚知識宇宙 兩個分頁的單一 SPA
 ├─ static/tailwind.css        # 編譯好的樣式表（已 commit，見下方「前端樣式」），伺服器直接掛載 /static
+├─ static/manifest.json        # 📲 PWA manifest（見「可加到主畫面」一節）
+├─ static/sw.js                 # 📲 PWA service worker（不快取任何東西，純滿足可安裝性要求）
+├─ static/icon-*.png             # 📲 PWA 圖示（192/512/512 maskable/apple-touch-icon）
 ├─ package.json                # 只用來跑 Tailwind CLI 編譯 static/tailwind.css，非必要不用裝
 ├─ requirements.txt           # fastapi / uvicorn / httpx / pandas / python-dotenv / apscheduler
 └─ .env.example                # 環境變數範本
@@ -83,6 +87,29 @@ Supabase 的 PostgREST API（`{SUPABASE_URL}/rest/v1/knowledge_nodes` 等），�
 > 是 AI token）完全由你點擊的次數決定，不會有背景空轉的隱藏消耗。如果你想要自動化，見
 > 「🤖 背景排程自動分析」一節——刻意需要主動開啟，開啟後 AI 用量仍然有三道防線把關。
 
+### 📲 可加到主畫面（PWA，不用真的上架 App Store）
+
+`static/manifest.json` + `static/sw.js` + `<head>` 裡的 `apple-touch-icon`／
+`apple-mobile-web-app-capable` 標籤，讓手機瀏覽器（Chrome/Safari）可以把這個網站
+「加到主畫面」，圖示跟啟動體驗會像一個真正安裝的 App——這是「App Store 品質」裡
+不用真的走 Apple/Google 開發者帳號＋審核流程就能拿到的那部分體感。
+
+`static/sw.js` 這個 service worker 刻意**不做任何離線快取**：只註冊了一個空的 `fetch`
+事件監聽器（瀏覽器的可安裝判定只檢查「有沒有註冊」，不要求真的攔截或提供任何回應），
+從頭到尾**不呼叫 `respondWith()`**——每個請求完全交給瀏覽器原生處理，這個 service
+worker 實質上不插手任何一個請求。這是刻意的保守選擇：這是即時報價/訊號的交易輔助
+工具，離線時秀出舊資料反而會誤導使用者以為那是最新狀態，不是安全的行為，跟系統其他
+地方「重點資訊要正確」的一貫立場一致。
+
+`sw.js` 特意從網站**根目錄**（`GET /sw.js`，見 `app.py`）服務，不是掛在 `/static/sw.js`
+底下——瀏覽器規定 service worker 的控制範圍（scope）不能超出它自己所在的路徑，掛在
+`/static/` 底下就只能控制 `/static/` 這個路徑本身，等於白註冊；`manifest.json` 裡
+`scope` 設的是 `"/"`，服務路徑要跟它對得起來。iOS Safari 認的是 `apple-touch-icon`，
+不會讀 manifest 裡的圖示，兩個都要放，缺一個某個平台就會顯示不正確的圖示。
+
+三個圖示（`icon-192.png`／`icon-512.png`／`icon-maskable-512.png`）已經 commit 進
+repo（`static/` 底下），沿用網站既有的 👑 crown emoji 視覺，不需要另外設計。
+
 ## 啟動方式
 
 ```bash
@@ -119,6 +146,7 @@ python -m trading_system.position_sizing  # 倉位計算機公式自測
 python -m trading_system.ranking          # 推薦強度榜四維度評分自測
 python -m trading_system.market_pulse     # RSI / 山寨季代理指標自測
 python -m trading_system.oi_tracker       # OI 變化判斷自測
+python -m trading_system.funding_rate     # 資金費率分類邏輯自測
 python -m trading_system.ai_governor      # 背景排程 AI 用量治理（節流週期/每日上限/斷路器）自測
 python -m trading_system.alerts           # 警報評估邏輯（條件判斷/觸發規則/通知文字）自測
 python -m trading_system.db               # SQLite 儲存層（訊號歷史/警報 CRUD/OI 快照等）自測
@@ -220,6 +248,19 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 現值＋讀「上一輪」快照都提前做（在監控清單迴圈跑之前），但批次「寫回」資料庫延後到
 整個函式最後面才做——監控清單迴圈跑的時候，資料庫裡還是真正的上一輪基準值。
 
+### 💰 資金費率（Funding Rate）——加密貨幣永續合約特有指標
+
+`funding_rate.py` 抓每檔監控中商品目前的資金費率——OKX 永續合約每 8 小時收取一次的
+多空資金費率，正值代表多頭付錢給空頭（市場整體偏多、持有多單要付出成本），負值代表
+空頭付錢給多頭。**這是加密貨幣永續合約特有的機制，股票沒有這個概念**，拿來當「市場
+情緒過熱程度」的輔助參考，顯示在訊號卡片跟商品詳情頁的基本資料裡。
+
+⚠️ 誠實範圍說明：費率反映的是「持有部位的多空傾向與成本」，不是「這個方向一定會贏」
+的訊號——費率極端偏高（多頭擁擠）業界常被視為短線反轉/回檔風險升高，不是加碼訊號。
+系統只負責客觀分類費率高低（`classify_funding_rate`），不做多空建議，也**不參與
+`brain.fuse()` 的訊號融合**——純資訊揭露，不影響任何既有訊號判斷邏輯，跟 OI 一樣是
+零額外 AI 成本的附加指標。
+
 ### ⭐ 觀察清單
 
 點任一商品名稱／熱力圖色塊／全部商品總覽表格列旁邊的 ☆，可以把該商品加進個人觀察
@@ -238,7 +279,7 @@ https://platform.openai.com/api-keys 建立金鑰後填入 `OPENAI_API_KEY`。
 | `/api/v1/analyze-instrument` | POST | 🔍 對「全部商品總覽」裡任一檔按需求做完整分析。body：`{"inst_id": "ETH-USDT-SWAP"}`，只針對這一檔多打一次資料（不重新分析全部商品），結果會併入 `signals`。商品不存在（還沒按過 `/analyze` 抓清單，或代號打錯）回 `404` |
 | `/api/v1/instrument/{inst_id}` | GET | 📄 單一商品詳情頁的資料：基本報價 + 已分析過的話帶技術指標 + 事件時間軸（這檔過去的訊號紀錄）+ 美股代幣的公司基本面。**零 AI 成本**，只讀已有資料，不會觸發新的技術分析或 AI 呼叫；商品不存在回 `404` |
 | `/api/v1/health` | GET | 存活檢查 + 上次更新時間 + 上次錯誤訊息 |
-| `/api/v1/config` | GET | 給「知識宇宙」分頁的 Supabase URL／anon key（公開金鑰，非機密） |
+| `/api/v1/config` | GET | 給前端用的公開設定：Supabase URL／anon key（知識宇宙用）、回測預設值、`candle_bar`（訊號判斷用的K線週期，走勢圖時間週期切換鈕用）、`telegram_configured`／`email_configured`（警報表單只顯示已設定的管道） |
 | `/api/v1/coach` | POST | AI 辯論空間一輪對話。body：`{"node": {...知識卡}, "history": [{"role","content"}, ...]}`，回傳 `{"reply", "error"}` |
 | `/api/v1/position-size` | POST | 🧮 倉位計算機，純本地計算、零外部 API 成本。body：`{"account_balance","risk_pct","entry_price","stop_loss_price","leverage_cap"?,"take_profit_1"?,"take_profit_2"?}` |
 | `/api/v1/backtest` | POST | 📊 歷史回測，**零 AI 成本**，只多打一次免費的 OKX 歷史K線查詢。body：`{"inst_id","bar"?,"limit"?,"ema_period"?,"box_lookback"?,"tp1_rr"?,"tp2_rr"?,"volume_confirm_multiple"?}`（後 5 項不帶就用 config.py 預設值，帶了就覆蓋——互動式參數實驗室用），任何商品都可以直接跑，不用先做過技術分析；資料不夠跑一次完整 EMA+盒子週期回 `422` |
@@ -509,6 +550,16 @@ LIMIT)」，不管技術面/新聞面/淨盈虧比再好看都一樣——這是
 OKX 免費公開的歷史K線包一層（順便算好 `ema_series` 給前端疊加畫線）；走勢圖每 20 秒
 自動重新抓取一次（只有詳情頁開著才會刷新，關閉就停止，不是背景輪詢），讓使用者不用
 手動重整就能看到最新收盤K線。
+
+### 時間週期切換鈕
+
+圖表右上角有 `5m／15m／30m／1H／4H／1D` 六個切換鈕，純瀏覽用途——想看 BTC 在更長週期
+上的走勢，不用離開這個詳情頁。跟訊號判斷同一個週期（`config.CANDLE_BAR`，圖上標★）
+的 EMA 線圖例會顯示「與訊號同週期」；切到其他週期時，圖例改顯示「（{週期}，僅供參考，
+非訊號依據）」——切換時間週期不會讓 EMA 數字「看起來像」跟訊號判斷是同一件事，這是
+上面「重點資訊要正確」同一個原則的延伸。停損/停利/進場參考線在任何週期都照畫（那是
+固定價位，不受K線週期影響）。切換商品（關掉詳情頁重開）會重置回訊號判斷用的預設週期，
+不會沿用上一檔商品手動選過的週期。
 
 **走勢圖總覽**：「🎯 當沖訊號」主畫面的每張訊號卡片也各自畫一張小型走勢圖（同樣疊加
 停損/停利/進場參考線），不用逐檔點開詳情頁才看得到走勢，一次分析就能瀏覽監控清單

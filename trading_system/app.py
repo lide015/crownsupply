@@ -30,7 +30,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -155,6 +155,16 @@ if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+@app.get("/sw.js")
+async def service_worker():
+    """PWA 可安裝性用的 service worker（見 static/sw.js，不快取任何東西，純粹滿足瀏覽器
+    的可安裝技術要求）。刻意從網站根目錄 /sw.js 服務，**不是**掛在 /static/sw.js 底下：
+    瀏覽器規定 service worker 的控制範圍(scope)不能超出它自己所在的路徑，掛在 /static/
+    底下就只能控制 /static/ 這個路徑本身，等於白註冊——manifest.json 裡 scope 設的是
+    "/"，這裡的服務路徑要跟它對得起來。"""
+    return FileResponse(STATIC_DIR / "sw.js", media_type="application/javascript")
+
+
 def _dashboard_payload() -> dict:
     return {
         "last_update": STATE.last_update,
@@ -202,6 +212,9 @@ async def frontend_config():
         # 不該讓使用者以為選了就有效），不是機密值，純布林旗標。
         "telegram_configured": telegram_notify.is_configured(),
         "email_configured": email_notify.is_configured(),
+        # 📈 走勢圖時間週期切換鈕要知道哪個週期才是「跟訊號判斷同一份 EMA」，其餘週期
+        # 純瀏覽參考——不能讓前端寫死猜一個可能跟後端環境變數對不上的值。
+        "candle_bar": config.CANDLE_BAR,
     }
 
 
