@@ -28,7 +28,8 @@
 <div id="tab-signals">
 
   <div class="bg-yellow-950/40 border-b border-yellow-800/60 text-yellow-300 text-xs px-6 py-2">
-    ⚠️ 本系統<b>不會自動在背景分析</b>，只在你按下「立即分析」時才呼叫一次 OKX／AI API——用量由你自己掌控。
+    ⚠️ 本系統<b>預設不會自動在背景分析</b>，只在你按下「立即分析」或主動開啟下方「🤖 背景排程自動分析」時才會呼叫
+    OKX／AI API——就算開啟排程，AI 用量也有上限保護，不會無限制燒 token。
     訊號僅供參考，<b>不會自動下單、不動用任何真實資金</b>；所有內容非投資建議。
   </div>
 
@@ -37,6 +38,7 @@
     <div class="flex flex-wrap items-center justify-between gap-3 bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
       <span class="text-sm text-gray-400">
         上次分析：<span id="last-update" class="text-amber-300 font-mono">尚未分析</span>
+        <span id="last-scan-live" class="text-xs font-mono ml-1 text-gray-500"></span>
       </span>
       <button id="analyze-btn"
         class="px-4 py-2 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 hover:from-amber-300 hover:to-amber-500
@@ -46,6 +48,54 @@
         <span id="analyze-btn-label">立即分析</span>
       </button>
     </div>
+
+    <details id="scheduler-panel" class="bg-gray-900 border border-gray-800 rounded-xl shadow-lg group">
+      <summary class="cursor-pointer select-none px-5 py-4 flex items-center justify-between text-gray-300 font-semibold">
+        <span class="flex items-center gap-2">
+          <span class="mr-1">🤖</span> 背景排程自動分析
+          <span id="scheduler-badge" class="text-[10px] px-2 py-0.5 rounded-full border border-gray-700 text-gray-500">關閉中</span>
+        </span>
+        <span class="text-xs text-gray-500 group-open:hidden">點開設定</span>
+      </summary>
+      <div class="px-5 pb-5 space-y-4 border-t border-gray-800 pt-4">
+        <div id="scheduler-intro" class="hidden bg-gray-950/60 border border-gray-800 rounded-lg p-3 text-xs text-gray-400 leading-relaxed flex items-start justify-between gap-3">
+          <p>開啟後系統會每隔一段時間自動掃描，不用手動按「立即分析」。<b class="text-gray-300">規則大腦（技術面 EMA/突破/量能/趨勢）每輪都會跑</b>，零成本；
+          AI 新聞情緒有每日上限與連續失敗斷路器保護，不會因為開了自動排程就無上限燒 AI 額度。系統<b class="text-gray-300">絕對不會自動下單</b>，只負責產生監控訊號。</p>
+          <button id="scheduler-intro-dismiss" type="button" class="text-gray-500 hover:text-gray-300 shrink-0" title="關閉這個說明，之後不再顯示">✕</button>
+        </div>
+
+        <div class="flex items-center justify-between flex-wrap gap-4">
+          <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input type="checkbox" id="scheduler-enabled-toggle" class="w-4 h-4 accent-amber-500" />
+            自動排程分析
+          </label>
+          <div class="flex items-center gap-2 text-xs text-gray-400">
+            間隔
+            <input type="number" id="scheduler-interval-input" min="15" step="1"
+              class="w-16 bg-gray-950 border border-gray-800 rounded px-2 py-1 text-gray-200 text-right font-mono
+                     focus:outline-none focus:border-amber-600" />
+            分鐘
+            <button id="scheduler-interval-save" type="button"
+              class="px-2.5 py-1 rounded border border-gray-700 text-gray-300 hover:bg-gray-800 text-xs transition-colors">套用</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono bg-gray-950 p-3 rounded-lg border border-gray-800">
+          <div><span class="text-gray-500 font-sans block mb-0.5">上次執行</span><span id="scheduler-last-run">—</span></div>
+          <div><span class="text-gray-500 font-sans block mb-0.5">下次執行</span><span id="scheduler-next-run">—</span></div>
+          <div><span class="text-gray-500 font-sans block mb-0.5">今日 AI 呼叫</span><span id="scheduler-ai-usage">—</span></div>
+          <div><span class="text-gray-500 font-sans block mb-0.5">AI 連續失敗</span><span id="scheduler-ai-failures">—</span></div>
+        </div>
+
+        <div id="scheduler-skip-note" class="hidden text-xs text-amber-400/90 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2 leading-relaxed"></div>
+        <div id="scheduler-error-note" class="hidden text-xs text-red-400/90 bg-red-950/20 border border-red-900/40 rounded-lg px-3 py-2 leading-relaxed"></div>
+
+        <p class="text-[11px] text-gray-600 leading-relaxed">
+          間隔最短 15 分鐘（伺服器端強制下限，防止設定錯誤變成失控迴圈）；手動按最上面「🔍 立即分析」隨時都可以，
+          跟這裡的排程互不衝突——剛好排程要跑的當下你正在手動分析，那一輪排程會直接跳過，下個間隔再試。
+        </p>
+      </div>
+    </details>
 
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg">
       <h2 class="text-sm font-semibold text-gray-300 mb-1">用三層資料建立交易觀察</h2>
@@ -795,12 +845,182 @@ function renderKellySuggestion(kelly) {
   });
 }
 
+/* ---------------------------------------------------------------- */
+/* 🤖 背景排程自動分析（選用，預設關閉）——見 scheduler.py／ai_governor.py       */
+/* 狀態面板純讀 GET /api/v1/scheduler（記憶體/SQLite，零 AI 成本），可以放心    */
+/* 背景定時輪詢；開關/間隔透過 POST /api/v1/scheduler 寫入，不用重啟伺服器。    */
+/* ---------------------------------------------------------------- */
+const SCHEDULER_POLL_MS = 10000;
+const SCHEDULER_INTRO_DISMISSED_KEY = "trading_system_scheduler_intro_dismissed";
+let _schedulerPollTimer = null;
+let lastSchedulerData = null;
+let lastUpdateMs = null; // 給「最後掃描：N秒前」即時倒數用，見 tickLiveTimers()
+
+function fmtElapsed(ms) {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  if (sec < 60) return `${sec} 秒前`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} 分鐘前`;
+  const hr = Math.floor(min / 60);
+  return `${hr} 小時 ${min % 60} 分前`;
+}
+
+function fmtCountdown(targetMs) {
+  if (targetMs == null) return "—";
+  const remain = targetMs - Date.now();
+  if (remain <= 0) return "即將執行";
+  const sec = Math.floor(remain / 1000);
+  if (sec < 60) return `${sec} 秒後`;
+  const min = Math.floor(sec / 60);
+  return `${min} 分 ${sec % 60} 秒後`;
+}
+
+/* 每秒重算「最後掃描：N秒前」跟「下次執行：N分後」這兩個會持續跳動的數字，不用等下一次
+   API 輪詢才更新——輪詢週期是 10 秒，純文字倒數用 setInterval(1000) 撐在中間，數字才不會
+   卡頓。排程有開啟時，超過「間隔 x2」還沒掃描過就變紅字，提醒使用者這筆資料可能不新鮮了；
+   排程沒開啟（純手動模式）不做這個判斷——手動模式本來就不保證資料新鮮度，變紅字沒有意義。 */
+function tickLiveTimers() {
+  const liveEl = document.getElementById("last-scan-live");
+  if (liveEl) {
+    if (lastUpdateMs == null) {
+      liveEl.textContent = "";
+    } else {
+      const elapsedMs = Date.now() - lastUpdateMs;
+      liveEl.textContent = `（${fmtElapsed(elapsedMs)}）`;
+      const schedulerEnabled = lastSchedulerData && lastSchedulerData.enabled;
+      const staleThreshold = schedulerEnabled ? lastSchedulerData.interval_seconds * 2 * 1000 : null;
+      const isStale = staleThreshold != null && elapsedMs > staleThreshold;
+      liveEl.className = `text-xs font-mono ml-1 ${isStale ? "text-red-400" : "text-gray-500"}`;
+    }
+  }
+
+  const nextRunEl = document.getElementById("scheduler-next-run");
+  if (nextRunEl && lastSchedulerData) {
+    nextRunEl.textContent = lastSchedulerData.enabled ? fmtCountdown(lastSchedulerData.next_run_at) : "—（未開啟）";
+  }
+}
+setInterval(tickLiveTimers, 1000);
+
+function renderSchedulerPanel(sched) {
+  if (!sched) return;
+  lastSchedulerData = sched;
+
+  const toggle = document.getElementById("scheduler-enabled-toggle");
+  if (document.activeElement !== toggle) toggle.checked = sched.enabled;
+
+  const badge = document.getElementById("scheduler-badge");
+  badge.textContent = sched.enabled ? "運作中" : "關閉中";
+  badge.className = `text-[10px] px-2 py-0.5 rounded-full border ${
+    sched.enabled ? "border-green-800 text-green-400" : "border-gray-700 text-gray-500"
+  }`;
+
+  const intervalInput = document.getElementById("scheduler-interval-input");
+  if (document.activeElement !== intervalInput) {
+    intervalInput.value = Math.round(sched.interval_seconds / 60);
+  }
+  intervalInput.min = Math.ceil(sched.min_interval_seconds / 60);
+
+  document.getElementById("scheduler-last-run").textContent = sched.last_run_at || "尚未執行";
+  document.getElementById("scheduler-ai-usage").textContent =
+    sched.ai_daily_cap > 0 ? `${sched.ai_calls_today} / ${sched.ai_daily_cap}` : `${sched.ai_calls_today}（不限）`;
+  document.getElementById("scheduler-ai-failures").textContent =
+    sched.ai_failure_threshold > 0 ? `${sched.ai_consecutive_failures} / ${sched.ai_failure_threshold}` : `${sched.ai_consecutive_failures}`;
+
+  const skipNote = document.getElementById("scheduler-skip-note");
+  if (sched.ai_skip_reason) {
+    skipNote.textContent = `💡 ${sched.ai_skip_reason}`;
+    skipNote.classList.remove("hidden");
+  } else {
+    skipNote.classList.add("hidden");
+  }
+
+  const errorNote = document.getElementById("scheduler-error-note");
+  if (sched.last_run_status === "error" && sched.last_run_error) {
+    errorNote.textContent = `⚠️ 上次排程執行失敗：${sched.last_run_error}`;
+    errorNote.classList.remove("hidden");
+  } else {
+    errorNote.classList.add("hidden");
+  }
+
+  const intro = document.getElementById("scheduler-intro");
+  let dismissed = false;
+  try { dismissed = !!localStorage.getItem(SCHEDULER_INTRO_DISMISSED_KEY); } catch (err) { /* 私密瀏覽模式，忽略 */ }
+  intro.classList.toggle("hidden", !sched.enabled || dismissed);
+
+  tickLiveTimers();
+}
+
+async function refreshSchedulerStatusOnce() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/scheduler`);
+    if (!res.ok) return;
+    const body = await res.json();
+    if (body.ok) renderSchedulerPanel(body);
+  } catch (err) {
+    console.error("排程狀態刷新失敗（不影響其他功能，下一輪會再試）：", err);
+  }
+}
+
+function startSchedulerPolling() {
+  if (_schedulerPollTimer) return;
+  refreshSchedulerStatusOnce();
+  _schedulerPollTimer = setInterval(refreshSchedulerStatusOnce, SCHEDULER_POLL_MS);
+}
+
+document.getElementById("scheduler-enabled-toggle").addEventListener("change", async (e) => {
+  const enabled = e.target.checked;
+  e.target.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/scheduler`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    const body = await res.json();
+    if (body.ok) renderSchedulerPanel(body);
+    else throw new Error(body.message || "設定失敗");
+  } catch (err) {
+    e.target.checked = !enabled; // 失敗就把切換撥回去，畫面不能顯示跟後端對不上的假狀態
+    alert(`無法連上後端：${err}`);
+  } finally {
+    e.target.disabled = false;
+  }
+});
+
+document.getElementById("scheduler-interval-save").addEventListener("click", async () => {
+  const minutes = parseInt(document.getElementById("scheduler-interval-input").value, 10);
+  if (!minutes || minutes <= 0) {
+    alert("請輸入大於 0 的分鐘數。");
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/scheduler`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interval_seconds: minutes * 60 }),
+    });
+    const body = await res.json();
+    if (body.ok) renderSchedulerPanel(body);
+    else throw new Error(body.message || "設定失敗");
+  } catch (err) {
+    alert(`無法連上後端：${err}`);
+  }
+});
+
+document.getElementById("scheduler-intro-dismiss").addEventListener("click", () => {
+  document.getElementById("scheduler-intro").classList.add("hidden");
+  try { localStorage.setItem(SCHEDULER_INTRO_DISMISSED_KEY, "1"); } catch (err) { /* 私密瀏覽模式，關閉一次算一次就好 */ }
+});
+
 let lastDashboardData = null;
 const signalsFilter = { assetClass: "all", search: "" };
 
 function renderDashboard(data) {
   lastDashboardData = data;
   document.getElementById("last-update").textContent = data.last_update || "尚未分析";
+  lastUpdateMs = data.last_update_ms || null;
+  renderSchedulerPanel(data.scheduler);
+  tickLiveTimers();
 
   const sentimentEl = document.getElementById("ai-sentiment");
   sentimentEl.textContent = data.has_run ? `AI 新聞情緒：${data.market_sentiment}` : "尚未分析";
@@ -2167,6 +2387,9 @@ document.getElementById("all-instruments-search").addEventListener("input", debo
 // 「還沒分析過」而白白跳過（loadLastResult 完成前 lastDashboardData 還是 null）。
 loadLastResult().then(startTickerPolling);
 loadBacktestDefaults();
+// 排程狀態輪詢不用等 loadLastResult 完成——不像報價輪詢要看 has_run 才有意義，排程
+// 設定本身在使用者第一次按「立即分析」之前就可能已經是開啟的（例如上次連線設定過）。
+startSchedulerPolling();
 
 /* ---------------------------------------------------------------- */
 /* 知識宇宙分頁 —— 直接用 fetch 打 Supabase REST API（PostgREST），      */

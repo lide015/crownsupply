@@ -139,6 +139,7 @@ if STATIC_DIR.is_dir():
 def _dashboard_payload() -> dict:
     return {
         "last_update": STATE.last_update,
+        "last_update_ms": STATE.last_update_ms,
         "has_run": STATE.has_run,
         "is_analyzing": STATE.is_analyzing,
         "market_sentiment": STATE.market_sentiment,

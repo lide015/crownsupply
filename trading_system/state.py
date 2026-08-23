@@ -9,6 +9,10 @@ REST 端點負責讀取（app.py）。不用 Redis／資料庫：這是單人使
 class SystemState:
     def __init__(self):
         self.last_update: str | None = None
+        # last_update 是給人看的顯示字串（伺服器所在時區）；last_update_ms 另外存一份
+        # epoch 毫秒，專給前端「最後掃描：N秒前」的即時倒數用——用字串反解析時間、還要
+        # 猜時區，不如直接存一份 epoch 時間戳準確（見 index.html 的 tickLiveTimers）。
+        self.last_update_ms: int | None = None
         self.has_run: bool = False  # 是否已經手動分析過至少一次
         self.is_analyzing: bool = False  # 目前是否有一次分析正在進行（避免重複點擊同時打兩輪）
         self.market_sentiment: str = "NEUTRAL"

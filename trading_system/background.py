@@ -435,6 +435,7 @@ async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None
 
     STATE.signals = signals
     STATE.last_update = time.strftime("%Y-%m-%d %H:%M:%S")
+    STATE.last_update_ms = int(time.time() * 1000)
     STATE.has_run = True
 
     # --- 市場情緒儀表板：平均 RSI、山寨季代理指標、恐懼貪婪指數（見 market_pulse.py） ---
