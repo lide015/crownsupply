@@ -413,6 +413,7 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div id="signals-filters" class="flex flex-wrap gap-2"></div>
         <input id="signals-search" type="text" placeholder="🔍 搜尋代號或名稱（例如 BTC）"
+          aria-label="搜尋當沖訊號面板的代號或名稱"
           class="w-full sm:w-64 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
                  placeholder-gray-600 focus:outline-none focus:border-amber-600" />
       </div>
@@ -444,6 +445,7 @@
         </div>
         <div class="flex flex-wrap items-center gap-3">
           <input id="all-instruments-search" type="text" placeholder="🔍 搜尋代號或名稱（例如 ETH）"
+            aria-label="搜尋全部商品總覽的代號或名稱"
             class="w-full sm:w-64 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-xs text-gray-200
                    placeholder-gray-600 focus:outline-none focus:border-amber-600" />
           <div class="flex items-center gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
@@ -464,21 +466,27 @@
         <table class="w-full text-xs">
           <thead class="sticky top-0 z-10 bg-gray-900 text-gray-500">
             <tr>
-              <th class="text-center px-2 py-2 font-semibold">⭐</th>
-              <th class="text-left px-3 py-2 font-semibold sticky left-0 bg-gray-900 z-10">代號</th>
-              <th class="text-left px-3 py-2 font-semibold">分類</th>
-              <th class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300" data-sort-key="price">價格<span class="all-inst-sort-arrow"></span></th>
-              <th class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300" data-sort-key="change_pct">24h 漲跌<span class="all-inst-sort-arrow"></span></th>
-              <th class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300" data-sort-key="amplitude_pct">24h 振幅<span class="all-inst-sort-arrow"></span></th>
-              <th class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300" data-sort-key="vol_usdt">24h 成交額<span class="all-inst-sort-arrow"></span></th>
-              <th class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300" data-sort-key="oi_change_pct">持倉異動<span class="all-inst-sort-arrow"></span></th>
-              <th class="text-center px-3 py-2 font-semibold">操作</th>
+              <th scope="col" class="text-center px-2 py-2 font-semibold">⭐</th>
+              <th scope="col" class="text-left px-3 py-2 font-semibold sticky left-0 bg-gray-900 z-10">代號</th>
+              <th scope="col" class="text-left px-3 py-2 font-semibold">分類</th>
+              <th scope="col" tabindex="0" role="button" aria-sort="none" class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300 focus:outline-none focus:text-amber-300" data-sort-key="price">價格<span class="all-inst-sort-arrow"></span></th>
+              <th scope="col" tabindex="0" role="button" aria-sort="none" class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300 focus:outline-none focus:text-amber-300" data-sort-key="change_pct">24h 漲跌<span class="all-inst-sort-arrow"></span></th>
+              <th scope="col" tabindex="0" role="button" aria-sort="descending" class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300 focus:outline-none focus:text-amber-300" data-sort-key="amplitude_pct">24h 振幅<span class="all-inst-sort-arrow"></span></th>
+              <th scope="col" tabindex="0" role="button" aria-sort="none" class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300 focus:outline-none focus:text-amber-300" data-sort-key="vol_usdt">24h 成交額<span class="all-inst-sort-arrow"></span></th>
+              <th scope="col" tabindex="0" role="button" aria-sort="none" class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300 focus:outline-none focus:text-amber-300" data-sort-key="oi_change_pct">持倉異動<span class="all-inst-sort-arrow"></span></th>
+              <th scope="col" class="text-center px-3 py-2 font-semibold">操作</th>
             </tr>
           </thead>
           <tbody id="all-instruments-tbody">
             <tr><td colspan="9" class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</td></tr>
           </tbody>
         </table>
+      </div>
+      <div id="all-instruments-loadmore-wrap" class="hidden pt-2 text-center">
+        <button id="all-instruments-loadmore-btn" type="button"
+          class="px-4 py-2 rounded-lg border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600 text-xs font-semibold transition-colors">
+          顯示更多
+        </button>
       </div>
       <div id="all-instruments-heatmap-wrap" class="hidden overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[60vh] p-3">
         <div class="flex items-center gap-2 mb-3">
@@ -1474,6 +1482,14 @@ async function loadAllSignalCardCharts(signals) {
 /* ---------------------------------------------------------------- */
 const allInstrumentsFilter = { assetClass: "all", productType: "all", search: "", watchlistOnly: false };
 
+/* 全部商品總覽一次可能有 200~300+ 檔，一次性把每一列都建成 DOM（含逐列的按鈕/監聽器）
+   沒有必要，尤其這張表還會被「每 15 秒即時報價輪詢」整個重建一次——分頁只渲染「目前
+   展開到第幾批」，其餘留在 filtered 陣列裡等使用者按「顯示更多」再補上，兩邊都省。
+   改篩選/搜尋條件才重設回第一批，改排序或單純輪詢刷新報價都保留使用者已經展開的量，
+   不會讓正在看的清單無預警縮回去。 */
+const ALL_INST_PAGE_SIZE = 50;
+let allInstVisibleCount = ALL_INST_PAGE_SIZE;
+
 /* ---------------------------------------------------------------- */
 /* ⭐ 觀察清單——純瀏覽器端功能（localStorage），沒有使用者登入系統可以存到雲端，
    只存在「這一台裝置的這個瀏覽器」。私密瀏覽模式或儲存空間被封鎖時安靜失敗，
@@ -1534,6 +1550,7 @@ function renderAllInstrumentsFilters() {
         : "border-gray-700 text-gray-400 hover:text-gray-200");
     btn.addEventListener("click", () => {
       allInstrumentsFilter.assetClass = opt.key;
+      allInstVisibleCount = ALL_INST_PAGE_SIZE;
       renderAllInstrumentsFilters();
       renderAllInstrumentsList();
       renderAllInstrumentsHeatmap();
@@ -1558,6 +1575,7 @@ function renderAllInstrumentsFilters() {
         : "border-gray-700 text-gray-400 hover:text-gray-200");
     btn.addEventListener("click", () => {
       allInstrumentsFilter.productType = opt.key;
+      allInstVisibleCount = ALL_INST_PAGE_SIZE;
       renderAllInstrumentsFilters();
       renderAllInstrumentsList();
       renderAllInstrumentsHeatmap();
@@ -1577,6 +1595,7 @@ function renderAllInstrumentsFilters() {
       : "border-gray-700 text-gray-400 hover:text-gray-200");
   watchlistBtn.addEventListener("click", () => {
     allInstrumentsFilter.watchlistOnly = !allInstrumentsFilter.watchlistOnly;
+    allInstVisibleCount = ALL_INST_PAGE_SIZE;
     renderAllInstrumentsFilters();
     renderAllInstrumentsList();
     renderAllInstrumentsHeatmap();
@@ -1605,27 +1624,40 @@ function renderAllInstrumentsSortIndicators() {
     const active = th.dataset.sortKey === allInstrumentsSort.key;
     arrow.textContent = active ? (allInstrumentsSort.dir === "asc" ? " ▲" : " ▼") : "";
     th.classList.toggle("text-amber-400", active);
+    // aria-sort 讓螢幕閱讀器唸得出「目前依這欄由大到小/小到大排序」，不是只有視覺上的箭頭。
+    th.setAttribute("aria-sort", active ? (allInstrumentsSort.dir === "asc" ? "ascending" : "descending") : "none");
   });
 }
 
 document.querySelectorAll(".all-inst-sort-th").forEach((th) => {
-  th.addEventListener("click", () => {
+  const triggerSort = () => {
     const key = th.dataset.sortKey;
     allInstrumentsSort = allInstrumentsSort.key === key
       ? { key, dir: allInstrumentsSort.dir === "desc" ? "asc" : "desc" }
       : { key, dir: "desc" };
     renderAllInstrumentsList();
+  };
+  th.addEventListener("click", triggerSort);
+  // 表頭是 <th> 不是原生可互動元素，靠 tabindex="0" 讓它能被 Tab 鍵聚焦到，
+  // 這裡補上鍵盤操作（Enter/Space 觸發排序），跟滑鼠點擊行為一致。
+  th.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      triggerSort();
+    }
   });
 });
 
 function renderAllInstrumentsList() {
   const tbody = document.getElementById("all-instruments-tbody");
   const data = lastDashboardData;
+  const loadMoreWrap = document.getElementById("all-instruments-loadmore-wrap");
   tbody.innerHTML = "";
   renderAllInstrumentsSortIndicators();
 
   if (!data || !data.has_run) {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</td></tr>`;
+    loadMoreWrap.classList.add("hidden");
     return;
   }
 
@@ -1643,13 +1675,26 @@ function renderAllInstrumentsList() {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center text-gray-500 py-6">${
       allInstrumentsFilter.watchlistOnly ? "觀察清單目前是空的——點任一商品的 ☆ 加進來。" : "沒有符合篩選/搜尋條件的商品。"
     }</td></tr>`;
+    loadMoreWrap.classList.add("hidden");
     return;
   }
 
   const analyzedIds = new Set((data.signals || []).map((s) => s.instId));
   filtered.sort(_allInstCompare);
 
-  for (const inst of filtered) {
+  // 分頁：只把「目前展開到的批次」真的建成 DOM 列，其餘留在 filtered 裡，按「顯示更多」
+  // 再往後補一批（見 allInstVisibleCount 宣告處的說明）。
+  const shown = filtered.slice(0, allInstVisibleCount);
+  const remaining = filtered.length - shown.length;
+  if (remaining > 0 && allInstrumentsFilter.view !== "heatmap") {
+    loadMoreWrap.classList.remove("hidden");
+    document.getElementById("all-instruments-loadmore-btn").textContent =
+      `顯示更多（已顯示 ${shown.length} / ${filtered.length} 檔，還有 ${remaining} 檔）`;
+  } else {
+    loadMoreWrap.classList.add("hidden");
+  }
+
+  for (const inst of shown) {
     const tr = document.createElement("tr");
     tr.className = "border-t border-gray-800 hover:bg-gray-900/50";
     const isAnalyzed = analyzedIds.has(inst.instId);
@@ -1882,9 +1927,17 @@ function setAllInstrumentsView(view) {
   heatmapBtn.className = view === "heatmap" ? activeCls : inactiveCls;
   document.getElementById("all-instruments-wrap").classList.toggle("hidden", view !== "list");
   document.getElementById("all-instruments-heatmap-wrap").classList.toggle("hidden", view !== "heatmap");
+  // 熱力圖本來就是「一眼看全市場」用的，不分頁；「顯示更多」按鈕只服務下面的列表，
+  // 切去熱力圖時先藏起來，避免列表分頁的按鈕疊在熱力圖上面。
+  if (view !== "list") document.getElementById("all-instruments-loadmore-wrap").classList.add("hidden");
+  else renderAllInstrumentsList();
 }
 document.getElementById("all-instruments-view-list-btn").addEventListener("click", () => setAllInstrumentsView("list"));
 document.getElementById("all-instruments-view-heatmap-btn").addEventListener("click", () => setAllInstrumentsView("heatmap"));
+document.getElementById("all-instruments-loadmore-btn").addEventListener("click", () => {
+  allInstVisibleCount += ALL_INST_PAGE_SIZE;
+  renderAllInstrumentsList();
+});
 setAllInstrumentsView("list");
 
 /* ---------------------------------------------------------------- */
@@ -2792,6 +2845,7 @@ document.getElementById("signals-search").addEventListener("input", debounce((e)
 }, 200));
 document.getElementById("all-instruments-search").addEventListener("input", debounce((e) => {
   allInstrumentsFilter.search = e.target.value;
+  allInstVisibleCount = ALL_INST_PAGE_SIZE;
   renderAllInstrumentsList();
   renderAllInstrumentsHeatmap();
 }, 200));
