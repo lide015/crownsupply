@@ -1,0 +1,44 @@
+# systemd unit 範本：把 trading_system 跑成一個系統服務，開機自動啟動、程式當掉自動重啟。
+# 只有真的要長期跑在自己的伺服器上（VPS/家用主機等）才需要這個檔案——本機開發、或只是
+# 偶爾手動跑 `uvicorn trading_system.app:app` 玩玩的話完全不需要。
+#
+# 使用方式：
+#   1. 把下面三個 <尖括號> 佔位符換成你實際的路徑/使用者，存成
+#      /etc/systemd/system/trading-system.service（檔名可以自己取，副檔名維持 .service）。
+#   2. sudo systemctl daemon-reload
+#   3. sudo systemctl enable --now trading-system     # 立刻啟動 + 開機自動啟動
+#   4. sudo systemctl status trading-system           # 確認狀態
+#   5. journalctl -u trading-system -f                # 看即時 log（等同印到終端機的內容）
+#
+# 更新程式碼後（git pull 新版本）：
+#   sudo systemctl restart trading-system
+#
+# 想關掉自動啟動（但先不解除安裝）：
+#   sudo systemctl disable --now trading-system
+
+[Unit]
+Description=Trading System (crypto day-trading signal service)
+# 等網路連上（要打 OKX/AI API）再啟動，避免開機瞬間網路還沒好就啟動失敗進入重試迴圈。
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 換成實際部署帳號（不建議用 root 長期跑常駐服務）。
+User=<你的系統使用者名稱，例如 ubuntu>
+# 換成 repo 實際路徑（crownsupply 的上一層，讓 `python3 -m uvicorn trading_system.app:app` 抓得到套件）。
+WorkingDirectory=<repo 所在路徑，例如 /home/ubuntu/crownsupply>
+# .env 檔案本身（含金鑰）不會被這個 unit 讀取——trading_system/config.py 開機時自己用
+# python-dotenv 讀 trading_system/.env，只要 WorkingDirectory 底下找得到那個檔案就行，
+# 不需要在這裡另外指定 EnvironmentFile。
+ExecStart=/usr/bin/python3 -m uvicorn trading_system.app:app --host 127.0.0.1 --port 8000
+# 常駐服務預期是長時間運行；非 0 結束碼（含被系統 OOM kill）都視為異常，自動重啟。
+Restart=on-failure
+RestartSec=5
+# 避免瞬間連續崩潰重啟造成雪崩式重試（例如金鑰失效導致每次啟動都馬上退出）：
+# 10 秒內重啟超過 3 次就放棄，改成手動介入排查，而不是無限重試燒 API 配額。
+StartLimitIntervalSec=10
+StartLimitBurst=3
+
+[Install]
+WantedBy=multi-user.target

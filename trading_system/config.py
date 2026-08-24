@@ -140,6 +140,14 @@ ALERT_MIN_RETRIGGER_SECONDS = int(os.getenv("ALERT_MIN_RETRIGGER_SECONDS", "3600
 # 提示使用者先刪掉不需要的舊警報。
 ALERT_MAX_TOTAL = int(os.getenv("ALERT_MAX_TOTAL", "50"))
 
+# ---- 死人開關監控（選用，見 healthcheck.py） ----
+# 只有真的把背景排程（scheduler.py）長期跑在自己的伺服器上才需要設定；留空（預設）
+# 完全不影響任何功能，也不會嘗試發送任何請求。填一個 healthchecks.io 的 ping 網址
+# （或任何相容的自架端點），每一輪排程分析跑完（不管成功或失敗）就會 ping 一次，
+# 讓 healthchecks.io 幫你偵測「排程是不是太久沒動靜」——伺服器整台當掉這種狀況，
+# 系統自己是不可能通知你的，需要靠外部第三方才偵測得到。
+HEALTHCHECK_PING_URL = os.getenv("HEALTHCHECK_PING_URL", "")
+
 # ---- 訊號結果追蹤與自動優化（見 db.py / outcome_tracker.py / strategy_tuner.py） ----
 # 每次分析時回頭檢查未結算訊號要抓多少根已收盤 K 線（OKX /market/candles 單次上限 300）
 RESOLUTION_LOOKBACK_CANDLES = int(os.getenv("RESOLUTION_LOOKBACK_CANDLES", "300"))

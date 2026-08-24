@@ -489,11 +489,12 @@
         </button>
       </div>
       <div id="all-instruments-heatmap-wrap" class="hidden overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[60vh] p-3">
-        <div class="flex items-center gap-2 mb-3">
+        <div class="flex items-center gap-2 mb-2">
           <span class="text-[11px] text-gray-500 mr-1">熱力圖依據：</span>
           <div id="heatmap-mode-toggle" class="flex items-center gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1"></div>
         </div>
-        <div id="all-instruments-heatmap" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2"></div>
+        <p id="heatmap-truncate-note" class="hidden text-[11px] text-gray-600 mb-2 leading-relaxed"></p>
+        <div id="all-instruments-heatmap" class="relative"></div>
       </div>
     </section>
 
@@ -1491,19 +1492,135 @@ const ALL_INST_PAGE_SIZE = 50;
 let allInstVisibleCount = ALL_INST_PAGE_SIZE;
 
 /* ---------------------------------------------------------------- */
-/* ⭐ 觀察清單——純瀏覽器端功能（localStorage），沒有使用者登入系統可以存到雲端，
-   只存在「這一台裝置的這個瀏覽器」。私密瀏覽模式或儲存空間被封鎖時安靜失敗，
-   不會讓其他功能掛掉，只是這個瀏覽器記不住你選過誰。 */
-const WATCHLIST_STORAGE_KEY = "trading_system_watchlist";
+/* ⭐ 觀察清單（支援多組命名清單）——純瀏覽器端功能（localStorage），沒有使用者登入
+   系統可以存到雲端，只存在「這一台裝置的這個瀏覽器」。私密瀏覽模式或儲存空間被
+   封鎖時安靜失敗，不會讓其他功能掛掉，只是這個瀏覽器記不住你選過誰。
 
-function getWatchlist() {
+   儲存格式（v2）：{ activeId, lists: [{ id, name, instIds: [] }, ...] }。
+   舊版（v1，這個功能剛推出時）只有單一未命名清單，存成一個純 instId 陣列，
+   key 是 WATCHLIST_STORAGE_KEY_V1——第一次讀 v2 資料時如果 v2 不存在但 v1 存在，
+   自動把 v1 的內容包成 v2 格式的第一組清單「預設觀察清單」，v1 的 key 保留不刪
+   （已經沒有任何程式碼會再讀它，留著不影響正確性，只是避免「萬一遷移邏輯有
+   bug」時舊資料被清空、救不回來）。
+
+   對外維持 getWatchlist()/isWatchlisted()/toggleWatchlist() 這三個既有函式的
+   簽章不變（永遠對應「目前作用中的清單」），全部其他呼叫端（訊號卡片/總覽表格/
+   熱力圖的 ☆ 按鈕與篩選）完全不用跟著改——只有「切換/新增/重新命名/刪除清單」
+   這幾個新功能是額外加上去的。 */
+const WATCHLIST_STORAGE_KEY_V1 = "trading_system_watchlist";
+const WATCHLIST_STORAGE_KEY = "trading_system_watchlists_v2";
+const DEFAULT_WATCHLIST_NAME = "預設觀察清單";
+
+function _newWatchlistId() {
+  return `wl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function _loadWatchlistState() {
   try {
     const raw = localStorage.getItem(WATCHLIST_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.lists) && parsed.lists.length > 0) return parsed;
+    }
   } catch (err) {
-    return [];
+    // 讀壞了就當作沒有資料，往下走「從 v1 遷移／建全新預設清單」的路徑。
   }
+  // v2 沒有資料——看看有沒有 v1 舊資料可以遷移，沒有就給一組空的預設清單。
+  let migratedIds = [];
+  try {
+    const rawV1 = localStorage.getItem(WATCHLIST_STORAGE_KEY_V1);
+    const parsedV1 = rawV1 ? JSON.parse(rawV1) : [];
+    if (Array.isArray(parsedV1)) migratedIds = parsedV1;
+  } catch (err) {
+    // v1 也讀不到就算了，給空清單。
+  }
+  const defaultId = _newWatchlistId();
+  const freshState = { activeId: defaultId, lists: [{ id: defaultId, name: DEFAULT_WATCHLIST_NAME, instIds: migratedIds }] };
+  // 一定要立刻寫回 localStorage，不能只回傳記憶體物件——不然同一個操作裡連續呼叫兩次
+  // _loadWatchlistState()（例如 toggleWatchlist() 呼叫它、又間接透過 getActiveWatchlistId()
+  // 呼叫一次）會各自產生一組帶著不同亂數 id 的全新清單，兩邊對不起來，靠 id 找清單會
+  // 直接找不到、整個操作悄悄變成沒作用——這是實際發生過的 bug，靠這行修掉。
+  _saveWatchlistState(freshState);
+  return freshState;
+}
+
+function _saveWatchlistState(state) {
+  try {
+    localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(state));
+  } catch (err) {
+    // 存不進去就算了（私密瀏覽/儲存空間被封鎖），不要讓操作本身噴錯誤擋住其他功能。
+  }
+}
+
+function getAllWatchlists() {
+  return _loadWatchlistState().lists;
+}
+
+function getActiveWatchlistId() {
+  const state = _loadWatchlistState();
+  // activeId 指到一個已經被刪除的清單（理論上不該發生，防禦性處理）就退回第一組。
+  return state.lists.some((l) => l.id === state.activeId) ? state.activeId : state.lists[0].id;
+}
+
+function getActiveWatchlist() {
+  const state = _loadWatchlistState();
+  const activeId = getActiveWatchlistId();
+  return state.lists.find((l) => l.id === activeId) || state.lists[0];
+}
+
+function setActiveWatchlistId(id) {
+  const state = _loadWatchlistState();
+  if (!state.lists.some((l) => l.id === id)) return;
+  state.activeId = id;
+  _saveWatchlistState(state);
+  renderAllInstrumentsFilters();
+  renderAllInstrumentsList();
+  renderAllInstrumentsHeatmap();
+  renderSignalsList();
+}
+
+function createWatchlist(name) {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return;
+  const state = _loadWatchlistState();
+  const id = _newWatchlistId();
+  state.lists.push({ id, name: trimmed, instIds: [] });
+  state.activeId = id; // 新增後直接切過去，符合「剛建好就是為了開始用它」的直覺。
+  _saveWatchlistState(state);
+  renderAllInstrumentsFilters();
+  renderAllInstrumentsList();
+  renderAllInstrumentsHeatmap();
+  renderSignalsList();
+}
+
+function renameActiveWatchlist(name) {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return;
+  const state = _loadWatchlistState();
+  const activeId = getActiveWatchlistId();
+  const list = state.lists.find((l) => l.id === activeId);
+  if (list) list.name = trimmed;
+  _saveWatchlistState(state);
+  renderAllInstrumentsFilters();
+}
+
+function deleteActiveWatchlist() {
+  const state = _loadWatchlistState();
+  // 一律至少留一組清單，不允許刪到只剩 0 組——不然「目前作用中的清單」這個概念會
+  // 整個沒有意義，UI 也沒地方掛。
+  if (state.lists.length <= 1) return;
+  const activeId = getActiveWatchlistId();
+  state.lists = state.lists.filter((l) => l.id !== activeId);
+  state.activeId = state.lists[0].id;
+  _saveWatchlistState(state);
+  renderAllInstrumentsFilters();
+  renderAllInstrumentsList();
+  renderAllInstrumentsHeatmap();
+  renderSignalsList();
+}
+
+function getWatchlist() {
+  return getActiveWatchlist().instIds;
 }
 
 function isWatchlisted(instId) {
@@ -1511,15 +1628,15 @@ function isWatchlisted(instId) {
 }
 
 function toggleWatchlist(instId) {
-  try {
-    const list = getWatchlist();
-    const idx = list.indexOf(instId);
-    if (idx >= 0) list.splice(idx, 1);
-    else list.push(instId);
-    localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(list));
-  } catch (err) {
-    // 存不進去就算了（私密瀏覽/儲存空間被封鎖），不要讓點擊本身噴錯誤擋住其他功能。
+  const state = _loadWatchlistState();
+  const activeId = getActiveWatchlistId();
+  const list = state.lists.find((l) => l.id === activeId);
+  if (list) {
+    const idx = list.instIds.indexOf(instId);
+    if (idx >= 0) list.instIds.splice(idx, 1);
+    else list.instIds.push(instId);
   }
+  _saveWatchlistState(state);
   renderAllInstrumentsFilters();
   renderAllInstrumentsList();
   renderAllInstrumentsHeatmap();
@@ -1585,9 +1702,28 @@ function renderAllInstrumentsFilters() {
 
   const watchlistWrap = document.getElementById("all-instruments-watchlist-toggle");
   watchlistWrap.innerHTML = "";
+
+  // 多組觀察清單選單——選哪一組就是「只看觀察清單」跟 ☆ 按鈕當下作用在哪一組。
+  const listSelect = document.createElement("select");
+  listSelect.title = "切換要編輯/篩選哪一組觀察清單";
+  listSelect.className =
+    "bg-gray-900 border border-gray-700 rounded-full px-2.5 py-1.5 text-xs text-gray-300 " +
+    "focus:outline-none focus:border-amber-600 max-w-[9rem]";
+  const activeId = getActiveWatchlistId();
+  for (const list of getAllWatchlists()) {
+    const opt = document.createElement("option");
+    opt.value = list.id;
+    opt.textContent = `${list.name}（${list.instIds.length}）`;
+    opt.selected = list.id === activeId;
+    listSelect.appendChild(opt);
+  }
+  listSelect.addEventListener("change", (e) => setActiveWatchlistId(e.target.value));
+  watchlistWrap.appendChild(listSelect);
+
   const watchlistBtn = document.createElement("button");
   const watchlistCount = getWatchlist().length;
-  watchlistBtn.textContent = `⭐ 只看觀察清單${watchlistCount ? `（${watchlistCount}）` : ""}`;
+  watchlistBtn.textContent = `⭐ 只看${watchlistCount ? `（${watchlistCount}）` : ""}`;
+  watchlistBtn.title = "只顯示目前這組觀察清單裡的商品";
   watchlistBtn.className =
     "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors " +
     (allInstrumentsFilter.watchlistOnly
@@ -1601,6 +1737,48 @@ function renderAllInstrumentsFilters() {
     renderAllInstrumentsHeatmap();
   });
   watchlistWrap.appendChild(watchlistBtn);
+
+  // 新增/重新命名/刪除清單——用瀏覽器原生 prompt()/confirm()（跟既有「刪除警報」
+  // 確認框同一種風格），這種低頻的小型 CRUD 操作沒必要另外做一個表單 UI。
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.textContent = "➕";
+  addBtn.title = "新增一組觀察清單";
+  addBtn.className = "px-2 py-1.5 rounded-full text-xs border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600 transition-colors";
+  addBtn.addEventListener("click", () => {
+    const name = prompt("新觀察清單的名稱：");
+    if (name != null) createWatchlist(name);
+  });
+  watchlistWrap.appendChild(addBtn);
+
+  const renameBtn = document.createElement("button");
+  renameBtn.type = "button";
+  renameBtn.textContent = "✏️";
+  renameBtn.title = "重新命名目前這組觀察清單";
+  renameBtn.className = "px-2 py-1.5 rounded-full text-xs border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600 transition-colors";
+  renameBtn.addEventListener("click", () => {
+    const current = getActiveWatchlist();
+    const name = prompt("新的清單名稱：", current.name);
+    if (name != null) renameActiveWatchlist(name);
+  });
+  watchlistWrap.appendChild(renameBtn);
+
+  // 只剩一組清單時不給刪，不然「目前作用中的清單」會沒地方掛——按鈕直接不渲染，
+  // 比渲染出來但按了沒反應更清楚（沒有「灰掉的按鈕該不該告訴使用者為什麼」的兩難）。
+  if (getAllWatchlists().length > 1) {
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "🗑️";
+    deleteBtn.title = "刪除目前這組觀察清單";
+    deleteBtn.className = "px-2 py-1.5 rounded-full text-xs border border-gray-700 text-gray-400 hover:text-red-400 hover:border-red-800 transition-colors";
+    deleteBtn.addEventListener("click", () => {
+      const current = getActiveWatchlist();
+      if (confirm(`確定要刪除「${current.name}」這組觀察清單嗎？裡面的 ${current.instIds.length} 檔收藏會一起消失。`)) {
+        deleteActiveWatchlist();
+      }
+    });
+    watchlistWrap.appendChild(deleteBtn);
+  }
 }
 
 /* 表頭排序狀態——依振幅由高到低是原本自動篩選邏輯的排序依據，當預設值；點表頭可以換成
@@ -1812,6 +1990,100 @@ function heatColorVolume(volUsdt, maxVol) {
   return `background-color:rgba(99,102,241,${alpha})`; // indigo，跟價格/持倉的綠紅區隔開來
 }
 
+/* Squarified Treemap（Bruls/Huizing/van Wijk 1999 的標準演算法，這裡是最小可用的
+   vanilla JS 實作，不依賴任何外部繪圖套件——這個專案刻意不接任何前端 CDN，見上方
+   「前端樣式」一節）。輸入一組「權重」（這裡固定用 24h 成交額，不管目前顏色依據是
+   哪個模式——色塊「大小」代表市場關注度/流動性，色塊「顏色」才依 heatmapMode 切換，
+   兩者是刻意分開的兩個維度，同一套大小規則比較好理解、不會每切一次顏色模式，格子
+   大小就整個洗牌一次）。回傳跟輸入同順序的 {x, y, w, h} 陣列，單位是呼叫端傳入的
+   容器座標系（通常直接是 px）。
+
+   演算法核心：每次從剩餘的權重裡，沿著容器目前較短的那一邊，盡量塞進最多格子、
+   同時讓這一整排格子的「長寬比最差的那一個」還是盡量接近正方形（越接近正方形的
+   格子，數字/名稱越好排版、越好讀），排完一整排就把容器剩餘空間往內縮，繼續處理
+   剩下的格子，直到權重用完。*/
+function squarifiedTreemap(weights, x, y, w, h) {
+  if (!weights.length) return [];
+  const total = weights.reduce((a, b) => a + b, 0);
+  // 全部權重都是 0（例如這批商品剛好成交額都查不到）就退化成「大家平分」，
+  // 避免除以 0 產生 NaN 版面。
+  const safeWeights = total > 0 ? weights : weights.map(() => 1);
+  const safeTotal = total > 0 ? total : safeWeights.length;
+
+  const areaScale = (w * h) / safeTotal;
+  const areas = safeWeights.map((v) => v * areaScale);
+  const result = new Array(weights.length);
+
+  function worstAspectRatio(rowAreas, sideLength) {
+    let max = -Infinity, min = Infinity, sum = 0;
+    for (const a of rowAreas) {
+      if (a > max) max = a;
+      if (a < min) min = a;
+      sum += a;
+    }
+    if (sum <= 0 || min <= 0) return Infinity;
+    const s2 = sum * sum, l2 = sideLength * sideLength;
+    return Math.max((l2 * max) / s2, s2 / (l2 * min));
+  }
+
+  let remaining = areas.map((area, idx) => ({ area, idx }));
+  let rx = x, ry = y, rw = w, rh = h;
+
+  while (remaining.length > 0) {
+    const shortSide = Math.min(rw, rh);
+    let row = [remaining[0]];
+    let rowWorst = worstAspectRatio(row.map((r) => r.area), shortSide);
+    let i = 1;
+    while (i < remaining.length) {
+      const candidate = row.concat([remaining[i]]);
+      const candidateWorst = worstAspectRatio(candidate.map((r) => r.area), shortSide);
+      // 加入下一個格子後整排的最差長寬比沒有變差，就繼續塞進這一排；一旦變差了就
+      // 停在目前這一排，剩下的留給下一輪（這正是「squarified」名稱的由來）。
+      if (candidateWorst <= rowWorst) {
+        row = candidate;
+        rowWorst = candidateWorst;
+        i += 1;
+      } else {
+        break;
+      }
+    }
+
+    const rowSum = row.reduce((s, r) => s + r.area, 0);
+    if (rw >= rh) {
+      // 容器比較寬——這一排沿著左邊切一直排（同寬的一欄），欄內由上往下依面積分高度。
+      const colW = rh > 0 ? rowSum / rh : 0;
+      let cy = ry;
+      for (const r of row) {
+        const itemH = colW > 0 ? r.area / colW : 0;
+        result[r.idx] = { x: rx, y: cy, w: colW, h: itemH };
+        cy += itemH;
+      }
+      rx += colW;
+      rw -= colW;
+    } else {
+      // 容器比較高——這一排沿著上邊切一整橫排，橫排內由左往右依面積分寬度。
+      const rowH = rw > 0 ? rowSum / rw : 0;
+      let cx = rx;
+      for (const r of row) {
+        const itemW = rowH > 0 ? r.area / rowH : 0;
+        result[r.idx] = { x: cx, y: ry, w: itemW, h: rowH };
+        cx += itemW;
+      }
+      ry += rowH;
+      rh -= rowH;
+    }
+    remaining = remaining.slice(row.length);
+  }
+
+  return result;
+}
+
+// 熱力圖一次最多鋪這麼多格子——200~300 檔全部塞進真正的 treemap，權重差距大的話尾端
+// 格子會小到看不清楚文字（這是 treemap 的本質，格子大小如實反映市場關注度懸殊，不是
+// bug），加上瀏覽器也沒必要一次排版幾百個絕對定位的格子。超過上限的（通常是成交額
+// 很小、市場關注度低的商品）畫面上會有一行提示，想看完整清單切回「📋 列表」。
+const TREEMAP_MAX_TILES = 60;
+
 const HEATMAP_MODES = [
   { key: "price", label: "💰 價格" },
   { key: "volume", label: "📊 成交額" },
@@ -1840,11 +2112,14 @@ renderHeatmapModeToggle();
 
 function renderAllInstrumentsHeatmap() {
   const grid = document.getElementById("all-instruments-heatmap");
+  const note = document.getElementById("heatmap-truncate-note");
   const data = lastDashboardData;
   grid.innerHTML = "";
+  grid.style.height = "";
+  note.classList.add("hidden");
 
   if (!data || !data.has_run) {
-    grid.innerHTML = `<div class="col-span-full text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</div>`;
+    grid.innerHTML = `<div class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</div>`;
     return;
   }
 
@@ -1859,7 +2134,7 @@ function renderAllInstrumentsHeatmap() {
   });
 
   if (filtered.length === 0) {
-    grid.innerHTML = `<div class="col-span-full text-center text-gray-500 py-6">${
+    grid.innerHTML = `<div class="text-center text-gray-500 py-6">${
       allInstrumentsFilter.watchlistOnly ? "觀察清單目前是空的——點任一商品的 ☆ 加進來。" : "沒有符合篩選/搜尋條件的商品。"
     }</div>`;
     return;
@@ -1868,34 +2143,55 @@ function renderAllInstrumentsHeatmap() {
   const analyzedIds = new Set((data.signals || []).map((s) => s.instId));
   const maxVol = Math.max(...filtered.map((i) => i.vol_usdt || 0));
 
-  if (heatmapMode === "volume") {
-    filtered.sort((a, b) => (b.vol_usdt || 0) - (a.vol_usdt || 0));
-  } else if (heatmapMode === "oi") {
-    filtered.sort((a, b) => Math.abs(b.oi_change_pct ?? -1) - Math.abs(a.oi_change_pct ?? -1));
-  } else {
-    filtered.sort((a, b) => b.amplitude_pct - a.amplitude_pct);
+  // 格子大小固定依「24h 成交額」由大到小排版，跟目前顏色依據（heatmapMode）無關——
+  // 大小代表市場關注度/流動性，顏色才跟著模式切換，兩個維度刻意分開，不會每切一次
+  // 顏色模式格子大小就整個洗牌。200~300 檔全部塞真正的 treemap，長尾格子會小到看不清
+  // 文字（如實反映關注度懸殊，不是 bug），所以只取前 TREEMAP_MAX_TILES 檔，其餘用
+  // 下面的提示告知使用者切去列表看完整清單。
+  const byVolDesc = [...filtered].sort((a, b) => (b.vol_usdt || 0) - (a.vol_usdt || 0));
+  const shown = byVolDesc.slice(0, TREEMAP_MAX_TILES);
+  const hiddenCount = byVolDesc.length - shown.length;
+  if (hiddenCount > 0) {
+    note.textContent =
+      `熱力圖只顯示這批 ${filtered.length} 檔裡、24h 成交額前 ${shown.length} 名的市場關注度排版；` +
+      `其餘 ${hiddenCount} 檔請切到「📋 列表」查看完整清單。`;
+    note.classList.remove("hidden");
   }
 
-  for (const inst of filtered) {
+  const containerWidth = grid.getBoundingClientRect().width || 800;
+  // 高度跟寬度抓一個固定比例，夾在 400~700px 之間——手機直向螢幕很窄，純比例算出來
+  // 會拉太高不好滑；比例本身沒有「正確答案」，純粹讓格子普遍不要太扁也不要太瘦長。
+  const containerHeight = Math.max(400, Math.min(700, containerWidth * 0.5));
+  grid.style.height = `${containerHeight}px`;
+
+  const weights = shown.map((inst) => Math.max(inst.vol_usdt || 0, 0));
+  const layout = squarifiedTreemap(weights, 0, 0, containerWidth, containerHeight);
+  const GAP = 3; // 格子間的視覺間距（px），從版面配置的面積裡內縮，不改變面積分配比例
+
+  shown.forEach((inst, i) => {
+    const box = layout[i];
     const tile = document.createElement("div");
     const isAnalyzed = analyzedIds.has(inst.instId);
     tile.className =
-      "rounded-lg p-2.5 flex flex-col justify-between gap-1 border border-white/5 cursor-pointer " +
-      "hover:border-amber-500/70 transition-colors";
+      "absolute rounded-lg p-2 flex flex-col justify-between gap-1 border border-white/5 cursor-pointer " +
+      "overflow-hidden hover:border-amber-500/70 hover:z-10 transition-colors";
 
-    let metricHtml;
+    let metricHtml, colorStyle;
     if (heatmapMode === "volume") {
-      tile.style = heatColorVolume(inst.vol_usdt, maxVol);
+      colorStyle = heatColorVolume(inst.vol_usdt, maxVol);
       metricHtml = `<span class="text-gray-100">${fmt(inst.vol_usdt, 0)}</span>`;
     } else if (heatmapMode === "oi") {
-      tile.style = heatColor(inst.oi_change_pct);
+      colorStyle = heatColor(inst.oi_change_pct);
       metricHtml = inst.product_type === "spot"
         ? `<span class="text-gray-600">現貨無持倉</span>`
         : changePctHtml(inst.oi_change_pct);
     } else {
-      tile.style = heatColor(inst.change_pct);
+      colorStyle = heatColor(inst.change_pct);
       metricHtml = changePctHtml(inst.change_pct);
     }
+    tile.style.cssText =
+      `left:${box.x + GAP / 2}px; top:${box.y + GAP / 2}px; ` +
+      `width:${Math.max(box.w - GAP, 0)}px; height:${Math.max(box.h - GAP, 0)}px; ${colorStyle}`;
 
     tile.title = "點一下看這檔的詳情頁（基本資料＋事件時間軸，不會呼叫 AI）";
     tile.innerHTML = `
@@ -1914,8 +2210,15 @@ function renderAllInstrumentsHeatmap() {
       toggleWatchlist(inst.instId);
     });
     grid.appendChild(tile);
-  }
+  });
 }
+
+// 視窗改變寬度時（例如轉直向/橫向、拖動瀏覽器視窗）treemap 的格子座標是按舊寬度算的，
+// 不會自動跟著版面重排——只有目前正在看熱力圖時才需要重算，debounce 200ms 避免拖曳
+// 視窗過程中每個 resize 事件都重算一次。
+window.addEventListener("resize", debounce(() => {
+  if (allInstrumentsFilter.view === "heatmap") renderAllInstrumentsHeatmap();
+}, 200));
 
 function setAllInstrumentsView(view) {
   allInstrumentsFilter.view = view;

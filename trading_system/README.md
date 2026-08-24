@@ -42,6 +42,7 @@ trading_system/
 ├─ scheduler.py                       # 🤖 選用背景排程（預設關閉）：APScheduler 定時跑 refresh_cycle
 ├─ ai_governor.py                      # 🤖 背景排程模式的 AI 用量治理：每日上限/連續失敗斷路器/新訊號優先/節流週期（純函式，內建自測）
 ├─ alerts.py                            # 🔔 警報評估邏輯：價格漲破/跌破、新技術訊號（純函式，內建自測）
+├─ healthcheck.py                        # 💚 死人開關監控：排程每輪跑完 ping healthchecks.io（純函式，內建自測）
 ├─ db.py                     # SQLite：訊號歷史 + 自動優化後的參數 + 警報，跨重啟持續累積
 ├─ state.py                   # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
 ├─ index.html                # 網頁前端：🎯當沖訊號／📚知識宇宙 兩個分頁的單一 SPA
@@ -49,6 +50,7 @@ trading_system/
 ├─ static/manifest.json        # 📲 PWA manifest（見「可加到主畫面」一節）
 ├─ static/sw.js                 # 📲 PWA service worker（不快取任何東西，純滿足可安裝性要求）
 ├─ static/icon-*.png             # 📲 PWA 圖示（192/512/512 maskable/apple-touch-icon）
+├─ deploy/trading-system.service  # 🖥️ systemd 常駐服務範本（選用，長期部署自己的伺服器才需要）
 ├─ package.json                # 只用來跑 Tailwind CLI 編譯 static/tailwind.css，非必要不用裝
 ├─ requirements.txt           # fastapi / uvicorn / httpx / pandas / python-dotenv / apscheduler
 └─ .env.example                # 環境變數範本
@@ -149,6 +151,7 @@ python -m trading_system.oi_tracker       # OI 變化判斷自測
 python -m trading_system.funding_rate     # 資金費率分類邏輯自測
 python -m trading_system.ai_governor      # 背景排程 AI 用量治理（節流週期/每日上限/斷路器）自測
 python -m trading_system.alerts           # 警報評估邏輯（條件判斷/觸發規則/通知文字）自測
+python -m trading_system.healthcheck      # 死人開關監控 ping 網址組裝邏輯自測
 python -m trading_system.db               # SQLite 儲存層（訊號歷史/警報 CRUD/OI 快照等）自測
 ```
 
@@ -252,10 +255,14 @@ Tab 鍵能聚焦到每個可排序欄位，Enter／Space 觸發跟滑鼠點擊�
 不會因為報價持續跳動就讓已經算好的停損停利跟著亂動。使用者在頁面按過一次「立即分析」
 之前，`all_instruments` 是空的，前端不會呼叫這個端點白跑一趟。
 
-### 🔥 熱力圖：價格／成交額／持倉三種模式
+### 🔥 熱力圖：真正的 Treemap（格子大小 = 市場關注度）＋ 價格／成交額／持倉三種顏色模式
 
-「全部商品總覽」右上角可切換「📋 列表」跟「🔥 熱力圖」，熱力圖裡再細分三種依據
-（`heatmap-mode-toggle`）：
+「全部商品總覽」右上角可切換「📋 列表」跟「🔥 熱力圖」。熱力圖是用
+[Squarified Treemap](https://www.win.tue.nl/~vanwijk/stm.pdf)（Bruls/Huizing/van Wijk
+1999 的標準演算法）手刻的 vanilla JS 實作（這個專案刻意不接任何前端 CDN，見上方「前端
+樣式」一節），不是均勻網格——**格子大小固定依 24h 成交額決定**（成交額越大格子越大，
+代表市場關注度/流動性越高），不管目前顏色依據切到哪個模式，格子大小都不會跟著洗牌；
+顏色才依 `heatmap-mode-toggle` 切換三種依據：
 
 - **💰 價格**：色塊綠漲紅跌，深淺對應 24h 漲跌幅大小。
 - **📊 成交額**：量本身沒有方向，改用單一色相（藍紫色）依「目前篩選出來這批商品裡的
@@ -266,6 +273,12 @@ Tab 鍵能聚焦到每個可排序欄位，Enter／Space 觸發跟滑鼠點擊�
 
 三種模式都是純前端切換、不重打任何 API；點色塊一律是打開該商品的詳情頁（見下方單一
 商品詳情頁說明），不會因為切換熱力圖模式而觸發任何 AI 呼叫。
+
+⚠️ **誠實範圍說明**：一次可能有 200~300+ 檔商品，全部塞進真正的 treemap 會讓長尾格子
+小到看不清文字——這是 treemap 的本質（如實反映市場關注度懸殊），不是 bug，但也沒有
+閱讀價值，所以只取這批篩選結果裡 24h 成交額前 60 名鋪版面，其餘用畫面上的提示告知，
+想看完整清單切回「📋 列表」（不分頁，也不受這個上限影響）。視窗寬度改變（例如手機
+轉橫向）會自動重新排版（debounce 200ms）。
 
 ### 📌 全市場未平倉量（OI）——不只監控清單那幾檔
 
@@ -296,14 +309,25 @@ Tab 鍵能聚焦到每個可排序欄位，Enter／Space 觸發跟滑鼠點擊�
 `brain.fuse()` 的訊號融合**——純資訊揭露，不影響任何既有訊號判斷邏輯，跟 OI 一樣是
 零額外 AI 成本的附加指標。
 
-### ⭐ 觀察清單
+### ⭐ 觀察清單（支援多組命名清單）
 
-點任一商品名稱／熱力圖色塊／全部商品總覽表格列旁邊的 ☆，可以把該商品加進個人觀察
-清單，✩ 變成 ★ 代表已加入；勾選「⭐ 只看觀察清單」篩選鈕就只顯示清單裡的商品（訊號
-卡片、熱力圖、表格三處篩選共用同一份清單）。**純瀏覽器端功能，存在 `localStorage`**
-（沒有使用者登入系統，見 `knowledge_universe/README.md` 的 Next Steps），只留在「這一台
-裝置的這個瀏覽器」，換裝置或清瀏覽器資料就會不見；私密瀏覽模式或儲存空間被封鎖時會
-安靜失敗，不影響其他任何功能。
+點任一商品名稱／熱力圖色塊／全部商品總覽表格列旁邊的 ☆，可以把該商品加進「目前作用中」
+的觀察清單，✩ 變成 ★ 代表已加入；勾選「⭐ 只看」篩選鈕就只顯示這組清單裡的商品（訊號
+卡片、熱力圖、表格三處篩選共用同一組作用中的清單）。
+
+「全部商品總覽」篩選列的下拉選單可以切換要編輯/篩選哪一組清單（選單裡每個名稱後面
+的數字是這組清單目前收藏幾檔），旁邊三個小按鈕：
+
+- **➕ 新增清單**：輸入名稱建一組新的空清單，建好直接切過去。
+- **✏️ 重新命名**：改目前這組清單的名稱。
+- **🗑️ 刪除**：刪掉目前這組清單（會先跳確認框）；只剩最後一組清單時這個按鈕不會出現
+  ——一定要留至少一組清單，不然「目前作用中的清單」這個概念會沒地方掛。
+
+**純瀏覽器端功能，存在 `localStorage`**（沒有使用者登入系統，見
+`knowledge_universe/README.md` 的 Next Steps），只留在「這一台裝置的這個瀏覽器」，換
+裝置或清瀏覽器資料就會不見；私密瀏覽模式或儲存空間被封鎖時會安靜失敗，不影響其他任何
+功能。這個功能剛推出時只有單一未命名清單（存成一個純代號陣列），第一次載入頁面時會
+自動把舊資料包成新格式的第一組清單「預設觀察清單」，不會遺失原本收藏的商品。
 
 ## API
 
@@ -484,6 +508,30 @@ AI_DAILY_CALL_CAP=48               # 每日 AI 呼叫上限（0 代表不限制�
 AI_FAILURE_THRESHOLD=3             # AI 連續失敗幾次觸發斷路器（0 代表不啟用）
 ```
 
+### 💚 死人開關監控（選用，只有長期部署才需要）
+
+背景排程本身沒有「跑失敗就通知你」的機制——如果整台伺服器當掉、Python 行程被 OOM
+killer 殺掉、或網路整個斷線，系統自己是不可能主動告訴你「我掛了」的（這正是「死人開關」
+這個監控思路存在的原因：不是系統自己說「我還活著」，而是靠外部第三方發現「太久沒聽到
+你的聲音」才是真正可信的失敗偵測）。
+
+設定方式：去 [healthchecks.io](https://healthchecks.io)（免費方案就夠用）建立一個
+check，拿到一個形如 `https://hc-ping.com/<你的 UUID>` 的 ping 網址，填進 `.env` 的
+`HEALTHCHECK_PING_URL`。之後**每一輪排程分析跑完**（不管成功或失敗）都會自動 ping 一次
+——成功時 `GET {網址}`，失敗時 `GET {網址}/fail`（healthchecks.io 的慣例，讓你在它的
+介面上分得出「排程有跑但這輪分析出錯」跟「排程整個沒在跑」兩種不同情況）。只要
+healthchecks.io 在你設定的預期時間內沒收到 ping，就會照你設定的管道（Email/Telegram/
+Slack…）通知你。
+
+`HEALTHCHECK_PING_URL` 留空（預設）完全不影響任何功能，也不會嘗試發送任何請求——這是
+純選用的維運工具，不是本系統核心功能的一部分（見 `healthcheck.py`）。ping 本身的失敗
+（例如你的伺服器連不到 healthchecks.io）只會記一行 log，不會讓排程任務跟著失敗——監控
+的職責是回報狀態，不該反過來影響它要監控的對象。
+
+```
+HEALTHCHECK_PING_URL=https://hc-ping.com/你的UUID   # 留空 = 停用（預設）
+```
+
 ### 前端控制面板
 
 主頁上方「🤖 背景排程自動分析」是一個可展開的面板（跟「新手教學」同一種收合元件），裡面
@@ -502,6 +550,31 @@ AI_FAILURE_THRESHOLD=3             # AI 連續失敗幾次觸發斷路器（0 �
 上方狀態列的「上次分析：2026-08-23 12:00:00 <span>（N秒前）</span>」也是即時跳動的——
 如果排程有開啟，超過「間隔 x2」還沒更新過就會變紅色，提醒這筆資料可能不新鮮；純手動模式
 （排程關閉）不做這個判斷，因為手動模式本來就不保證資料新鮮度。
+
+### 🖥️ 長期部署：systemd 常駐服務
+
+只有真的要把背景排程長期跑在自己的伺服器上（VPS、家用主機等）才需要這節——本機開發、
+或只是偶爾手動跑 `uvicorn` 玩玩的話完全不需要。`trading_system/deploy/trading-system.service`
+提供一份 systemd unit 範本，開機自動啟動、程式當掉自動重啟（含防止連續崩潰雪崩重試的
+`StartLimitBurst` 保護），檔案裡的每個設定都有中文註解說明。三個步驟：
+
+```bash
+# 1. 把範本複製到 systemd 目錄，換掉裡面的 <使用者名稱> 跟 <repo 路徑> 佔位符
+sudo cp trading_system/deploy/trading-system.service /etc/systemd/system/
+sudo nano /etc/systemd/system/trading-system.service
+
+# 2. 重新載入 + 啟用（立刻啟動 + 開機自動啟動）
+sudo systemctl daemon-reload
+sudo systemctl enable --now trading-system
+
+# 3. 確認狀態、看即時 log
+sudo systemctl status trading-system
+journalctl -u trading-system -f
+```
+
+`.env`（含金鑰）不需要在 unit 檔案裡另外指定——`config.py` 開機時自己用 `python-dotenv`
+讀 `trading_system/.env`，只要 systemd 的 `WorkingDirectory` 設對，服務啟動時就讀得到。
+更新程式碼（`git pull`）後 `sudo systemctl restart trading-system` 套用新版本即可。
 
 ## 訊號邏輯
 

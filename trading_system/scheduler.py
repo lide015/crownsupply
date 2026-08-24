@@ -21,7 +21,7 @@ import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import ai_governor, background, config, db
+from . import ai_governor, background, config, db, healthcheck
 from .state import STATE
 
 logger = logging.getLogger("scheduler")
@@ -101,6 +101,7 @@ def status() -> dict:
         "ai_consecutive_failures": STATE.ai_consecutive_failures,
         "ai_failure_threshold": config.AI_FAILURE_THRESHOLD,
         "ai_skip_reason": STATE.ai_skip_reason,
+        "healthcheck_configured": bool(config.HEALTHCHECK_PING_URL.strip()),
     }
 
 
@@ -146,6 +147,12 @@ async def _run_scheduled_cycle(client: httpx.AsyncClient, lock: asyncio.Lock):
     if not skip_reason and STATE.last_ai_call_attempted:
         _increment_ai_usage(now_ms)
         STATE.ai_consecutive_failures = STATE.ai_consecutive_failures + 1 if STATE.last_ai_call_failed else 0
+
+    # 死人開關 ping（選用，見 healthcheck.py）：沒設定 HEALTHCHECK_PING_URL 就完全跳過，
+    # 不影響上面已經完成的排程結果。這裡的「成功/失敗」對應排程這一輪本身有沒有正常
+    # 跑完（含技術面分析），跟上面的 AI 用量治理是兩件獨立的事——排程正常跑完但這輪
+    # 剛好被節流跳過 AI 呼叫，對死人開關來說仍然算「排程活著」，不算失敗。
+    await healthcheck.ping(client, config.HEALTHCHECK_PING_URL, success=STATE.scheduler_last_run_status == "ok")
 
 
 def start(client: httpx.AsyncClient, lock: asyncio.Lock):
