@@ -1,3 +1,12 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Skeleton 載入動畫（.animate-pulse）尊重使用者的「減少動態效果」系統設定——閃爍的
+   載入動畫對某些使用者是不舒服甚至觸發不適的，這個設定開啟時直接關掉動畫，改成靜態的
+   骨架色塊（一樣達到「版面不會跳動」的效果，只是少了呼吸閃爍感）。 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse {
+    animation: none;
+  }
+}

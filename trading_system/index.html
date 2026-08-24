@@ -462,16 +462,16 @@
       </p>
       <div id="all-instruments-wrap" class="overflow-auto border border-gray-800 rounded-xl bg-gray-950 max-h-[60vh]">
         <table class="w-full text-xs">
-          <thead class="sticky top-0 bg-gray-900 text-gray-500">
+          <thead class="sticky top-0 z-10 bg-gray-900 text-gray-500">
             <tr>
               <th class="text-center px-2 py-2 font-semibold">⭐</th>
-              <th class="text-left px-3 py-2 font-semibold">代號</th>
+              <th class="text-left px-3 py-2 font-semibold sticky left-0 bg-gray-900 z-10">代號</th>
               <th class="text-left px-3 py-2 font-semibold">分類</th>
-              <th class="text-right px-3 py-2 font-semibold">價格</th>
-              <th class="text-right px-3 py-2 font-semibold">24h 漲跌</th>
-              <th class="text-right px-3 py-2 font-semibold">24h 振幅</th>
-              <th class="text-right px-3 py-2 font-semibold">24h 成交額</th>
-              <th class="text-right px-3 py-2 font-semibold">持倉異動</th>
+              <th class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300" data-sort-key="price">價格<span class="all-inst-sort-arrow"></span></th>
+              <th class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300" data-sort-key="change_pct">24h 漲跌<span class="all-inst-sort-arrow"></span></th>
+              <th class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300" data-sort-key="amplitude_pct">24h 振幅<span class="all-inst-sort-arrow"></span></th>
+              <th class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300" data-sort-key="vol_usdt">24h 成交額<span class="all-inst-sort-arrow"></span></th>
+              <th class="all-inst-sort-th text-right px-3 py-2 font-semibold cursor-pointer select-none hover:text-gray-300" data-sort-key="oi_change_pct">持倉異動<span class="all-inst-sort-arrow"></span></th>
               <th class="text-center px-3 py-2 font-semibold">操作</th>
             </tr>
           </thead>
@@ -1584,10 +1584,45 @@ function renderAllInstrumentsFilters() {
   watchlistWrap.appendChild(watchlistBtn);
 }
 
+/* 表頭排序狀態——依振幅由高到低是原本自動篩選邏輯的排序依據，當預設值；點表頭可以換成
+   價格/漲跌/成交額/持倉異動排序，同一欄再點一次切換升降冪。缺值（例如現貨沒有持倉異動）
+   一律排最後，不管目前是升冪還是降冪，比「缺值當 0」更不容易誤導。 */
+let allInstrumentsSort = { key: "amplitude_pct", dir: "desc" };
+
+function _allInstCompare(a, b) {
+  const key = allInstrumentsSort.key;
+  const av = a[key], bv = b[key];
+  const aMissing = av == null, bMissing = bv == null;
+  if (aMissing && bMissing) return 0;
+  if (aMissing) return 1;
+  if (bMissing) return -1;
+  return allInstrumentsSort.dir === "asc" ? av - bv : bv - av;
+}
+
+function renderAllInstrumentsSortIndicators() {
+  document.querySelectorAll(".all-inst-sort-th").forEach((th) => {
+    const arrow = th.querySelector(".all-inst-sort-arrow");
+    const active = th.dataset.sortKey === allInstrumentsSort.key;
+    arrow.textContent = active ? (allInstrumentsSort.dir === "asc" ? " ▲" : " ▼") : "";
+    th.classList.toggle("text-amber-400", active);
+  });
+}
+
+document.querySelectorAll(".all-inst-sort-th").forEach((th) => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.sortKey;
+    allInstrumentsSort = allInstrumentsSort.key === key
+      ? { key, dir: allInstrumentsSort.dir === "desc" ? "asc" : "desc" }
+      : { key, dir: "desc" };
+    renderAllInstrumentsList();
+  });
+});
+
 function renderAllInstrumentsList() {
   const tbody = document.getElementById("all-instruments-tbody");
   const data = lastDashboardData;
   tbody.innerHTML = "";
+  renderAllInstrumentsSortIndicators();
 
   if (!data || !data.has_run) {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center text-gray-500 py-6">尚未分析。按上方「🔍 立即分析」抓取商品清單。</td></tr>`;
@@ -1612,8 +1647,7 @@ function renderAllInstrumentsList() {
   }
 
   const analyzedIds = new Set((data.signals || []).map((s) => s.instId));
-  // 依 24h 振幅由高到低排序，跟自動篩選的邏輯一致，活躍的商品排前面比較好找。
-  filtered.sort((a, b) => b.amplitude_pct - a.amplitude_pct);
+  filtered.sort(_allInstCompare);
 
   for (const inst of filtered) {
     const tr = document.createElement("tr");
@@ -1621,7 +1655,7 @@ function renderAllInstrumentsList() {
     const isAnalyzed = analyzedIds.has(inst.instId);
     tr.innerHTML = `
       <td class="px-2 py-2 text-center">${starButtonHtml(inst.instId, "text-sm")}</td>
-      <td class="inst-name-cell px-3 py-2 text-white font-semibold whitespace-nowrap cursor-pointer hover:text-amber-400 hover:underline" title="點一下看這檔的詳情頁">${inst.name}</td>
+      <td class="inst-name-cell px-3 py-2 text-white font-semibold whitespace-nowrap cursor-pointer hover:text-amber-400 hover:underline sticky left-0 bg-gray-950" title="點一下看這檔的詳情頁">${inst.name}</td>
       <td class="px-3 py-2 whitespace-nowrap space-x-1">
         <span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-400">
           ${inst.asset_class === "stock" ? "📈 股票永續" : "🪙 加密貨幣"}
@@ -2673,6 +2707,48 @@ async function loadBacktestDefaults() {
   }
 }
 
+/* Skeleton 載入狀態——按下「立即分析」到拿到回應之間，用跟真實內容同形狀的灰色骨架
+   佔位，取代「畫面停在舊資料不動、只有按鈕文字變成分析中…」的觀感。版面尺寸跟真實卡片/
+   表格列大致相同，資料回來時不會有明顯的版面跳動。只在「使用者主動按下分析」這個時機
+   出現——不套用在背景排程觸發的更新（那是被動、非使用者當下盯著看的情境，見
+   scheduler.py），也不套用在第一次進站、還沒按過分析的「尚未分析」空狀態。 */
+function renderSignalsSkeleton() {
+  const card = `
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-md space-y-4 animate-pulse">
+      <div class="flex justify-between items-start gap-3">
+        <div class="space-y-2 flex-1">
+          <div class="h-3.5 bg-gray-800 rounded w-24"></div>
+          <div class="h-7 bg-gray-800 rounded w-32"></div>
+        </div>
+        <div class="h-6 bg-gray-800 rounded-full w-24"></div>
+      </div>
+      <div class="h-24 bg-gray-800 rounded-lg"></div>
+      <div class="grid grid-cols-3 gap-2">
+        <div class="h-10 bg-gray-800 rounded"></div>
+        <div class="h-10 bg-gray-800 rounded"></div>
+        <div class="h-10 bg-gray-800 rounded"></div>
+      </div>
+      <div class="h-14 bg-gray-800 rounded"></div>
+    </div>`;
+  document.getElementById("signals-container").innerHTML = card.repeat(3);
+}
+
+function renderAllInstrumentsSkeleton() {
+  const row = `
+    <tr class="border-t border-gray-800 animate-pulse">
+      <td class="px-2 py-2"><div class="h-3 w-3 bg-gray-800 rounded mx-auto"></div></td>
+      <td class="px-3 py-2"><div class="h-3 bg-gray-800 rounded w-16"></div></td>
+      <td class="px-3 py-2"><div class="h-3 bg-gray-800 rounded w-24"></div></td>
+      <td class="px-3 py-2"><div class="h-3 bg-gray-800 rounded w-12 ml-auto"></div></td>
+      <td class="px-3 py-2"><div class="h-3 bg-gray-800 rounded w-12 ml-auto"></div></td>
+      <td class="px-3 py-2"><div class="h-3 bg-gray-800 rounded w-10 ml-auto"></div></td>
+      <td class="px-3 py-2"><div class="h-3 bg-gray-800 rounded w-14 ml-auto"></div></td>
+      <td class="px-3 py-2"><div class="h-3 bg-gray-800 rounded w-10 ml-auto"></div></td>
+      <td class="px-3 py-2"><div class="h-6 bg-gray-800 rounded w-14 mx-auto"></div></td>
+    </tr>`;
+  document.getElementById("all-instruments-tbody").innerHTML = row.repeat(8);
+}
+
 async function runAnalysis() {
   const btn = document.getElementById("analyze-btn");
   const icon = document.getElementById("analyze-btn-icon");
@@ -2681,6 +2757,8 @@ async function runAnalysis() {
   btn.disabled = true;
   icon.textContent = "⏳";
   label.textContent = "分析中…";
+  renderSignalsSkeleton();
+  renderAllInstrumentsSkeleton();
 
   try {
     const res = await fetch(`${API_BASE}/api/v1/analyze`, { method: "POST" });
@@ -2695,6 +2773,12 @@ async function runAnalysis() {
     console.error("分析失敗：", err);
     alert(`無法連上後端：${err}\n請確認 uvicorn 是否還在執行中。`);
   } finally {
+    // 不管成功、409（上一輪還在跑）、還是真的失敗，都要把 skeleton 換回真實內容——
+    // 失敗時 renderDashboard() 沒被呼叫到，skeleton 會卡住不動，這裡補上退回原狀態的
+    // 路徑（renderSignalsList/renderAllInstrumentsList 本來就會依 lastDashboardData
+    // 的實際狀態畫出正確畫面，包含還沒分析過的空狀態）。
+    renderSignalsList();
+    renderAllInstrumentsList();
     btn.disabled = false;
     icon.textContent = "🔍";
     label.textContent = "立即分析";
