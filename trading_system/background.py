@@ -33,6 +33,9 @@ state.STATE。核心邏輯不假設任何觸發方式——app.py 的 `POST /api
     指標（股票沒有），純資訊揭露，不參與 brain.fuse() 的訊號融合。
 13. 使用者自訂警報（見 alerts.py）：價格漲破/跌破對每輪重抓的全部商品清單評估，訊號
     警報依附在這裡的技術分析流程上，條件成立就透過 Telegram／Email 通知。
+14. 重複利用同一份 K 線，順便跑型態辨識（見 pattern_recognition.py）：突破前高/跳空
+    缺口/均線黏合發散/W底雙重底/三角收斂/回踩黃金分割位共 6 種，不管這一檔有沒有
+    觸發主策略都照算，純資訊揭露，不參與 brain.fuse() 的訊號融合。
 
 新聞情緒判讀刻意放在「OKX 篩選出這輪實際監控哪些商品」**之後**才做（不是開頭第一步）：
 要先知道這輪到底在看哪幾檔商品，才能各自搜尋「這檔」的專屬新聞，而不是每一檔訊號都套用
@@ -44,7 +47,7 @@ import time
 
 import httpx
 
-from . import alerts, brain, config, db, email_notify, fee_calc, funding_rate, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, position_sizing, ranking, strategy, strategy_tuner, telegram_notify
+from . import alerts, brain, config, db, email_notify, fee_calc, funding_rate, market_pulse, news_client, oi_tracker, okx_client, outcome_tracker, pattern_recognition, position_sizing, ranking, strategy, strategy_tuner, telegram_notify
 from .state import STATE
 
 BTC_INST_ID = "BTC-USDT-SWAP"  # 山寨季代理指標的比較基準（見 market_pulse.py 說明）
@@ -225,6 +228,10 @@ async def analyze_one_instrument(
         return None, [], False
 
     rsi = market_pulse.compute_rsi([c["c"] for c in candles])
+    # 🔍 型態辨識（見 pattern_recognition.py 說明）：純資訊揭露，不管這一檔有沒有觸發
+    # 主策略（EMA+盒子突破）的訊號都照算——一檔還沒突破盒子，但三角收斂正在成形，
+    # 這種「還沒到但值得關注」的脈絡本身也有參考價值。不參與 brain.fuse() 的訊號融合。
+    detected_patterns = pattern_recognition.detect_patterns(candles)
     oi_delta = await _fetch_oi_delta(client, inst_id, now_ms)
     funding = await _fetch_funding_rate(client, inst_id)
 
@@ -269,6 +276,7 @@ async def analyze_one_instrument(
         "news_headline": sentiment.get("headline"),
         "news_reason": sentiment.get("reason"),
         "rsi": rsi,
+        "detected_patterns": detected_patterns,
         "oi_change_pct": oi_delta["oi_change_pct"],
         "oi_label": oi_delta["label"],
         "funding_rate_pct": funding["funding_rate_pct"],

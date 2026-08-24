@@ -777,6 +777,18 @@ function netRrHtml(sig) {
   return `<div class="text-xs text-gray-500 font-mono">💸 淨盈虧比（已扣來回手續費 ${fmt(sig.round_trip_fee_pct, 2)}%）：<span class="${cls} font-bold">${fmt(sig.net_rr, 2)}</span>${sig.fee_eats_pct != null ? `　手續費吃掉停利1獲利的 ${fmt(sig.fee_eats_pct, 1)}%` : ""}</div>`;
 }
 
+/* 🔍 型態辨識——見 pattern_recognition.py。純資訊揭露，沒偵測到任何型態時完全不佔版面
+   （空陣列回傳空字串），不會為了「可能有東西」預留一整排空殼。 */
+function detectedPatternsHtml(sig) {
+  if (!sig.detected_patterns || sig.detected_patterns.length === 0) return "";
+  const badges = sig.detected_patterns
+    .map((p) => `<span class="px-2 py-0.5 rounded-full border border-teal-800 text-teal-400 bg-teal-950/30">${p.label}</span>`)
+    .join("");
+  return `<div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+    <span class="text-gray-600">🔍 偵測到型態：</span>${badges}
+  </div>`;
+}
+
 /* ---------------------------------------------------------------- */
 /* ✅ 訊號核准——使用者對每一筆訊號自己標記「已核准/觀察中/拒絕」，純粹是個人回顧用的     */
 /* 紀錄，本系統仍然不會因為標記「已核准」就真的去下單。存在後端 SQLite（signal_history  */
@@ -1534,6 +1546,7 @@ function renderSignalsList() {
       ${netRrHtml(sig)}
       <div class="text-xs text-gray-500 font-mono">24h 振幅：${fmt(sig.amplitude_pct, 2)}%${sig.oi_label ? `　OI：<span class="${changePctTextCls(sig.oi_change_pct)}">${sig.oi_label}</span>` : ""}</div>
       ${sig.funding_rate_pct != null ? `<div class="text-xs text-gray-500 font-mono">資金費率：<span class="${changePctTextCls(sig.funding_rate_pct)}">${fmt(sig.funding_rate_pct, 4)}%</span>　${sig.funding_rate_label}</div>` : ""}
+      ${detectedPatternsHtml(sig)}
       <div class="text-xs text-gray-400 bg-gray-950/50 p-2.5 rounded border border-gray-800/60 leading-relaxed">
         <span class="font-semibold text-amber-400">大腦研判：</span>${sig.reason}
       </div>
@@ -2394,6 +2407,7 @@ function renderInstModalTechnical(signal) {
         <div class="text-gray-400" title="跟停損不同：這是「突破/跌破」原始論述是否還成立的結構價位，比停損更早、更輕的示警">失效 <span class="text-orange-400 block font-bold">${fmt(signal.invalidation_price)}</span></div>
       </div>
       ${netRrHtml(signal)}
+      ${detectedPatternsHtml(signal)}
       <div class="text-gray-400 leading-relaxed"><span class="font-semibold text-amber-400">大腦研判：</span>${signal.reason}</div>
       ${decisionButtonsHtml(signal)}`;
   bindDecisionButtons(document.getElementById("inst-modal-technical"), signal, () => renderInstModalTechnical(signal));
