@@ -187,6 +187,7 @@ def _dashboard_payload() -> dict:
         "ranking": STATE.ranking,
         "circuit_breaker": STATE.circuit_breaker,
         "portfolio_exposure": STATE.portfolio_exposure,
+        "exposure_gate": STATE.exposure_gate,
         "scheduler": scheduler.status(),
         "disclaimer": "僅供訊號監控參考，非投資建議；本系統不執行任何自動化下單，也不會自動在背景分析。",
     }
@@ -215,6 +216,11 @@ async def frontend_config():
         # 📈 走勢圖時間週期切換鈕要知道哪個週期才是「跟訊號判斷同一份 EMA」，其餘週期
         # 純瀏覽參考——不能讓前端寫死猜一個可能跟後端環境變數對不上的值。
         "candle_bar": config.CANDLE_BAR,
+        # 📦 曝險上限／🌪️ 波動風控門檻——給「持倉組合風險總覽」面板顯示「X / 上限 Y」用，
+        # 實際攔截邏輯已經在後端 brain.fuse() 做了（見 outcome_tracker.compute_exposure_gate／
+        # compute_volatility_gate），前端這裡純粹是把數字顯示出來，不重複判斷邏輯。
+        "max_open_positions": config.MAX_OPEN_POSITIONS,
+        "max_amplitude_pct": config.MAX_AMPLITUDE_PCT,
     }
 
 
@@ -394,12 +400,18 @@ async def analyze_instrument(req: AnalyzeInstrumentRequest):
         [{"instId": item["instId"], "query": item["instId"].split("-")[0], "label": item["name"]}],
     )
     sentiment = news["by_instrument"].get(item["instId"], news["market"])
-    # 每日虧損斷路器獨立算一次（純讀 DB，零成本）——這是使用者自己點的單一商品分析，
-    # 不是走 `_refresh_signals` 那輪，一樣要套用同一個「今天」的斷路器狀態，標準不能兩套。
+    # 每日虧損斷路器／曝險上限關卡都獨立算一次（純讀 DB，零成本）——這是使用者自己點的
+    # 單一商品分析，不是走 `_refresh_signals` 那輪，一樣要套用同一個「現在」的風控狀態，
+    # 標準不能兩套（見這支端點 docstring 說的「不管自動選中還是自己點的，標準一致」）。
     circuit_breaker = outcome_tracker.compute_daily_circuit_breaker(
         db.get_resolved_today(now_ms), config.MAX_DAILY_LOSS_COUNT, config.MAX_DAILY_LOSS_R
     )
-    signal, _candles, _is_new = await background.analyze_one_instrument(_http_client, item, sentiment, now_ms, circuit_breaker)
+    exposure_gate = outcome_tracker.compute_exposure_gate(
+        outcome_tracker.compute_portfolio_exposure(db.get_open_signals())["total_open"], config.MAX_OPEN_POSITIONS
+    )
+    signal, _candles, _is_new = await background.analyze_one_instrument(
+        _http_client, item, sentiment, now_ms, circuit_breaker, exposure_gate
+    )
     if signal is None:
         return JSONResponse(
             {"ok": False, "message": "這檔商品目前抓不到 K 線資料，稍後再試一次。"}, status_code=502

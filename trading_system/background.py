@@ -185,7 +185,8 @@ async def _fetch_btc_pct_change(client: httpx.AsyncClient, already_fetched: dict
 
 
 async def analyze_one_instrument(
-    client: httpx.AsyncClient, item: dict, sentiment: dict, now_ms: int, circuit_breaker: dict | None = None
+    client: httpx.AsyncClient, item: dict, sentiment: dict, now_ms: int,
+    circuit_breaker: dict | None = None, exposure_gate: dict | None = None,
 ) -> tuple[dict | None, list, bool]:
     """對單一商品跑完整的「K線→技術訊號→OI→多空共振」流程，回傳
     (訊號 dict 或 None, candles, is_new_signal)。第三個值供呼叫端（見 _refresh_signals）
@@ -197,6 +198,10 @@ async def analyze_one_instrument(
     sentiment 是這檔的新聞情緒（{"sentiment","headline","reason"}）。
     circuit_breaker：outcome_tracker.compute_daily_circuit_breaker() 的回傳值（可能是
     None，代表呼叫端選擇不檢查這個機制）——見 brain.fuse() 說明，優先於所有其他判斷。
+    exposure_gate：outcome_tracker.compute_exposure_gate() 的回傳值（可能是 None）——
+    整個分析週期只要算一次（不隨個別商品變動，看的是「現在同時開著幾筆」這個帳戶層級
+    的狀態），呼叫端算好一次傳進來，不用每檔商品各自重算。volatility_gate 不一樣，是
+    每檔商品各自的 24h 振幅算出來的，直接在這個函式內部算，不用外部傳入。
 
     這是 `_refresh_signals` 自動篩選迴圈、跟 `app.py` 的 `POST /api/v1/analyze-instrument`
     （使用者在「全部商品總覽」點按需求分析）**共用的同一份邏輯**——不管是系統自動選中的，
@@ -237,7 +242,12 @@ async def analyze_one_instrument(
             tech["price"], tech["stop_loss"], tech["take_profit_1"], config.TAKER_FEE_PCT
         )
 
-    fused = brain.fuse(tech, sentiment, fee_info, config.MIN_NET_RR, htf_trend, circuit_breaker)
+    # 🌪️ 波動風控關卡：這檔商品自己的 24h 振幅是不是過於劇烈（見
+    # outcome_tracker.compute_volatility_gate 說明）——跟曝險上限不同，這是逐檔各自的
+    # 特徵，不是帳戶層級的共用狀態，所以在這裡（每檔商品各自）算，不是外部傳入。
+    volatility_gate = outcome_tracker.compute_volatility_gate(item["amplitude_pct"], config.MAX_AMPLITUDE_PCT)
+
+    fused = brain.fuse(tech, sentiment, fee_info, config.MIN_NET_RR, htf_trend, circuit_breaker, exposure_gate, volatility_gate)
     signal = {
         "name": item["name"],
         "instId": inst_id,
@@ -250,6 +260,7 @@ async def analyze_one_instrument(
         "stop_loss": tech["stop_loss"] if tech else None,
         "take_profit_1": tech["take_profit_1"] if tech else None,
         "take_profit_2": tech["take_profit_2"] if tech else None,
+        "invalidation_price": tech["invalidation_price"] if tech else None,
         "vol_usdt": item["vol_usdt"],
         "amplitude_pct": item["amplitude_pct"],
         "change_pct": item.get("change_pct"),
@@ -387,7 +398,14 @@ async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None
     # 📦 持倉組合風險總覽：現在同時開著幾筆未結算訊號（見
     # outcome_tracker.compute_portfolio_exposure 說明）——每日斷路器看的是「今天已發生」，
     # 這個看的是「現在正在承受」，純讀 DB + 純函式計算，零額外成本。
-    STATE.portfolio_exposure = outcome_tracker.compute_portfolio_exposure(db.get_open_signals())
+    portfolio_exposure = outcome_tracker.compute_portfolio_exposure(db.get_open_signals())
+    STATE.portfolio_exposure = portfolio_exposure
+
+    # 🚧 曝險上限關卡：現在同時開著的部位數達到自訂上限時，這一輪所有新訊號都會被
+    # brain.fuse() 攔截成「曝險已達上限」（見 outcome_tracker.compute_exposure_gate
+    # 說明）——只算一次，套用在下面每一檔商品身上，跟每日虧損斷路器同一種用法。
+    exposure_gate = outcome_tracker.compute_exposure_gate(portfolio_exposure["total_open"], config.MAX_OPEN_POSITIONS)
+    STATE.exposure_gate = exposure_gate
 
     # 🧮 倉位計算機的凱利公式建議：用「本系統自己歷史上真的中停利/停損過幾次」算出來的
     # 勝率＋平均獲利倍數，不是憑空給一個數字。零額外 AI/API 成本，純讀 DB + 純函式計算。
@@ -488,7 +506,7 @@ async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None
     for item in monitored:
         inst_id = item["instId"]
         sentiment = sentiment_by_inst.get(inst_id, news["market"])
-        signal, candles, is_new_signal = await analyze_one_instrument(client, item, sentiment, now_ms, circuit_breaker)
+        signal, candles, is_new_signal = await analyze_one_instrument(client, item, sentiment, now_ms, circuit_breaker, exposure_gate)
         any_new_signal = any_new_signal or is_new_signal
 
         # 🔔 訊號警報：只對「這輪有跑過技術分析」的商品有效（監控清單自動選中的、或使用者

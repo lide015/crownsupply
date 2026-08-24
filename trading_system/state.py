@@ -44,6 +44,10 @@ class SystemState:
         # 持倉組合風險總覽（見 outcome_tracker.compute_portfolio_exposure）：現在同時開著
         # 幾筆未結算訊號、有沒有同方向集中度警訊。
         self.portfolio_exposure: dict = {"total_open": 0, "long_count": 0, "short_count": 0, "concentration_warning": None}
+        # 曝險上限關卡（見 outcome_tracker.compute_exposure_gate）：portfolio_exposure 的
+        # total_open 達到 config.MAX_OPEN_POSITIONS 時 active=True，這一輪新訊號會被
+        # brain.fuse() 攔截成「曝險已達上限」。
+        self.exposure_gate: dict = {"active": False, "reason": None}
 
         # ---- 背景排程 + AI 用量治理（見 scheduler.py／ai_governor.py） ----
         self.ai_skip_reason: str | None = None  # 這一輪(排程模式)AI 新聞情緒有沒有被跳過、跳過的原因；手動分析恆為 None

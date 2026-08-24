@@ -47,6 +47,20 @@ HTF_CANDLE_LIMIT = int(os.getenv("HTF_CANDLE_LIMIT", "50"))
 MAX_DAILY_LOSS_COUNT = int(os.getenv("MAX_DAILY_LOSS_COUNT", "3"))
 MAX_DAILY_LOSS_R = float(os.getenv("MAX_DAILY_LOSS_R", "-5.0"))
 
+# ---- 曝險上限關卡（見 outcome_tracker.compute_exposure_gate） ----
+# 現在同時開著的未結算訊號數達到這個數字時，新訊號一律攔截成「曝險已達上限」，不管
+# 技術面/新聞面再漂亮——帳戶整體風險已經足夠，不該再疊加。跟每日虧損斷路器是互補的
+# 兩層風控：斷路器看「今天已發生的虧損」，這個看「現在正在承擔的部位數」。
+# 設成 0 代表關閉這道關卡。
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))
+
+# ---- 波動風控關卡（見 outcome_tracker.compute_volatility_gate） ----
+# 24h 振幅達到這個百分比（含）以上時，訊號攔截成「波動過於劇烈」的警告——這套策略是為
+# 正常波動幅度設計、拿歷史資料驗證過參數，極端行情下驗證過的參數不見得還適用。
+# 跟商品篩選階段的 MIN_AMPLITUDE_PCT 方向相反：那個濾掉太安靜的商品（下限），這個濾掉
+# 太劇烈的商品（上限），兩者搭配才是「波動要落在合理區間」的完整篩選。設成 0 代表關閉。
+MAX_AMPLITUDE_PCT = float(os.getenv("MAX_AMPLITUDE_PCT", "20.0"))
+
 # ---- 歷史回測（見 backtest.py：把策略規則套在過去的 K 線上重播統計） ----
 # OKX /market/candles 單次查詢上限 300 根；使用者可在前端選更短的 K 線週期（bar）
 # 換取更長的實際回測時間跨度，但單次抓取根數本身受 OKX API 限制，不能無限加大。

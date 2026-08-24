@@ -221,6 +221,63 @@ def compute_portfolio_exposure(open_signals: list[dict]) -> dict:
     }
 
 
+def compute_exposure_gate(total_open: int, max_open_positions: int) -> dict:
+    """曝險上限關卡：現在同時開著的未結算訊號數（total_open，來自
+    compute_portfolio_exposure）達到使用者自訂上限時，攔截「新」訊號——不是因為這筆新
+    訊號本身技術面/新聞面不好，是帳戶整體已經同時承擔夠多份風險，不該再疊加。
+
+    跟每日虧損斷路器（compute_daily_circuit_breaker）是互補的兩層 portfolio-level 關卡：
+    斷路器看「今天已經發生的虧損」（事後、時間軸角度），這個看「現在正在承擔的部位數」
+    （當下、部位數量角度）——一個帳戶可能今天還沒虧錢（斷路器沒觸發），但同時開了一堆
+    部位，新訊號一樣該被這道關卡攔下來。
+
+    max_open_positions <= 0 代表關閉這道關卡（不會誤觸發，也不會因為設成 0 這種邊界值
+    就動不動觸發）。
+
+    回傳 {"active": bool, "reason": str|None}——刻意跟 compute_daily_circuit_breaker
+    同一種形狀，brain.fuse() 可以用一模一樣的方式套用兩者。"""
+    if max_open_positions <= 0:
+        return {"active": False, "reason": None}
+    if total_open >= max_open_positions:
+        return {
+            "active": True,
+            "reason": (
+                f"目前同時有 {total_open} 筆未結算訊號，已達自訂曝險上限 {max_open_positions} 筆，"
+                "帳戶整體風險已經足夠，新訊號先不建議加碼，等既有部位結算後再評估。"
+            ),
+        }
+    return {"active": False, "reason": None}
+
+
+def compute_volatility_gate(amplitude_pct: float | None, max_amplitude_pct: float) -> dict:
+    """波動風控關卡：這檔商品的 24h 振幅過大時攔截成警告——不是技術面/新聞面不好，是波動
+    太劇烈的商品容易出現插針、滑價，極端行情下流動性也可能瞬間變差。20 EMA + 盒子突破
+    這套策略是為「正常」波動幅度設計、拿歷史資料驗證過參數，波動極端偏離正常範圍時，
+    驗證過的參數不見得還適用，值得提醒使用者格外謹慎。
+
+    跟商品篩選階段的 MIN_AMPLITUDE_PCT（見 okx_client.screen_active_instruments）方向
+    相反：那個濾掉「太安靜」（振幅太小、雜訊多、不值得分析）的商品，這個濾掉「太劇烈」
+    的商品，兩個門檻搭配起來才是「波動要落在一個合理區間」的完整篩選——只設下限、
+    不設上限的話，遇到單日暴漲暴跌 50% 的極端行情一樣會照常產生訊號，不是使用者想要的。
+
+    max_amplitude_pct <= 0 代表關閉這道關卡；amplitude_pct 是 None（例如查不到資料）
+    優雅放行、不誤攔截。
+
+    回傳 {"active": bool, "reason": str|None}，跟另外兩道 portfolio-level 關卡同一種
+    形狀，方便 brain.fuse() 統一套用。"""
+    if max_amplitude_pct <= 0 or amplitude_pct is None:
+        return {"active": False, "reason": None}
+    if amplitude_pct >= max_amplitude_pct:
+        return {
+            "active": True,
+            "reason": (
+                f"24h 振幅達 {amplitude_pct}%（超過門檻 {max_amplitude_pct}%），波動過於劇烈，"
+                "容易出現插針/滑價，本策略是為正常波動幅度設計驗證，建議謹慎評估、縮小部位或觀望。"
+            ),
+        }
+    return {"active": False, "reason": None}
+
+
 if __name__ == "__main__":
     _passed = 0
     _total = 0
@@ -413,6 +470,38 @@ if __name__ == "__main__":
     result_mixed_dir = compute_portfolio_exposure(mixed_directions)
     check("1 long + 1 short -> no concentration warning (neither direction hits 2)", result_mixed_dir["concentration_warning"], None)
     check("1 long + 1 short -> total_open is 2", result_mixed_dir["total_open"], 2)
+
+    # 29) compute_exposure_gate -- 關閉這道關卡（<=0）永遠不觸發，不管 total_open 多大
+    check("exposure gate disabled (max<=0) -> never active", compute_exposure_gate(999, 0)["active"], False)
+    check("exposure gate disabled (negative max) -> never active", compute_exposure_gate(999, -1)["active"], False)
+
+    # 30) compute_exposure_gate -- 還沒到上限
+    check("exposure gate: below cap -> inactive", compute_exposure_gate(2, 5)["active"], False)
+
+    # 31) compute_exposure_gate -- 剛好到達上限（>=，邊界含入）
+    at_cap = compute_exposure_gate(5, 5)
+    check("exposure gate: exactly at cap -> active (boundary inclusive)", at_cap["active"], True)
+    check("exposure gate: reason mentions counts", "5" in at_cap["reason"], True)
+
+    # 32) compute_exposure_gate -- 超過上限
+    check("exposure gate: above cap -> active", compute_exposure_gate(8, 5)["active"], True)
+
+    # 33) compute_volatility_gate -- 關閉這道關卡（<=0）永遠不觸發
+    check("volatility gate disabled (max<=0) -> never active", compute_volatility_gate(50.0, 0)["active"], False)
+
+    # 34) compute_volatility_gate -- 查不到振幅資料（None）優雅放行，不誤攔截
+    check("volatility gate: amplitude_pct=None -> inactive (no false trigger)", compute_volatility_gate(None, 20.0)["active"], False)
+
+    # 35) compute_volatility_gate -- 正常波動範圍內
+    check("volatility gate: normal amplitude -> inactive", compute_volatility_gate(6.0, 20.0)["active"], False)
+
+    # 36) compute_volatility_gate -- 剛好在門檻邊界（>=，邊界含入）
+    at_vol_cap = compute_volatility_gate(20.0, 20.0)
+    check("volatility gate: exactly at threshold -> active (boundary inclusive)", at_vol_cap["active"], True)
+    check("volatility gate: reason mentions the amplitude value", "20.0" in at_vol_cap["reason"], True)
+
+    # 37) compute_volatility_gate -- 明顯超過門檻
+    check("volatility gate: far above threshold -> active", compute_volatility_gate(45.0, 20.0)["active"], True)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

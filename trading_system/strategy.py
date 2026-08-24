@@ -30,6 +30,15 @@ def compute_signal(
     停損固定設在盒子中線（比「盒子邊緣」保守、比「前一根K線極值」寬鬆，兩者的折衷）。
     停利用風報比（reward:risk）算：risk = |進場價 - 停損價|，
     TP1 = 進場價 ± risk * tp1_rr（可先減碼）、TP2 = 進場價 ± risk * tp2_rr（留給趨勢延續）。
+
+    失效條件（invalidation_price）跟停損是兩個不同的概念，刻意分開揭露：停損是「虧到
+    這裡就認賠出場」的風險控管價位；失效條件是「這個判斷邏輯本身還成不成立」的結構性
+    價位——做多訊號的判斷邏輯是「站上盒子高點」，如果收盤價又跌破盒子高點（跌回盒子
+    裡面），代表這次突破很可能是假突破，這個訊號的原始論述已經站不住腳，是比停損更早、
+    更輕的示警（做多：invalidation_price = box_high，介於進場價與停損價之間；
+    做空對稱：invalidation_price = box_low）。這個機制只在有訊號時才有意義，沒有訊號
+    時是 None。
+
     回傳 None 代表資料不夠（還沒收集滿 EMA 週期 + 盒子回看窗）。
 
     volume_confirm_multiple：量能突破確認——真正有動能的突破通常伴隨成交量放大，雜訊
@@ -71,18 +80,21 @@ def compute_signal(
     stop_loss = None
     take_profit_1 = None
     take_profit_2 = None
+    invalidation_price = None
     if raw_long_breakout and volume_confirmed:
         signal = "long"
         stop_loss = box_mid
         risk = price - stop_loss
         take_profit_1 = price + risk * tp1_rr
         take_profit_2 = price + risk * tp2_rr
+        invalidation_price = box_high
     elif raw_short_breakout and volume_confirmed:
         signal = "short"
         stop_loss = box_mid
         risk = stop_loss - price
         take_profit_1 = price - risk * tp1_rr
         take_profit_2 = price - risk * tp2_rr
+        invalidation_price = box_low
 
     return {
         "price": price,
@@ -93,6 +105,7 @@ def compute_signal(
         "stop_loss": stop_loss,
         "take_profit_1": take_profit_1,
         "take_profit_2": take_profit_2,
+        "invalidation_price": invalidation_price,
         "tp1_rr": tp1_rr,
         "tp2_rr": tp2_rr,
         "volume_confirmed": volume_confirmed,
@@ -154,6 +167,9 @@ if __name__ == "__main__":
     check("take_profit_2 at 2.0R", sig_long["take_profit_2"], 115.0)
     check("no volume data -> volume_confirmed defaults True", sig_long["volume_confirmed"], True)
     check("no volume data -> not blocked_by_volume", sig_long["blocked_by_volume"], False)
+    # 失效條件（做多）＝ box_high——介於進場價(105)跟停損(100)之間，是比停損更早的示警。
+    check("long invalidation_price = box_high", sig_long["invalidation_price"], 101.0)
+    check("long invalidation sits between entry and stop_loss", sig_long["stop_loss"] < sig_long["invalidation_price"] < sig_long["price"], True)
 
     # 3) 對稱情境：跌破盒子低點且跌破 EMA -> short
     breakout_down = flat + [{"o": 100.0, "h": 100.0, "l": 94.0, "c": 95.0}]
@@ -162,6 +178,9 @@ if __name__ == "__main__":
     # entry=95, stop_loss=100 -> risk=5 -> tp1=95-5*1.5=87.5, tp2=95-5*2.0=85.0
     check("short take_profit_1 at 1.5R", sig_short["take_profit_1"], 87.5)
     check("short take_profit_2 at 2.0R", sig_short["take_profit_2"], 85.0)
+    # 失效條件（做空）＝ box_low——同樣介於進場價(95)跟停損(100)之間。
+    check("short invalidation_price = box_low", sig_short["invalidation_price"], 99.0)
+    check("short invalidation sits between entry and stop_loss", sig_short["price"] < sig_short["invalidation_price"] < sig_short["stop_loss"], True)
 
     # 4) 價格仍在盒子內盤整 -> 無訊號，停損停利皆為 None
     still_inside = flat + [{"o": 100.0, "h": 100.5, "l": 99.5, "c": 100.0}]
@@ -169,6 +188,7 @@ if __name__ == "__main__":
     check("price inside box -> no signal", sig_none["signal"], None)
     check("no signal -> no take_profit", sig_none["take_profit_1"], None)
     check("no breakout at all -> not blocked_by_volume", sig_none["blocked_by_volume"], False)
+    check("no signal -> no invalidation_price", sig_none["invalidation_price"], None)
 
     # 5) 量能突破確認：突破但量能不足 -> 不觸發訊號，且明確標示 blocked_by_volume
     flat_low_vol = [{"o": 100.0, "h": 101.0, "l": 99.0, "c": 100.0, "vol": 1000.0} for _ in range(20)]
@@ -177,6 +197,7 @@ if __name__ == "__main__":
     check("breakout with weak volume -> no signal", sig_weak["signal"], None)
     check("breakout with weak volume -> volume_confirmed False", sig_weak["volume_confirmed"], False)
     check("breakout with weak volume -> blocked_by_volume True", sig_weak["blocked_by_volume"], True)
+    check("breakout blocked by volume -> no invalidation_price either (no real signal)", sig_weak["invalidation_price"], None)
 
     # 6) 量能突破確認：突破且量能充足 -> 正常觸發訊號
     strong_breakout = flat_low_vol + [{"o": 100.0, "h": 106.0, "l": 100.0, "c": 105.0, "vol": 2000.0}]  # 量能是均量的 2 倍

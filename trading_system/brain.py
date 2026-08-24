@@ -19,6 +19,8 @@ def fuse(
     min_net_rr: float = 1.0,
     htf_trend: str | None = None,
     circuit_breaker: dict | None = None,
+    exposure_gate: dict | None = None,
+    volatility_gate: dict | None = None,
 ) -> dict:
     """tech: strategy.compute_signal() 的回傳值（可能是 None）。
     sentiment: 一個帶 "sentiment" 欄位的 dict——實際上是 news_client.get_market_and_instrument_sentiment()
@@ -37,6 +39,14 @@ def fuse(
     再怎麼漂亮，都優先攔截成「今日建議停止交易」，這是跟單一訊號品質無關、更上層的紀律
     把關，所以擺在所有判斷「最前面」，連「觀望中」都會被它取代（讓使用者一眼就知道今天
     為什麼要停手，而不是看到一堆「觀望中」不知道原因）。
+    exposure_gate: outcome_tracker.compute_exposure_gate() 的回傳值（可能是 None，代表
+    不啟用）——現在同時開著的部位數已經達到自訂上限時攔截「新」訊號，不管這筆訊號本身
+    多漂亮，帳戶整體風險已經足夠了。優先序在 circuit_breaker 之後、但在 tech 是否有
+    訊號的判斷「之前」不合理（沒有訊號就沒有「要不要加碼」的問題），所以擺在
+    tech-is-None 判斷之後、fee_info 判斷之前。
+    volatility_gate: outcome_tracker.compute_volatility_gate() 的回傳值（可能是 None，
+    代表不啟用）——這檔商品的 24h 振幅過於劇烈時攔截成警告，優先序在 htf_trend 判斷
+    之後（先看方向對不對，再看波動是不是在合理範圍）。
     回傳 {"action": str, "color": str, "reason": str}。"""
     if circuit_breaker and circuit_breaker.get("active"):
         return {
@@ -60,6 +70,13 @@ def fuse(
             "action": "觀望中",
             "color": COLOR_GRAY,
             "reason": "價格仍在盒子整理區間內，或尚未站上/跌破 20 EMA，技術面尚無訊號。",
+        }
+
+    if exposure_gate and exposure_gate.get("active"):
+        return {
+            "action": "⚠️ 曝險已達上限，暫緩新訊號 (EXPOSURE CAP)",
+            "color": COLOR_YELLOW,
+            "reason": exposure_gate.get("reason") or "目前同時開著的部位數已達自訂曝險上限，新訊號暫不建議加碼。",
         }
 
     if fee_info and fee_info.get("net_rr") is not None and fee_info["net_rr"] < min_net_rr:
@@ -87,6 +104,13 @@ def fuse(
                 f"{'下跌' if htf_trend == 'down' else '上漲'}——逆著大方向做的短線突破特別容易被"
                 "回歸主趨勢的走勢洗出場，系統攔截以避免逆勢操作。"
             ),
+        }
+
+    if volatility_gate and volatility_gate.get("active"):
+        return {
+            "action": "⚠️ 波動過於劇烈，謹慎評估 (HIGH VOLATILITY)",
+            "color": COLOR_YELLOW,
+            "reason": volatility_gate.get("reason") or "24h 振幅超過自訂門檻，波動過於劇烈，建議謹慎評估。",
         }
 
     if signal == "long":
@@ -207,6 +231,40 @@ if __name__ == "__main__":
           fuse(long_tech, {"sentiment": "BULLISH"}, circuit_breaker={"active": False, "reason": None})["color"], COLOR_GREEN)
     check("circuit_breaker=None -> no effect (backward compatible)",
           fuse(long_tech, {"sentiment": "BULLISH"}, circuit_breaker=None)["color"], COLOR_GREEN)
+
+    # 曝險上限關卡：達到上限時攔截新訊號，不管技術面/新聞面再漂亮——但只在真的有訊號時
+    # 才需要攔截（沒有訊號就沒有「要不要加碼」的問題，不該覆蓋單純的「觀望中」）。
+    exposure_active = {"active": True, "reason": "目前同時有 5 筆未結算訊號，已達自訂曝險上限 5 筆"}
+    exposure_result = fuse(long_tech, {"sentiment": "BULLISH"}, exposure_gate=exposure_active)
+    check("exposure gate active -> EXPOSURE CAP overrides signal quality", "EXPOSURE CAP" in exposure_result["action"], True)
+    check("exposure gate active -> yellow", exposure_result["color"], COLOR_YELLOW)
+    check("exposure gate reason passed through", "曝險上限 5 筆" in exposure_result["reason"], True)
+
+    exposure_no_tech = fuse(None, {"sentiment": "NEUTRAL"}, exposure_gate=exposure_active)
+    check("exposure gate does NOT override when tech has no signal (nothing to gate)", exposure_no_tech["action"], "觀望中")
+
+    check("exposure gate active but circuit breaker also active -> circuit breaker wins (higher priority)",
+          "DAILY LIMIT" in fuse(long_tech, {"sentiment": "BULLISH"}, circuit_breaker=breaker_active, exposure_gate=exposure_active)["action"], True)
+
+    check("exposure_gate inactive dict -> no effect (backward compatible)",
+          fuse(long_tech, {"sentiment": "BULLISH"}, exposure_gate={"active": False, "reason": None})["color"], COLOR_GREEN)
+    check("exposure_gate=None -> no effect (backward compatible)",
+          fuse(long_tech, {"sentiment": "BULLISH"}, exposure_gate=None)["color"], COLOR_GREEN)
+
+    # 波動風控關卡：振幅過大時攔截成警告，優先序在 htf_trend 之後、mood 判斷之前
+    volatility_active = {"active": True, "reason": "24h 振幅達 45.0%（超過門檻 20.0%），波動過於劇烈"}
+    volatility_result = fuse(long_tech, {"sentiment": "BULLISH"}, volatility_gate=volatility_active)
+    check("volatility gate active -> HIGH VOLATILITY overrides signal quality", "HIGH VOLATILITY" in volatility_result["action"], True)
+    check("volatility gate active -> yellow", volatility_result["color"], COLOR_YELLOW)
+    check("volatility gate reason passed through", "45.0%" in volatility_result["reason"], True)
+
+    check("volatility gate active but htf_trend conflict also present -> htf conflict wins (higher priority)",
+          "HTF CONFLICT" in fuse(long_tech, {"sentiment": "BULLISH"}, htf_trend="down", volatility_gate=volatility_active)["action"], True)
+
+    check("volatility_gate inactive dict -> no effect (backward compatible)",
+          fuse(long_tech, {"sentiment": "BULLISH"}, volatility_gate={"active": False, "reason": None})["color"], COLOR_GREEN)
+    check("volatility_gate=None -> no effect (backward compatible)",
+          fuse(long_tech, {"sentiment": "BULLISH"}, volatility_gate=None)["color"], COLOR_GREEN)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:
