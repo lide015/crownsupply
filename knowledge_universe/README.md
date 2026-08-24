@@ -64,6 +64,36 @@ Google Drive 電子書庫本身——由 Claude（分析師 agent）逐本嘗試
 以及技術面裡幾個先前沒收錄的具體交易方法（金字塔加碼、VCP波動收縮、網格交易），macro/
 sentiment 各補一張跟既有卡片互補但角度不同的（熊市歷史階段、科斯托蘭尼雞蛋理論）。
 
+## 呼應六階段框架的延伸內容（第六批卡片，⚠️ 已撰寫、尚未部署）
+
+第六批 8 張卡片不是延續 Google Drive 書單，而是回應 `trading_system` 那邊「系統圍繞六階段
+框架執行與開發」之後浮現的明確缺口：那邊這幾輪陸續補上了資金費率
+（`trading_system/funding_rate.py`）、失效條件、波動風控關卡這幾個加密貨幣/當沖特有的
+概念，但知識宇宙裡完全沒有對應的知識卡能讓使用者理解「這個數字/這道關卡背後代表什麼」；
+順便補了幾個既有五批裡明顯缺席、但廣為人知的通用概念：
+
+- `chips_funding_rate_longshort`（資金費率與多空比）——對應 `funding_rate.py`
+- `fund_tokenomics_basics`（代幣經濟學）——加密貨幣沒有財報時的基本面替代品
+- `tech_atr_volatility_stops`（ATR與波動度停損）——對應波動風控關卡背後的量化邏輯
+- `tech_fibonacci_retracement`（費波那契回撤）——技術面通用工具，先前五批缺席
+- `sentiment_sunk_cost_fallacy`（沉沒成本謬誤）——對應停損/失效條件背後的心理阻力
+- `sentiment_anchoring_bias`（錨定效應）——行為金融學通用偏誤，先前五批缺席
+- `macro_vix_fear_index`（VIX恐慌指數）——總經面通用概念，先前五批缺席
+- `chips_etf_fund_flow`（ETF資金流向）——機構籌碼觀察的另一個窗口
+
+內容一樣全部原創撰寫，寫的是概念本身，延續「不摘錄任何書籍原文」的方針。
+
+**⚠️ 誠實揭露：這批目前只存在 `seed_knowledge_nodes_6.sql` 這個檔案裡，還沒有實際寫進
+Supabase 資料庫**——跟前五批不同，這批的部署被這個工作階段的工具權限擋下來了：
+`mcp__Supabase__execute_sql`／`apply_migration` 兩個能寫入資料庫的工具都回傳「需要
+使用者核准」，但這個階段沒有互動式核准管道能完成這個授權流程，重試多次結果一樣。SQL
+本身已經過結構驗證（引號/括號配對、跟既有 60 張卡片的 ID 不衝突、`position_x`/
+`position_y` 不重疊、`knowledge_edges`/`missions` 引用的 `node_id` 全部存在），語法上
+可以安全執行，只是差「有寫入權限的人跑一次」這一步——你可以自己把
+`seed_knowledge_nodes_6.sql` 貼進 Supabase Dashboard 的 SQL Editor 執行，或之後在有
+互動核准管道的階段裡請我直接跑。部署前，下方「累計 52 張知識卡」表格跟卡片總數**都還
+沒反映這批**，避免文件講的跟資料庫實際內容對不上。
+
 ## Supabase 專案資訊
 
 | 項目 | 值 |
@@ -93,6 +123,8 @@ knowledge_universe/
 ├─ seed_knowledge_nodes_2.sql    # 第二批 13 張原創知識卡 + 12 條關聯 + 3 個任務（已部署）
 ├─ seed_knowledge_nodes_3.sql    # 第三批 9 張原創知識卡 + 11 條關聯 + 3 個任務（已部署，見下方來源說明）
 ├─ seed_knowledge_nodes_4.sql    # 第四批 6 張原創知識卡 + 7 條關聯 + 2 個任務（已部署，補強籌碼/總經/情緒面）
+├─ seed_knowledge_nodes_5.sql    # 第五批 7 張原創知識卡 + 9 條關聯 + 2 個任務（已部署，見上方來源說明）
+├─ seed_knowledge_nodes_6.sql    # 第六批 8 張原創知識卡 + 14 條關聯 + 3 個任務（⚠️ 已撰寫、尚未部署，見上方說明）
 ├─ .env.example                   # SUPABASE_URL / SUPABASE_ANON_KEY 範本，供之後的前端使用
 └─ README.md
 ```
@@ -148,7 +180,12 @@ knowledge_universe/
    ——訪客一進站就自動拿到一個 `auth.uid()`，滿足現有 RLS policy，不需要任何登入表單；
    但那是 Dashboard 層級的 Auth Provider 設定，目前可用的 Supabase 工具查不到、也改不了，
    需要你自己到 Supabase Dashboard 開啟。
-2. **更多知識卡**：52 張仍只涵蓋 Drive 書單、股票研究方法論所代表概念的一部分，
-   之後要擴充一樣要走「原創改寫、不摘錄」的方針。
-3. **`dingyao-tw` 的 RLS 缺口**：獨立於這個知識平台之外，但仍然是待處理的安全問題，
+2. **部署第六批知識卡**：`seed_knowledge_nodes_6.sql`（8 張，見上方「呼應六階段框架的
+   延伸內容」一節）已經寫好並通過結構驗證，但這個工作階段拿不到 Supabase 寫入權限的
+   核准，還沒實際執行進資料庫——把檔案內容貼進 Supabase Dashboard 的 SQL Editor 執行
+   即可（或之後有互動核准管道的階段請我直接跑）。部署後記得回來更新這份 README 的
+   「累計 52 張知識卡」表格跟卡片總數。
+3. **更多知識卡**：即使部署完第六批，60 張仍只涵蓋 Drive 書單、股票研究方法論、
+   六階段框架相關概念的一部分，之後要擴充一樣要走「原創改寫、不摘錄」的方針。
+4. **`dingyao-tw` 的 RLS 缺口**：獨立於這個知識平台之外，但仍然是待處理的安全問題，
    需要你自己確認那個專案的用途與存取設計。
