@@ -94,6 +94,37 @@ Supabase 資料庫**——跟前五批不同，這批的部署被這個工作階
 互動核准管道的階段裡請我直接跑。部署前，下方「累計 52 張知識卡」表格跟卡片總數**都還
 沒反映這批**，避免文件講的跟資料庫實際內容對不上。
 
+## 對照「25種主升浪啟動形態」型態圖鑑的延伸內容（第七批卡片，⚠️ 已撰寫、尚未部署）
+
+第七批 7 張卡片的靈感來源是使用者分享的一套「25種主升浪啟動形態」型態圖鑑（社群教學
+圖卡，非嚴謹學術文獻，圖卡本身也註明「僅供參考，不做為任何投資建議」）。跟這批同時，
+`trading_system` 那邊也新增了 `pattern_recognition.py`（見
+`trading_system/README.md`「🔍 型態辨識」一節），把其中 6 種能用純 OHLC 數字量化定義
+的型態做成可回測驗證的偵測邏輯（純資訊揭露，不參與 `brain.fuse()` 的訊號融合）；這批
+知識卡就是對應同一組型態的教學內容，讓使用者理解「系統偵測到的這個型態標籤代表什麼」：
+
+- `tech_break_previous_high`（突破前高）——對應 `pattern_recognition.detect_break_previous_high`
+- `tech_gap_breakout`（跳空缺口突破）——對應 `detect_gap_breakout`
+- `tech_ma_squeeze_expansion`（均線黏合發散）——對應 `detect_ma_convergence_divergence`
+- `tech_double_bottom_neckline`（W底頸線突破）——對應 `detect_double_bottom`
+- `tech_triangle_wedge_flag`（三角收斂/旗形/楔形收斂型態家族）——對應 `detect_triangle_convergence`
+- `tech_head_shoulders_bottom`（頭肩底）——圖鑑裡廣為人知的型態，但因為「形狀是否夠
+  對稱」不容易用簡單規則可靠量化，`pattern_recognition.py` 刻意沒有做成程式偵測
+  （詳見該模組說明），這裡純粹當教學內容收錄
+- `tech_retest_support_hold`（回踩不破）——突破訊號的驗證概念，不是型態圖鑑列表裡的
+  項目，但緊密相關，一併補上
+
+型態圖鑑裡「杯柄突破／圓弧底起漲／漲停突破／突破籌碼密集區」這幾種，`pattern_recognition.py`
+基於可靠度考量刻意不做成程式偵測（原因見 `trading_system/README.md`），這批知識卡
+同樣沒有收錄，避免教學內容暗示系統其實有在幫忙判斷這些型態。內容全部原創撰寫，延續
+「不摘錄任何書籍原文」的方針。
+
+**⚠️ 誠實揭露：這批一樣只存在 `seed_knowledge_nodes_7.sql` 這個檔案裡，還沒有實際寫進
+Supabase 資料庫**——原因跟第六批相同（這個工作階段的 Supabase 寫入工具權限被擋下來，
+重試同樣結果一致）。SQL 已通過結構驗證（跟第六批合併計算共 67 張卡片的 id 不衝突、
+`position_x`/`position_y` 不重疊、`knowledge_edges`/`missions` 引用全部存在）。部署
+方式同上：把檔案內容貼進 Supabase Dashboard 的 SQL Editor 執行即可。
+
 ## Supabase 專案資訊
 
 | 項目 | 值 |
@@ -125,6 +156,7 @@ knowledge_universe/
 ├─ seed_knowledge_nodes_4.sql    # 第四批 6 張原創知識卡 + 7 條關聯 + 2 個任務（已部署，補強籌碼/總經/情緒面）
 ├─ seed_knowledge_nodes_5.sql    # 第五批 7 張原創知識卡 + 9 條關聯 + 2 個任務（已部署，見上方來源說明）
 ├─ seed_knowledge_nodes_6.sql    # 第六批 8 張原創知識卡 + 14 條關聯 + 3 個任務（⚠️ 已撰寫、尚未部署，見上方說明）
+├─ seed_knowledge_nodes_7.sql    # 第七批 7 張原創知識卡 + 8 條關聯 + 2 個任務（⚠️ 已撰寫、尚未部署，見上方說明）
 ├─ .env.example                   # SUPABASE_URL / SUPABASE_ANON_KEY 範本，供之後的前端使用
 └─ README.md
 ```
@@ -180,12 +212,15 @@ knowledge_universe/
    ——訪客一進站就自動拿到一個 `auth.uid()`，滿足現有 RLS policy，不需要任何登入表單；
    但那是 Dashboard 層級的 Auth Provider 設定，目前可用的 Supabase 工具查不到、也改不了，
    需要你自己到 Supabase Dashboard 開啟。
-2. **部署第六批知識卡**：`seed_knowledge_nodes_6.sql`（8 張，見上方「呼應六階段框架的
-   延伸內容」一節）已經寫好並通過結構驗證，但這個工作階段拿不到 Supabase 寫入權限的
-   核准，還沒實際執行進資料庫——把檔案內容貼進 Supabase Dashboard 的 SQL Editor 執行
-   即可（或之後有互動核准管道的階段請我直接跑）。部署後記得回來更新這份 README 的
-   「累計 52 張知識卡」表格跟卡片總數。
-3. **更多知識卡**：即使部署完第六批，60 張仍只涵蓋 Drive 書單、股票研究方法論、
-   六階段框架相關概念的一部分，之後要擴充一樣要走「原創改寫、不摘錄」的方針。
+2. **部署第六批＋第七批知識卡**：`seed_knowledge_nodes_6.sql`（8 張，見上方「呼應六階段
+   框架的延伸內容」一節）跟 `seed_knowledge_nodes_7.sql`（7 張，見上方「對照『25種主升
+   浪啟動形態』型態圖鑑的延伸內容」一節）都已經寫好並通過結構驗證，但這個工作階段拿
+   不到 Supabase 寫入權限的核准，還沒實際執行進資料庫——把兩個檔案的內容依序貼進
+   Supabase Dashboard 的 SQL Editor 執行即可（順序：先第六批再第七批，因為第七批有
+   幾條 `knowledge_edges` 連到第六批新增的卡片；或之後有互動核准管道的階段請我直接
+   跑）。部署後記得回來更新這份 README 的「累計 52 張知識卡」表格跟卡片總數（部署完
+   兩批後應該是 67 張）。
+3. **更多知識卡**：即使部署完第六、七批，67 張仍只涵蓋 Drive 書單、股票研究方法論、
+   六階段框架相關概念、型態圖鑑的一部分，之後要擴充一樣要走「原創改寫、不摘錄」的方針。
 4. **`dingyao-tw` 的 RLS 缺口**：獨立於這個知識平台之外，但仍然是待處理的安全問題，
    需要你自己確認那個專案的用途與存取設計。
