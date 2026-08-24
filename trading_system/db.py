@@ -32,7 +32,13 @@ CREATE TABLE IF NOT EXISTS signal_history (
   resolution TEXT NOT NULL DEFAULT 'open',
   resolved_at INTEGER,
   resolution_price REAL,
-  failure_reason TEXT
+  failure_reason TEXT,
+  -- 使用者對這筆訊號的個人決策標籤：'approved'（已核准，我會照這筆訊號行動）／
+  -- 'watching'（先觀察，還沒決定）／'rejected'（拒絕，不採用）。NULL＝還沒表態
+  -- （預設）。這是使用者自己的紀錄用途，本系統仍然不會替使用者真的下單——見
+  -- app.py 的 POST /api/v1/signal-decision 說明。
+  user_decision TEXT,
+  user_decision_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS signal_history_inst_idx ON signal_history(inst_id);
 CREATE INDEX IF NOT EXISTS signal_history_resolution_idx ON signal_history(resolution);
@@ -84,10 +90,24 @@ def get_connection():
     return conn
 
 
+def _migrate_missing_columns(conn: sqlite3.Connection):
+    """`CREATE TABLE IF NOT EXISTS` 只對「全新資料庫」有效——已經存在的 signal_history
+    表不會因為 _SCHEMA 字串多了新欄位就自動補上，需要對已存在的舊資料庫額外
+    `ALTER TABLE ADD COLUMN`。這裡用 PRAGMA table_info 檢查欄位存不存在，缺才補，
+    冪等（重複執行也不會出錯），新資料庫（CREATE TABLE 那一步就已經有這些欄位了）
+    這裡直接是無事可做。"""
+    existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(signal_history)").fetchall()}
+    if "user_decision" not in existing_cols:
+        conn.execute("ALTER TABLE signal_history ADD COLUMN user_decision TEXT")
+    if "user_decision_at" not in existing_cols:
+        conn.execute("ALTER TABLE signal_history ADD COLUMN user_decision_at INTEGER")
+
+
 def init_db():
     conn = get_connection()
     try:
         conn.executescript(_SCHEMA)
+        _migrate_missing_columns(conn)
         conn.commit()
     finally:
         conn.close()
@@ -147,6 +167,40 @@ def resolve_signal(signal_id: int, resolution: str, resolved_at: int, resolution
             (resolution, resolved_at, resolution_price, failure_reason, signal_id),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+VALID_SIGNAL_DECISIONS = ("approved", "watching", "rejected")
+
+
+def get_signal_by_id(signal_id: int) -> dict | None:
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM signal_history WHERE id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def set_signal_decision(signal_id: int, decision: str | None, now_ms: int) -> bool:
+    """使用者對這筆訊號的個人決策標籤（見「訊號核准」功能，app.py 的
+    POST /api/v1/signal-decision）。decision 必須是 VALID_SIGNAL_DECISIONS 其中一個，
+    或 None（清除回「還沒表態」，例如使用者點了「已核准」又想反悔）——無效值直接
+    raise ValueError，不會悄悄存進一個前端從沒出現過的狀態。
+
+    回傳是否真的更新到一列（id 不存在就回傳 False，呼叫端可以據此回 404），
+    跟 set_alert_enabled 同樣的慣例。"""
+    if decision is not None and decision not in VALID_SIGNAL_DECISIONS:
+        raise ValueError(f"invalid decision: {decision!r}, must be one of {VALID_SIGNAL_DECISIONS} or None")
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            "UPDATE signal_history SET user_decision = ?, user_decision_at = ? WHERE id = ?",
+            (decision, now_ms if decision is not None else None, signal_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()
 
@@ -592,6 +646,86 @@ if __name__ == "__main__":
         check("delete_alert on existing id returns True", deleted_ok, True)
         check("count_alerts reflects the deletion", count_alerts(), 1)
         check("delete_alert on unknown id returns False", delete_alert(999999), False)
+
+        # --- 訊號決策標籤（見「訊號核准」功能，app.py 的 POST /api/v1/signal-decision） ---
+        decision_signal_id = insert_signal({
+            "inst_id": "SOL-USDT-SWAP", "name": "SOL-USDT", "asset_class": "crypto",
+            "signal_type": "long", "created_at": 5000, "entry_price": 20.0,
+            "stop_loss": 19.0, "take_profit_1": 22.0, "take_profit_2": 24.0,
+            "ema": 19.5, "box_high": 20.5, "box_low": 19.5,
+            "ai_sentiment": "BULLISH", "action_label": "強烈做多", "color": "green",
+        })
+        fresh_row = get_signal_by_id(decision_signal_id)
+        check("newly inserted signal has user_decision=None by default", fresh_row["user_decision"], None)
+        check("newly inserted signal has user_decision_at=None by default", fresh_row["user_decision_at"], None)
+
+        approved_ok = set_signal_decision(decision_signal_id, "approved", 6000)
+        check("set_signal_decision on existing id returns True", approved_ok, True)
+        approved_row = get_signal_by_id(decision_signal_id)
+        check("set_signal_decision stores the decision", approved_row["user_decision"], "approved")
+        check("set_signal_decision stores the timestamp", approved_row["user_decision_at"], 6000)
+
+        # 改變心意：核准 -> 觀察，確認會覆蓋掉舊的決策，不是疊加/累積。
+        set_signal_decision(decision_signal_id, "watching", 7000)
+        check("set_signal_decision overwrites a previous decision", get_signal_by_id(decision_signal_id)["user_decision"], "watching")
+
+        # 清除回「還沒表態」——decision=None 是合法輸入，不是錯誤。
+        set_signal_decision(decision_signal_id, None, 8000)
+        cleared_row = get_signal_by_id(decision_signal_id)
+        check("set_signal_decision(None) clears the decision", cleared_row["user_decision"], None)
+        check("set_signal_decision(None) also clears the timestamp", cleared_row["user_decision_at"], None)
+
+        check("set_signal_decision on unknown id returns False", set_signal_decision(999999, "approved", 9000), False)
+        check("get_signal_by_id on unknown id returns None", get_signal_by_id(999999), None)
+
+        try:
+            set_signal_decision(decision_signal_id, "not_a_real_decision", 10000)
+            check("set_signal_decision rejects an invalid decision value", False, True)
+        except ValueError:
+            check("set_signal_decision rejects an invalid decision value", True, True)
+
+        # --- Schema 遷移：模擬「升級前就已經有資料庫」的既有使用者，signal_history 表
+        # 存在但沒有 user_decision/user_decision_at 兩個欄位——init_db() 要能補上這兩個
+        # 欄位、不動到既有資料，而且重複執行要是冪等的（不會因為欄位已經加過就出錯）。
+        original_db_path = DB_PATH  # 先存起來，這個子區塊結束後要復原，不能直接用 DB_PATH
+        # 這個名字本身——底下會把它重新指向遷移測試用的暫時檔案，屆時裸讀 DB_PATH 拿到的
+        # 已經是新值，不是這裡想保留的原始值。
+        with tempfile.TemporaryDirectory() as tmp_migrate:
+            migrate_db_path = Path(tmp_migrate) / "old_schema.db"
+            old_conn = sqlite3.connect(migrate_db_path)
+            old_conn.execute(
+                """CREATE TABLE signal_history (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  inst_id TEXT NOT NULL, name TEXT NOT NULL, asset_class TEXT NOT NULL,
+                  signal_type TEXT NOT NULL, created_at INTEGER NOT NULL,
+                  entry_price REAL NOT NULL, stop_loss REAL NOT NULL,
+                  take_profit_1 REAL NOT NULL, take_profit_2 REAL NOT NULL,
+                  ema REAL, box_high REAL, box_low REAL, ai_sentiment TEXT,
+                  action_label TEXT, color TEXT, resolution TEXT NOT NULL DEFAULT 'open',
+                  resolved_at INTEGER, resolution_price REAL, failure_reason TEXT
+                )"""
+            )
+            old_conn.execute(
+                "INSERT INTO signal_history (inst_id, name, asset_class, signal_type, created_at, "
+                "entry_price, stop_loss, take_profit_1, take_profit_2) VALUES "
+                "('OLD-USDT-SWAP', 'OLD-USDT', 'crypto', 'long', 100, 10.0, 9.0, 11.0, 12.0)"
+            )
+            old_conn.commit()
+            old_conn.close()
+
+            globals()["DB_PATH"] = migrate_db_path
+            init_db()  # 應該補上缺的兩個欄位，不動到既有資料
+            migrated_row = get_signal_by_id(1)
+            check("migration: pre-existing row survives schema upgrade", migrated_row["inst_id"], "OLD-USDT-SWAP")
+            check("migration: new column defaults to None on old rows", migrated_row["user_decision"], None)
+            # 遷移後這個功能要能正常運作，不是只有欄位存在但寫不進去。
+            set_signal_decision(1, "rejected", 200)
+            check("migration: set_signal_decision works after migrating an old DB", get_signal_by_id(1)["user_decision"], "rejected")
+            # 冪等：再跑一次 init_db()（模擬伺服器重啟）不該出錯。
+            init_db()
+            check("migration: running init_db() twice is idempotent (no error, data intact)", get_signal_by_id(1)["user_decision"], "rejected")
+
+        globals()["DB_PATH"] = original_db_path  # 復原成這個測試檔案原本用的路徑
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

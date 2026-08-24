@@ -756,6 +756,70 @@ function netRrHtml(sig) {
   return `<div class="text-xs text-gray-500 font-mono">💸 淨盈虧比（已扣來回手續費 ${fmt(sig.round_trip_fee_pct, 2)}%）：<span class="${cls} font-bold">${fmt(sig.net_rr, 2)}</span>${sig.fee_eats_pct != null ? `　手續費吃掉停利1獲利的 ${fmt(sig.fee_eats_pct, 1)}%` : ""}</div>`;
 }
 
+/* ---------------------------------------------------------------- */
+/* ✅ 訊號核准——使用者對每一筆訊號自己標記「已核准/觀察中/拒絕」，純粹是個人回顧用的     */
+/* 紀錄，本系統仍然不會因為標記「已核准」就真的去下單。存在後端 SQLite（signal_history  */
+/* 表的 user_decision 欄位），不是 localStorage——這是「這筆訊號本身」的屬性，跨裝置/   */
+/* 瀏覽器應該看到一樣的標籤，跟純瀏覽器端的觀察清單（誰的收藏清單）性質不同。            */
+/* ---------------------------------------------------------------- */
+const SIGNAL_DECISIONS = [
+  { key: "approved", label: "✅ 核准", activeCls: "bg-green-600 border-green-500 text-white" },
+  { key: "watching", label: "👁 觀察", activeCls: "bg-amber-600 border-amber-500 text-white" },
+  { key: "rejected", label: "❌ 拒絕", activeCls: "bg-red-600 border-red-500 text-white" },
+];
+
+function decisionButtonsHtml(sig) {
+  // 沒有實際訊號方向（signal_history_id 是 null）就沒有「核准/拒絕」這回事可言。
+  if (!sig.signal_history_id) return "";
+  const btns = SIGNAL_DECISIONS.map((opt) => {
+    const active = sig.user_decision === opt.key;
+    return `<button type="button" class="signal-decision-btn px-2 py-1 rounded text-[11px] font-semibold border transition-colors ${
+      active ? opt.activeCls : "border-gray-700 text-gray-500 hover:text-gray-300"
+    }" data-decision="${opt.key}">${opt.label}</button>`;
+  }).join("");
+  return `<div class="signal-decision-row flex items-center gap-1.5 flex-wrap" data-signal-id="${sig.signal_history_id}">
+    <span class="text-[11px] text-gray-600">我的判斷：</span>${btns}
+  </div>`;
+}
+
+// 再點一次已經是作用中的那個決策 = 取消（清除回「還沒表態」），不用另外做一個「清除」按鈕。
+// onUpdated：呼叫端想在「本地資料更新完成、清單也重畫完」之後，額外再刷新自己那個畫面
+// 區塊時傳入（目前只有詳情頁 modal 用得到——見 renderInstModalTechnical；訊號卡片列表
+// 本身靠下面固定會呼叫的 renderSignalsList() 就完整重畫過了，不需要額外回呼）。
+async function submitSignalDecision(sig, clickedDecision, onUpdated) {
+  const nextDecision = sig.user_decision === clickedDecision ? null : clickedDecision;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/signals/${sig.signal_history_id}/decision`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: nextDecision }),
+    });
+    const body = await res.json();
+    if (!res.ok || !body.ok) throw new Error(body.message || "更新失敗");
+    sig.user_decision = body.decision;
+    // lastDashboardData.signals 跟詳情頁 modal 各自獨立 fetch 來的 signal 是兩個不同的
+    // 物件參照——如果剛剛點擊的不是 lastDashboardData.signals 裡那一份（例如從 modal
+    // 點的），這裡順手把清單那份也同步一次，兩處畫面才會對得起來。
+    if (lastDashboardData && lastDashboardData.signals) {
+      const listSig = lastDashboardData.signals.find((s) => s.signal_history_id === sig.signal_history_id);
+      if (listSig && listSig !== sig) listSig.user_decision = body.decision;
+    }
+  } catch (err) {
+    alert(`無法更新訊號決策：${err}`);
+  } finally {
+    renderSignalsList();
+    if (onUpdated) onUpdated();
+  }
+}
+
+function bindDecisionButtons(scopeEl, sig, onUpdated) {
+  const row = scopeEl.querySelector(".signal-decision-row");
+  if (!row) return;
+  row.querySelectorAll(".signal-decision-btn").forEach((btn) => {
+    btn.addEventListener("click", () => submitSignalDecision(sig, btn.dataset.decision, onUpdated));
+  });
+}
+
 const sentimentClass = {
   BULLISH: "px-3 py-1 text-xs font-bold rounded-full bg-green-950 text-green-400 border border-green-800",
   BEARISH: "px-3 py-1 text-xs font-bold rounded-full bg-red-950 text-red-400 border border-red-800",
@@ -1456,12 +1520,14 @@ function renderSignalsList() {
         <span class="font-semibold text-gray-400">📰 ${sig.name} 相關新聞：</span>${sig.news_headline}
         ${sig.news_reason ? `<div class="text-gray-600 mt-1">${sig.news_reason}</div>` : ""}
       </div>` : ""}
+      ${decisionButtonsHtml(sig)}
       ${sig.signal_type ? `<button class="calc-fill-btn w-full text-xs px-3 py-1.5 rounded-lg border border-amber-800 text-amber-400 hover:bg-amber-950/30 transition-colors">🧮 用此訊號試算倉位</button>` : ""}`;
     if (sig.signal_type) {
       card.querySelector(".calc-fill-btn").addEventListener("click", () => fillCalcFromSignal(sig));
     }
     card.querySelector(".sig-name-link").addEventListener("click", () => openInstrumentModal(sig.instId));
     card.querySelector(".watchlist-star-btn").addEventListener("click", () => toggleWatchlist(sig.instId));
+    bindDecisionButtons(card, sig);
     container.appendChild(card);
   }
 
@@ -2289,6 +2355,29 @@ async function openInstrumentModal(instId) {
   }
 }
 
+/* 抽成獨立函式（原本內嵌在 renderInstrumentModal 裡）：詳情頁 modal 打開時整段渲染一次，
+   但「訊號核准」按鈕點擊後也需要只重畫這一小段（不用整個 modal 重新打 API），兩處共用
+   同一份邏輯，不會各寫一套可能兜不起來的版本。 */
+function renderInstModalTechnical(signal) {
+  document.getElementById("inst-modal-technical").innerHTML = `
+      <div class="text-[11px] text-gray-500">📍 開倉價（進場）<span class="text-gray-300 font-mono font-bold ml-1">${fmt(signal.price)}</span></div>
+      <div class="grid grid-cols-3 gap-2 font-mono">
+        <div class="text-gray-400">20 EMA <span class="text-amber-400 block">${fmt(signal.ema)}</span></div>
+        <div class="text-gray-400">盒子高點 <span class="text-green-400 block">${fmt(signal.box_high)}</span></div>
+        <div class="text-gray-400">盒子低點 <span class="text-red-400 block">${fmt(signal.box_low)}</span></div>
+      </div>
+      <div class="grid grid-cols-4 gap-2 font-mono">
+        <div class="text-gray-400">停損 <span class="text-red-400 block font-bold">${fmt(signal.stop_loss)}</span></div>
+        <div class="text-gray-400">停利1 <span class="text-green-400 block font-bold">${fmt(signal.take_profit_1)}</span></div>
+        <div class="text-gray-400">停利2 <span class="text-green-300 block font-bold">${fmt(signal.take_profit_2)}</span></div>
+        <div class="text-gray-400" title="跟停損不同：這是「突破/跌破」原始論述是否還成立的結構價位，比停損更早、更輕的示警">失效 <span class="text-orange-400 block font-bold">${fmt(signal.invalidation_price)}</span></div>
+      </div>
+      ${netRrHtml(signal)}
+      <div class="text-gray-400 leading-relaxed"><span class="font-semibold text-amber-400">大腦研判：</span>${signal.reason}</div>
+      ${decisionButtonsHtml(signal)}`;
+  bindDecisionButtons(document.getElementById("inst-modal-technical"), signal, () => renderInstModalTechnical(signal));
+}
+
 function renderInstrumentModal(data) {
   const { basic, signal, history, fundamentals, fundamentals_available } = data;
   document.getElementById("inst-modal-loading").classList.add("hidden");
@@ -2357,21 +2446,7 @@ function renderInstrumentModal(data) {
   const techWrap = document.getElementById("inst-modal-technical-wrap");
   if (signal && signal.signal_type) {
     techWrap.classList.remove("hidden");
-    document.getElementById("inst-modal-technical").innerHTML = `
-      <div class="text-[11px] text-gray-500">📍 開倉價（進場）<span class="text-gray-300 font-mono font-bold ml-1">${fmt(signal.price)}</span></div>
-      <div class="grid grid-cols-3 gap-2 font-mono">
-        <div class="text-gray-400">20 EMA <span class="text-amber-400 block">${fmt(signal.ema)}</span></div>
-        <div class="text-gray-400">盒子高點 <span class="text-green-400 block">${fmt(signal.box_high)}</span></div>
-        <div class="text-gray-400">盒子低點 <span class="text-red-400 block">${fmt(signal.box_low)}</span></div>
-      </div>
-      <div class="grid grid-cols-4 gap-2 font-mono">
-        <div class="text-gray-400">停損 <span class="text-red-400 block font-bold">${fmt(signal.stop_loss)}</span></div>
-        <div class="text-gray-400">停利1 <span class="text-green-400 block font-bold">${fmt(signal.take_profit_1)}</span></div>
-        <div class="text-gray-400">停利2 <span class="text-green-300 block font-bold">${fmt(signal.take_profit_2)}</span></div>
-        <div class="text-gray-400" title="跟停損不同：這是「突破/跌破」原始論述是否還成立的結構價位，比停損更早、更輕的示警">失效 <span class="text-orange-400 block font-bold">${fmt(signal.invalidation_price)}</span></div>
-      </div>
-      ${netRrHtml(signal)}
-      <div class="text-gray-400 leading-relaxed"><span class="font-semibold text-amber-400">大腦研判：</span>${signal.reason}</div>`;
+    renderInstModalTechnical(signal);
   } else {
     techWrap.classList.add("hidden");
   }

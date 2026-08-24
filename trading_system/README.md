@@ -351,6 +351,7 @@ Tab 鍵能聚焦到每個可排序欄位，Enter／Space 觸發跟滑鼠點擊�
 | `/api/v1/alerts` | POST | 🔔 新增警報。body：`{"inst_id","name"?,"alert_type","threshold"?,"repeat_mode"?,"channels"}`；`alert_type` 為 `price_above`/`price_below`/`signal`；`channels` 只能包含目前已設定的管道，否則回 `400` |
 | `/api/v1/alerts/{id}` | PATCH | 🔔 啟用/停用一個警報。body：`{"enabled"}`；id 不存在回 `404` |
 | `/api/v1/alerts/{id}` | DELETE | 🔔 刪除一個警報；id 不存在回 `404` |
+| `/api/v1/signals/{signal_id}/decision` | PATCH | ✅ 訊號核准：標記一筆訊號「已核准/觀察中/拒絕」。body：`{"decision"}`，值為 `approved`/`watching`/`rejected` 其中之一，或 `null` 清除回「還沒表態」；無效值回 `400`，`signal_id` 不存在回 `404`（見「✅ 訊號核准」一節） |
 
 `/api/v1/dashboard`、`/api/v1/analyze` 的回傳現在還多了 `market_pulse`（市場情緒儀表板資料）、
 `ranking`（推薦強度榜資料）跟 `scheduler`（背景排程狀態，同 `GET /api/v1/scheduler`），見下一節。
@@ -438,7 +439,10 @@ Tab 鍵能聚焦到每個可排序欄位，Enter／Space 觸發跟滑鼠點擊�
 
 累積 `strategy_tuner.MIN_SAMPLES`（預設 10）筆以上已驗證訊號後，如果勝率低於
 `LOW_WATERMARK_PCT`（預設 40%），自動把 `MIN_AMPLITUDE_PCT` 調高 `STEP`（預設 0.5，上限
-`MAX_AMPLITUDE_PCT` 8.0），篩掉波動較弱、雜訊較多的商品。**不是黑箱**：每次調整都會在畫面
+`strategy_tuner.AUTO_TUNE_CEILING_PCT` 8.0——這是自動調整機制自己內部的收緊上限，跟
+下方「波動風控關卡」用的 `config.MAX_AMPLITUDE_PCT` 是兩個名字相近但完全獨立的門檻，
+不要混淆：前者限制「篩選門檻自己最多被調到多嚴」，後者是「訊號要不要因為波動太大被
+攔截」），篩掉波動較弱、雜訊較多的商品。**不是黑箱**：每次調整都會在畫面
 上顯示明確的理由（近幾筆勝率多少、從多少調到多少）；也不會對同一批舊資料重複調整——只有
 自從上次調整後有新的訊號結算，才會再評估一次。調整後的門檻存在 SQLite（`db.py`），跨重啟
 持續生效，不會每次重開伺服器就跑回預設值。想手動重置，刪除 `data/trading_system.db` 裡
@@ -447,6 +451,20 @@ Tab 鍵能聚焦到每個可排序欄位，Enter／Space 觸發跟滑鼠點擊�
 歷史資料存在 `data/trading_system.db`（跟 `backend/` 共用 repo 根目錄的 `data/` 資料夾，
 已在 `.gitignore` 排除）——這是本地檔案，純粹讓「訊號有沒有用」這件事跨重啟持續累積，
 不會傳到任何外部服務。
+
+## ✅ 訊號核准
+
+每筆有實際多空方向的訊號卡片（訊號面板／單一商品詳情頁都有），下方會有「我的判斷：
+✅ 核准 / 👁 觀察 / ❌ 拒絕」三個按鈕，讓使用者對這筆訊號留下自己的決策紀錄——再點一次
+已經是作用中的按鈕會取消（清除回「還沒表態」），不用另外做一個「清除」按鈕。
+
+**這純粹是個人回顧用的紀錄**，本系統仍然**不會**因為標記「已核准」就真的去下單——見頁首
+的免責聲明。用途是幫使用者記住「這筆訊號我當初是怎麼判斷的」，避免看到同一筆還沒結算
+的訊號時，每次重新整理都要重新想一次要不要採用。
+
+存在後端 SQLite（`signal_history` 表的 `user_decision` 欄位），不是瀏覽器
+`localStorage`——這是「這筆訊號本身」的屬性，換裝置或清瀏覽器資料不會遺失，跟純瀏覽器端
+的觀察清單（見「⭐ 觀察清單」一節，誰的個人收藏清單、故意留在裝置端）性質不同。
 
 ## 🤖 背景排程自動分析（選用，預設關閉）
 

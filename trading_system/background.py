@@ -287,6 +287,25 @@ async def analyze_one_instrument(
         except Exception as exc:  # noqa: BLE001 — 記錄歷史失敗不該讓分析整個掛掉
             logger.warning("recording signal history failed for %s: %s", inst_id, exc)
 
+    # ✅ 訊號核准：把這一筆訊號對應的 signal_history 資料庫列 id（跟使用者已經設定過的
+    # 決策標籤，如果有的話）帶回前端——不管這輪是剛插入新的一筆、還是延續上一輪就已經
+    # 存在的未結算訊號，都用同一個 db.get_open_signal_for 查詢拿到（上面
+    # _maybe_record_new_signal 已經確保「有訊號方向」時這一列一定存在）。使用者按下
+    # 「核准/觀察/拒絕」（POST /api/v1/signal-decision）之後，下一輪分析就會在這裡讀到、
+    # 訊號卡片上會持續顯示這個標籤，不會因為重新整理就忘記自己當初的判斷。
+    signal_history_id = None
+    user_decision = None
+    if tech is not None and tech.get("signal") is not None:
+        try:
+            open_row = db.get_open_signal_for(inst_id, tech["signal"])
+            if open_row:
+                signal_history_id = open_row["id"]
+                user_decision = open_row["user_decision"]
+        except Exception as exc:  # noqa: BLE001 — 讀決策標籤失敗不該讓分析整個掛掉，頂多這輪看不到標籤
+            logger.warning("fetching signal decision failed for %s: %s", inst_id, exc)
+    signal["signal_history_id"] = signal_history_id
+    signal["user_decision"] = user_decision
+
     # 📨 訊號觸發通知：只在「真正新產生」且是多空共振強烈訊號（STRONG LONG/SHORT，也就是
     # 沒有被手續費/高週期趨勢/每日斷路器攔截成警告）時才通知，避免雜訊/警告訊號也跳通知
     # 太擾人。Telegram／Email 各自獨立、都是選用管道，兩邊內部都已經吞掉所有失敗情況，

@@ -9,7 +9,7 @@ MIN_SAMPLES = 10          # 少於這個已驗證訊號數，不調整——樣�
 LOW_WATERMARK_PCT = 40.0   # 勝率低於這個百分比，調高門檻（更保守篩選）
 HIGH_WATERMARK_PCT = 65.0  # 勝率高於這個百分比，調低門檻（放寬篩選，抓更多機會）
 STEP = 0.5                 # 每次調整的幅度
-MAX_AMPLITUDE_PCT = 8.0    # 往上收緊的上限，避免門檻被一路調到篩不出任何商品
+AUTO_TUNE_CEILING_PCT = 8.0    # 往上收緊的上限，避免門檻被一路調到篩不出任何商品
 
 
 def maybe_auto_tune(
@@ -39,7 +39,7 @@ def maybe_auto_tune(
         return None
 
     if win_rate_pct < LOW_WATERMARK_PCT:
-        new_value = round(min(current_min_amplitude_pct + STEP, MAX_AMPLITUDE_PCT), 2)
+        new_value = round(min(current_min_amplitude_pct + STEP, AUTO_TUNE_CEILING_PCT), 2)
         if new_value <= current_min_amplitude_pct:
             return None  # 已經到上限，調不動了
         reason = (
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     # 4) 已經到收緊上限 -> 不再調整
     check(
         "already at max -> no further tighten",
-        maybe_auto_tune({"total": 20, "wins": 2, "losses": 18, "win_rate_pct": 10.0}, MAX_AMPLITUDE_PCT),
+        maybe_auto_tune({"total": 20, "wins": 2, "losses": 18, "win_rate_pct": 10.0}, AUTO_TUNE_CEILING_PCT),
         None,
     )
 

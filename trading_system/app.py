@@ -101,6 +101,12 @@ class CreateAlertRequest(BaseModel):
 class UpdateAlertRequest(BaseModel):
     enabled: bool
 
+
+class SignalDecisionRequest(BaseModel):
+    # None＝清除回「還沒表態」；db.set_signal_decision 會驗證非 None 值必須是
+    # db.VALID_SIGNAL_DECISIONS 其中之一，無效值在那一層被拒絕（回 400）。
+    decision: str | None = None
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("app")
 
@@ -350,6 +356,32 @@ async def delete_alert_endpoint(alert_id: int):
     if not ok:
         return JSONResponse({"ok": False, "message": "找不到這個警報。"}, status_code=404)
     return {"ok": True}
+
+
+@app.patch("/api/v1/signals/{signal_id}/decision")
+async def update_signal_decision(signal_id: int, req: SignalDecisionRequest):
+    """✅ 訊號核准：使用者對一筆訊號自己標記「已核准/觀察中/拒絕」（或傳 decision=null
+    清除回「還沒表態」）——純粹是給使用者自己回顧用的個人紀錄，本系統仍然**不會**因為
+    標記「已核准」就真的去下單，見頁首的免責聲明。
+
+    signal_id 是 signal_history 資料庫列的 id（見 background.analyze_one_instrument
+    回傳的 signal dict 裡的 signal_history_id 欄位，不是 instId）。"""
+    now_ms = int(time.time() * 1000)
+    try:
+        ok = db.set_signal_decision(signal_id, req.decision, now_ms)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
+    if not ok:
+        return JSONResponse({"ok": False, "message": "找不到這筆訊號紀錄。"}, status_code=404)
+
+    # 順手把目前記憶體裡正在顯示的訊號（STATE.signals）也同步更新，使用者馬上就能在
+    # 畫面上看到標籤變化，不用等下一輪「立即分析」重新整理才對得上資料庫裡的值。
+    for sig in STATE.signals:
+        if sig.get("signal_history_id") == signal_id:
+            sig["user_decision"] = req.decision
+            break
+
+    return {"ok": True, "decision": req.decision}
 
 
 @app.post("/api/v1/analyze")
