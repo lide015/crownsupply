@@ -29,7 +29,7 @@
 | 🔎 市場掃描 | `okx_client.py`（全商品解析/篩選）、熱力圖與全部商品總覽、`oi_tracker.py`（全市場未平倉量）、`funding_rate.py`（資金費率） |
 | 🧩 訊號引擎 | `strategy.py`（20 EMA + 盤整盒子突破）、`news_client.py`（AI 新聞情緒）、`brain.py`（多空共振融合） |
 | 📋 交易規劃 | `strategy.py` 的停損/停利/失效條件（`invalidation_price`）、`fee_calc.py`（淨盈虧比）、`position_sizing.py`（凱利公式建議部位） |
-| 🛡️ 風控關卡 | `outcome_tracker.py` 的每日虧損斷路器／曝險上限關卡／波動風控關卡，全部接進 `brain.fuse()` 的判斷序列 |
+| 🛡️ 風控關卡 | `outcome_tracker.py` 的每日虧損斷路器／曝險上限關卡／同方向曝險關卡（可選）／波動風控關卡，全部接進 `brain.fuse()` 的判斷序列 |
 | 🔄 監控循環 | `scheduler.py`（選用背景排程）、`alerts.py`（自訂警報）、觀察清單（支援多組命名清單）、`ai_governor.py`（AI 用量治理） |
 | ✅ 最終決策 | 訊號核准機制（`db.py` 的 `user_decision`，`PATCH /api/v1/signals/{id}/decision`）——系統只給建議，核准／觀察／拒絕永遠由使用者自己按下去 |
 
@@ -64,7 +64,7 @@ trading_system/
 ├─ ai_governor.py                      # 🤖 背景排程模式的 AI 用量治理：每日上限/連續失敗斷路器/新訊號優先/節流週期（純函式，內建自測）
 ├─ alerts.py                            # 🔔 警報評估邏輯：價格漲破/跌破、新技術訊號（純函式，內建自測）
 ├─ healthcheck.py                        # 💚 死人開關監控：排程每輪跑完 ping healthchecks.io（純函式，內建自測）
-├─ pattern_recognition.py                 # 🔍 型態辨識：突破前高/跳空缺口/均線黏合發散/W底/三角收斂/回踩黃金分割位（純函式，內建自測）
+├─ pattern_recognition.py                 # 🔍 型態辨識：突破前高/跳空缺口/均線黏合發散/W底/三角收斂/回踩黃金分割位/RSI頂背離/RSI底背離（純函式，內建自測）
 ├─ db.py                     # SQLite：訊號歷史 + 自動優化後的參數 + 警報，跨重啟持續累積
 ├─ state.py                   # 行程內記憶體狀態（上一輪分析結果，REST 端點讀寫）
 ├─ index.html                # 網頁前端：🎯當沖訊號／📚知識宇宙 兩個分頁的單一 SPA
@@ -365,7 +365,8 @@ Tab 鍵能聚焦到每個可排序欄位，Enter／Space 觸發跟滑鼠點擊�
 | `/api/v1/config` | GET | 給前端用的公開設定：Supabase URL／anon key（知識宇宙用）、回測預設值、`candle_bar`（訊號判斷用的K線週期，走勢圖時間週期切換鈕用）、`telegram_configured`／`email_configured`（警報表單只顯示已設定的管道） |
 | `/api/v1/coach` | POST | AI 辯論空間一輪對話。body：`{"node": {...知識卡}, "history": [{"role","content"}, ...]}`，回傳 `{"reply", "error"}` |
 | `/api/v1/position-size` | POST | 🧮 倉位計算機，純本地計算、零外部 API 成本。body：`{"account_balance","risk_pct","entry_price","stop_loss_price","leverage_cap"?,"take_profit_1"?,"take_profit_2"?}` |
-| `/api/v1/backtest` | POST | 📊 歷史回測，**零 AI 成本**，只多打一次免費的 OKX 歷史K線查詢。body：`{"inst_id","bar"?,"limit"?,"ema_period"?,"box_lookback"?,"tp1_rr"?,"tp2_rr"?,"volume_confirm_multiple"?}`（後 5 項不帶就用 config.py 預設值，帶了就覆蓋——互動式參數實驗室用），任何商品都可以直接跑，不用先做過技術分析；資料不夠跑一次完整 EMA+盒子週期回 `422` |
+| `/api/v1/backtest` | POST | 📊 歷史回測，**零 AI 成本**，只多打一次免費的 OKX 歷史K線查詢。body：`{"inst_id","bar"?,"limit"?,"ema_period"?,"box_lookback"?,"tp1_rr"?,"tp2_rr"?,"volume_confirm_multiple"?,"stop_loss_mode"?,"atr_period"?,"atr_multiple"?}`（後 8 項不帶就用 config.py 預設值，帶了就覆蓋——互動式參數實驗室用），任何商品都可以直接跑，不用先做過技術分析；資料不夠跑一次完整 EMA+盒子週期回 `422` |
+| `/api/v1/backtest/sweep` | POST | 🔬 參數掃描，用同一批歷史K線跑過多組參數各一次回測、依可靠度＋獲利因子排序全部回傳，**零 AI 成本**、掃描本身不額外打 API。body：`{"inst_id","bar"?,"limit"?,"box_lookback_options"?,"tp_rr_options"?,"volume_confirm_options"?}`（後 3 項不帶就用內建的預設掃描範圍），額外回傳 `baseline`（現在系統實際在用的參數跑出來的對照結果）；組合數超過 500 回 `422`，資料不夠回 `422` |
 | `/api/v1/candles/{inst_id}` | GET | 📈 K線走勢圖資料，**零 AI 成本**，只是把 OKX 免費公開的歷史K線包一層，順便算好 `ema_series` 給前端疊加畫線。query：`bar`?、`limit`?、`ema_period`?（都不帶就用 `config.CANDLE_BAR`/`BACKTEST_CANDLE_LIMIT`/`EMA_PERIOD`——刻意跟訊號分析用同一組預設值，見「K線走勢圖」一節）|
 | `/api/v1/backtest-all` | POST | 📊 批次回測排行榜，對監控清單逐一跑歷史回測、依獲利因子排序，**零 AI 成本**。body：`{"bar"?,"limit"?}` |
 | `/api/v1/tickers` | GET | 📡 輕量即時報價刷新，**零 AI 成本**，只抓 OKX 免費公開 ticker、覆蓋 `all_instruments` 的報價欄位（OI 欄位沿用上次分析的值）。前端每 15 秒自動輪詢，見「即時報價自動刷新」一節 |
@@ -378,7 +379,9 @@ Tab 鍵能聚焦到每個可排序欄位，Enter／Space 觸發跟滑鼠點擊�
 | `/api/v1/signals/{signal_id}/decision` | PATCH | ✅ 訊號核准：標記一筆訊號「已核准/觀察中/拒絕」。body：`{"decision"}`，值為 `approved`/`watching`/`rejected` 其中之一，或 `null` 清除回「還沒表態」；無效值回 `400`，`signal_id` 不存在回 `404`（見「✅ 訊號核准」一節） |
 
 `/api/v1/dashboard`、`/api/v1/analyze` 的回傳現在還多了 `market_pulse`（市場情緒儀表板資料）、
-`ranking`（推薦強度榜資料）跟 `scheduler`（背景排程狀態，同 `GET /api/v1/scheduler`），見下一節。
+`ranking`（推薦強度榜資料）跟 `scheduler`（背景排程狀態，同 `GET /api/v1/scheduler`），見下一節；
+另外還有 `direction_concentration_gates`（同方向曝險關卡的 long/short 現況，見該節）、
+`pattern_hit_rates`／`decision_hit_rates`（型態/核准決策事後命中率統計，見「🔍 型態辨識」節）。
 
 ## 🧮 倉位計算機、📊 推薦強度榜、🌡️ 市場情緒儀表板
 
@@ -623,7 +626,8 @@ journalctl -u trading-system -f
 **技術面**（`strategy.py`）：跟 20 EMA 的相對位置決定只做多或只做空；最近 `BOX_LOOKBACK`
 根已收盤 K 線的高低點框出「盤整盒子」；當前這根**已收盤**（非正在走的那根，避免插針假突破——
 見 `okx_client.fetch_confirmed_candles` 的說明）K 線實體突破盒子且同向站上/跌破 EMA 才觸發訊號。
-停損固定設在盒子中線；停利用風報比算：risk = │進場價 − 停損價│，TP1 = 進場價 ± risk × `TP1_RR`
+停損預設固定設在盒子中線（可選改用 ATR 動態停損，見下方「🎯 停損模式」一節）；停利用
+風報比算：risk = │進場價 − 停損價│，TP1 = 進場價 ± risk × `TP1_RR`
 （預設 1.5，可先減碼）、TP2 = 進場價 ± risk × `TP2_RR`（預設 2.0，留給趨勢延續的部位）。
 
 **失效條件**（`invalidation_price`）跟停損是兩個不同的概念，訊號卡片上分開顯示：停損是
@@ -657,11 +661,43 @@ journalctl -u trading-system -f
 突破但該檔新聞情緒明確反向 → 標記「潛在假突破，觀望」並不建議進場；該檔新聞中性或 AI 未啟用
 → 顯示純技術面訊號。
 
+## 🎯 停損模式：盒子中點 vs. ATR 動態（可選）
+
+使用者問「有沒有辦法提高訊號機率」，其中一個誠實的答案是：不追求「贏更多次」，改善
+「贏的時候賺更多、輸的時候賠更少」——停損距離怎麼設，直接影響這件事。`strategy.compute_signal`
+的 `stop_loss_mode` 參數（預設 `"box_mid"`，向後相容）現在支援兩種模式：
+
+- **`box_mid`**（預設）：停損固定設在盤整盒子中線——不管這檔商品現在波動大小，同樣寬度
+  的盒子給同樣寬度的停損。
+- **`atr`**：停損距離改用 ATR（Average True Range，`strategy.compute_atr`，Wilder's
+  平滑法，跟 `market_pulse.compute_rsi` 同一套遞迴平滑公式）× `ATR_MULTIPLE` 決定——
+  波動大時停損自動放寬（避免被正常波動洗出場）、波動小時停損自動收緊（避免虧損風險過度
+  暴露），跟盒子寬度完全脫鉤。`.env` 可調 `ATR_PERIOD`（預設 14）／`ATR_MULTIPLE`（預設
+  1.5）。資料不足以算出 ATR 時（防禦性處理，正常情況不會發生）優雅退回 `box_mid`，不會
+  讓整筆訊號判斷失敗。
+
+⚠️ ATR 模式下 `stop_loss` **不保證**還在 `invalidation_price`（盒子邊緣）之外——ATR
+距離是獨立算出來的，可能比 box_mid 模式更緊、也可能更寬，這是換成波動導向停損的固有
+特性，不是計算錯誤。
+
+**改用 ATR 模式之前，建議先實測比較，不要憑感覺切換**：詳情頁「📊 執行歷史回測」的
+「🔧 進階：調整回測參數」面板可以直接切換停損模式、用同一批真實歷史 K 線對照兩種模式
+的實際勝率/獲利因子差異（`POST /api/v1/backtest` 的 `stop_loss_mode`／`atr_period`／
+`atr_multiple` 欄位）。要真的切換系統預設行為，改 `.env` 的 `STOP_LOSS_MODE=atr`。
+⚠️ 目前「🔬 參數掃描」（見下方同名章節）**還沒**把停損模式納入掃描維度，只掃
+`box_mid` 模式下的 box_lookback／TP倍數／量能確認門檻——這是刻意先聚焦，之後如果需要
+可以再擴充。
+
 ## 🔍 型態辨識
 
-`pattern_recognition.py`：重複利用同一份 K 線，額外偵測 6 種常見的技術分析圖形型態——
-突破前高、跳空缺口突破、均線黏合發散、W底雙重底、三角收斂突破、回踩黃金分割位。零額外
-API/AI 成本，純數學計算（線性回歸抓趨勢線、局部低點抓雙重底轉折、移動平均算黏合/發散）。
+`pattern_recognition.py`：重複利用同一份 K 線，額外偵測 8 種常見的技術訊號——前 6 種是
+「形狀類」圖形型態（突破前高、跳空缺口突破、均線黏合發散、W底雙重底、三角收斂突破、
+回踩黃金分割位），後 2 種是「動能背離類」（RSI 頂背離、RSI 底背離——`strategy.py` 原本
+只算「當前這一個」RSI 數值給市場情緒儀表板用，這裡另外做了一條完整的 RSI 序列
+`_rsi_series`，比較「前一個轉折點」跟「後一個轉折點」當時各自的 RSI：價格創新高但 RSI
+反而更低是頂背離、價格創新低但 RSI 反而更高是底背離，是常見的動能轉弱早期警訊）。零額外
+API/AI 成本，純數學計算（線性回歸抓趨勢線、局部高低點抓轉折、移動平均算黏合/發散、
+Wilder's 平滑算 RSI 序列）。
 
 ⚠️ **誠實範圍說明**：靈感來源是坊間流傳的「25種主升浪啟動形態」型態圖鑑（社群教學圖卡，
 非嚴謹學術文獻，圖卡本身也註明「僅供參考，不做為任何投資建議」），這裡只取「型態名稱
@@ -680,6 +716,21 @@ API/AI 成本，純數學計算（線性回歸抓趨勢線、局部低點抓雙�
 進場/停損/停利判斷——跟 `oi_tracker.py`／`funding_rate.py` 同樣的設計哲學。不管這一檔
 有沒有觸發主策略（20 EMA + 盤整盒子突破）都照算，訊號卡片跟詳情頁 modal 上偵測到型態
 才會多顯示一行「🔍 偵測到型態：⋯」的標籤列，沒偵測到任何型態完全不佔版面。
+
+**型態命中率統計（回頭驗證，不是憑空相信）**：型態標籤既然是純資訊揭露、不影響進場
+判斷，那「這個標籤實際準不準」就值得回頭用累積的訊號歷史驗證，而不是放著好看。
+`db.py` 的 `signal_history` 表新增 `detected_patterns` 欄位（JSON 陣列字串存
+pattern key），每次記錄新訊號時一併存進去；`outcome_tracker.compute_pattern_hit_rates`
+統計「這個標籤出現時，後續實際勝率是多少」，樣本數太少（少於 5 筆）的標籤標示
+`reliable: False`，不是偷偷過濾掉也不是假裝一樣可信。主畫面「📊 訊號結果追蹤」區塊
+展開「📚 型態／核准決策事後命中率分析」就看得到，零額外成本（純讀 DB + 純函式計算，
+跟 win_rate_stats 共用同一批查詢結果）。
+
+**核准決策事後命中率**：同一個機制也用來驗證「訊號核准」功能（✅／👀／🚫，見下方
+「訊號核准」一節）——`outcome_tracker.compute_decision_hit_rates` 統計使用者自己核准/
+觀察/拒絕過的訊號，後續實際勝率分別是多少，讓使用者知道自己手動判斷是不是真的比系統
+原始建議準，還是反而在扯後腿。四組（已核准／觀察中／已拒絕／未表態）固定都顯示，就算
+某組完全沒有樣本也不會從畫面上消失。
 
 ## 💸 淨盈虧比 — 當沖手續費不會被忽略
 
@@ -722,6 +773,20 @@ LIMIT)」，不管技術面/新聞面/淨盈虧比再好看都一樣——這是
 可能今天還沒虧錢（斷路器沒觸發），但同時開了一堆部位，新訊號一樣該被這道關卡攔下來。
 只有真的有技術訊號時才會套用這道關卡（沒有訊號就沒有「要不要加碼」的問題，不會覆蓋掉
 單純的「觀望中」）。設成 0 代表關閉這道關卡。
+
+## 🚧 同方向曝險關卡（可選，預設關閉）
+
+`compute_portfolio_exposure` 原本就有「同方向集中度提醒」——加密貨幣主流幣普遍高度連動，
+同方向的未結算訊號數 ≥ 2 時只是文字警告，不會真的攔截新訊號。使用者反饋這道提醒太軟，
+`outcome_tracker.compute_direction_concentration_gate` 讓在意這件事的使用者可以把它升級
+成實際攔截：同一個方向（多或空）的未結算訊號數達到 `MAX_SAME_DIRECTION_OPEN`（`.env`
+可調，**預設 0 = 關閉**，維持原本只是警告的行為）時，這個方向的新訊號一律攔截成
+「⚠️ 同方向曝險過於集中，暫緩新訊號 (DIRECTION CAP)」。
+
+跟曝險上限關卡不同，這道關卡是**方向性**的——long/short 各自獨立算一份，多方超標不會
+連帶攔截空方的新訊號。優先序跟曝險上限關卡放在一起（都是 portfolio-level、不是這筆
+訊號自己品質的問題），在曝險上限關卡之後。持倉組合風險總覽面板觸發時會額外顯示一行
+🚧 提醒，跟曝險上限關卡同樣的呈現方式。
 
 ## 🌪️ 波動風控關卡
 

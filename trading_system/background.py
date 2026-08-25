@@ -52,6 +52,13 @@ from .state import STATE
 
 BTC_INST_ID = "BTC-USDT-SWAP"  # 山寨季代理指標的比較基準（見 market_pulse.py 說明）
 
+# 型態命中率統計要顯示的中文標籤——outcome_tracker.compute_pattern_hit_rates() 刻意只
+# 回傳 pattern_key（純字串），不依賴 pattern_recognition.py（維持 outcome_tracker.py
+# 對其他模組零依賴的純函式庫定位），這裡是唯一知道兩邊怎麼對應的地方，負責把 key 轉成
+# 使用者看得懂的標籤，跟 PATTERN_DETECTORS 共用同一份對照表、不會兩邊各自維護一份可能
+# 兜不起來的中文名稱。
+_PATTERN_LABELS = {key: label for key, label, _fn in pattern_recognition.PATTERN_DETECTORS}
+
 logger = logging.getLogger("background")
 
 
@@ -87,9 +94,18 @@ async def _resolve_open_signals(client: httpx.AsyncClient):
         db.resolve_signal(row["id"], resolution, resolved_at, price, failure_reason)
 
 
-def _maybe_record_new_signal(item: dict, tech: dict, candles: list, fused: dict, sentiment: dict, now_ms: int) -> bool:
+def _maybe_record_new_signal(
+    item: dict, tech: dict, candles: list, fused: dict, sentiment: dict, now_ms: int,
+    detected_patterns: list | None = None,
+) -> bool:
     """tech 有實際多空方向時才記錄；同一商品同方向已經有未結算的紀錄就不要重複插入
     （使用者連續點「立即分析」時，同一個突破不該每次都被算成一筆新紀錄）。
+
+    detected_patterns：pattern_recognition.detect_patterns() 的回傳值（見該模組說明，
+    純資訊揭露、不參與 brain.fuse() 的訊號融合）——連同這筆訊號一起存進歷史紀錄，
+    才有辦法事後回頭統計「這個型態標籤實際準不準」（見
+    outcome_tracker.compute_pattern_hit_rates）。只存 pattern key（字串），不存整個
+    dict（label 是固定對照表，不需要重複存）。
 
     回傳是否真的插入了一筆新紀錄——給呼叫端判斷要不要觸發 Telegram 通知（見
     telegram_notify.py）：只有「真正新產生」的訊號才通知，不會因為同一筆訊號還沒結算、
@@ -115,6 +131,7 @@ def _maybe_record_new_signal(item: dict, tech: dict, candles: list, fused: dict,
         "ai_sentiment": sentiment["sentiment"],
         "action_label": fused["action"],
         "color": fused["color"],
+        "detected_patterns": [p["key"] for p in (detected_patterns or [])],
     })
     return True
 
@@ -190,6 +207,7 @@ async def _fetch_btc_pct_change(client: httpx.AsyncClient, already_fetched: dict
 async def analyze_one_instrument(
     client: httpx.AsyncClient, item: dict, sentiment: dict, now_ms: int,
     circuit_breaker: dict | None = None, exposure_gate: dict | None = None,
+    direction_concentration_gates: dict | None = None,
 ) -> tuple[dict | None, list, bool]:
     """對單一商品跑完整的「K線→技術訊號→OI→多空共振」流程，回傳
     (訊號 dict 或 None, candles, is_new_signal)。第三個值供呼叫端（見 _refresh_signals）
@@ -205,6 +223,11 @@ async def analyze_one_instrument(
     整個分析週期只要算一次（不隨個別商品變動，看的是「現在同時開著幾筆」這個帳戶層級
     的狀態），呼叫端算好一次傳進來，不用每檔商品各自重算。volatility_gate 不一樣，是
     每檔商品各自的 24h 振幅算出來的，直接在這個函式內部算，不用外部傳入。
+    direction_concentration_gates：{"long": {...}, "short": {...}}，兩個都是
+    outcome_tracker.compute_direction_concentration_gate() 的回傳值（可能是 None，代表
+    呼叫端選擇不檢查這個機制）——一樣是整個分析週期只算一次，但這裡要依這一檔算出來的
+    訊號方向（tech["signal"]）挑對應那一份傳給 brain.fuse()，所以是在這個函式「內部」
+    才做方向判斷跟挑選，不是呼叫端先猜好方向。
 
     這是 `_refresh_signals` 自動篩選迴圈、跟 `app.py` 的 `POST /api/v1/analyze-instrument`
     （使用者在「全部商品總覽」點按需求分析）**共用的同一份邏輯**——不管是系統自動選中的，
@@ -222,6 +245,9 @@ async def analyze_one_instrument(
             tp1_rr=config.TP1_RR,
             tp2_rr=config.TP2_RR,
             volume_confirm_multiple=config.VOLUME_CONFIRM_MULTIPLE,
+            stop_loss_mode=config.STOP_LOSS_MODE,
+            atr_period=config.ATR_PERIOD,
+            atr_multiple=config.ATR_MULTIPLE,
         )
     except Exception as exc:  # noqa: BLE001 — 單一商品失敗不能拖垮整輪更新
         logger.warning("signal calc failed for %s: %s", inst_id, exc)
@@ -254,7 +280,17 @@ async def analyze_one_instrument(
     # 特徵，不是帳戶層級的共用狀態，所以在這裡（每檔商品各自）算，不是外部傳入。
     volatility_gate = outcome_tracker.compute_volatility_gate(item["amplitude_pct"], config.MAX_AMPLITUDE_PCT)
 
-    fused = brain.fuse(tech, sentiment, fee_info, config.MIN_NET_RR, htf_trend, circuit_breaker, exposure_gate, volatility_gate)
+    # 同方向曝險關卡要依這一檔算出來的訊號方向挑對應那一份——沒有訊號方向就沒有「同方向
+    # 加碼」的問題，direction_gate 保持 None，跟 brain.fuse() 其餘可選關卡一致的
+    # None-代表不檢查慣例。
+    direction_gate = None
+    if direction_concentration_gates and tech is not None and tech.get("signal") is not None:
+        direction_gate = direction_concentration_gates.get(tech["signal"])
+
+    fused = brain.fuse(
+        tech, sentiment, fee_info, config.MIN_NET_RR, htf_trend, circuit_breaker, exposure_gate, volatility_gate,
+        direction_gate,
+    )
     signal = {
         "name": item["name"],
         "instId": inst_id,
@@ -291,7 +327,7 @@ async def analyze_one_instrument(
     is_new_signal = False
     if tech is not None:
         try:
-            is_new_signal = _maybe_record_new_signal(item, tech, candles, fused, sentiment, now_ms)
+            is_new_signal = _maybe_record_new_signal(item, tech, candles, fused, sentiment, now_ms, detected_patterns)
         except Exception as exc:  # noqa: BLE001 — 記錄歷史失敗不該讓分析整個掛掉
             logger.warning("recording signal history failed for %s: %s", inst_id, exc)
 
@@ -404,6 +440,16 @@ async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None
     STATE.tuning_note = tuning["reason"] if tuning else None
     STATE.win_rate_stats = win_rate_stats
     STATE.effective_min_amplitude_pct = effective_min_amplitude
+
+    # 📚 型態／核准決策事後命中率分析（見 outcome_tracker.compute_pattern_hit_rates／
+    # compute_decision_hit_rates 說明）：純讀 DB + 純函式計算，零額外成本。跟
+    # win_rate_stats 共用同一批「全部已結算訊號」資料，不用再多查一次資料庫。
+    hit_rate_rows = db.get_resolved_for_hit_rate_stats()
+    STATE.pattern_hit_rates = [
+        {**row, "label": _PATTERN_LABELS.get(row["pattern_key"], row["pattern_key"])}
+        for row in outcome_tracker.compute_pattern_hit_rates(hit_rate_rows)
+    ]
+    STATE.decision_hit_rates = outcome_tracker.compute_decision_hit_rates(hit_rate_rows)
     # 訊號歷史純讀 DB、跟 OKX 網路呼叫無關，先設好——就算接下來的 OKX 篩選失敗，
     # 使用者還是看得到歷史成效，不會因為這次分析失敗就連歷史紀錄都不見了。
     recent_resolved = db.get_recent_resolved(20)
@@ -433,6 +479,16 @@ async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None
     # 說明）——只算一次，套用在下面每一檔商品身上，跟每日虧損斷路器同一種用法。
     exposure_gate = outcome_tracker.compute_exposure_gate(portfolio_exposure["total_open"], config.MAX_OPEN_POSITIONS)
     STATE.exposure_gate = exposure_gate
+
+    # 🚧 同方向曝險關卡（可選，預設關閉）：long/short 各自獨立算一次（見
+    # outcome_tracker.compute_direction_concentration_gate 說明）——跟曝險上限關卡不同，
+    # 這個是「方向性」的，長方跟短方各自達標與否互不影響，呼叫端（analyze_one_instrument）
+    # 會依這筆訊號實際的方向，從這兩份裡挑對應那一份傳給 brain.fuse()。
+    direction_concentration_gates = {
+        "long": outcome_tracker.compute_direction_concentration_gate(portfolio_exposure["long_count"], config.MAX_SAME_DIRECTION_OPEN),
+        "short": outcome_tracker.compute_direction_concentration_gate(portfolio_exposure["short_count"], config.MAX_SAME_DIRECTION_OPEN),
+    }
+    STATE.direction_concentration_gates = direction_concentration_gates
 
     # 🧮 倉位計算機的凱利公式建議：用「本系統自己歷史上真的中停利/停損過幾次」算出來的
     # 勝率＋平均獲利倍數，不是憑空給一個數字。零額外 AI/API 成本，純讀 DB + 純函式計算。
@@ -533,7 +589,9 @@ async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None
     for item in monitored:
         inst_id = item["instId"]
         sentiment = sentiment_by_inst.get(inst_id, news["market"])
-        signal, candles, is_new_signal = await analyze_one_instrument(client, item, sentiment, now_ms, circuit_breaker, exposure_gate)
+        signal, candles, is_new_signal = await analyze_one_instrument(
+            client, item, sentiment, now_ms, circuit_breaker, exposure_gate, direction_concentration_gates,
+        )
         any_new_signal = any_new_signal or is_new_signal
 
         # 🔔 訊號警報：只對「這輪有跑過技術分析」的商品有效（監控清單自動選中的、或使用者

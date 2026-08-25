@@ -26,6 +26,15 @@ class SystemState:
         self.last_error: str | None = None
         # 訊號結果追蹤與自動優化（見 db.py / outcome_tracker.py / strategy_tuner.py）
         self.win_rate_stats: dict = {"total": 0, "wins": 0, "losses": 0, "win_rate_pct": None}
+        # 型態／核准決策事後命中率分析（見 outcome_tracker.compute_pattern_hit_rates／
+        # compute_decision_hit_rates）。
+        self.pattern_hit_rates: list = []
+        self.decision_hit_rates: dict = {
+            "approved": {"total": 0, "wins": 0, "losses": 0, "win_rate_pct": None, "reliable": False},
+            "watching": {"total": 0, "wins": 0, "losses": 0, "win_rate_pct": None, "reliable": False},
+            "rejected": {"total": 0, "wins": 0, "losses": 0, "win_rate_pct": None, "reliable": False},
+            "no_decision": {"total": 0, "wins": 0, "losses": 0, "win_rate_pct": None, "reliable": False},
+        }
         self.recent_resolved: list[dict] = []
         self.kelly_suggestion: dict | None = None
         self.tuning_note: str | None = None  # 這一輪如果剛好觸發自動優化，放調整理由；沒有就 None
@@ -48,6 +57,13 @@ class SystemState:
         # total_open 達到 config.MAX_OPEN_POSITIONS 時 active=True，這一輪新訊號會被
         # brain.fuse() 攔截成「曝險已達上限」。
         self.exposure_gate: dict = {"active": False, "reason": None}
+        # 同方向曝險關卡（可選，預設關閉，見 outcome_tracker.compute_direction_concentration_gate）：
+        # long/short 各自獨立算一份，這一輪對應方向的新訊號才會被 brain.fuse() 攔截成
+        # 「同方向曝險過於集中」。
+        self.direction_concentration_gates: dict = {
+            "long": {"active": False, "reason": None},
+            "short": {"active": False, "reason": None},
+        }
 
         # ---- 背景排程 + AI 用量治理（見 scheduler.py／ai_governor.py） ----
         self.ai_skip_reason: str | None = None  # 這一輪(排程模式)AI 新聞情緒有沒有被跳過、跳過的原因；手動分析恆為 None

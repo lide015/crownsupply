@@ -21,6 +21,7 @@ def fuse(
     circuit_breaker: dict | None = None,
     exposure_gate: dict | None = None,
     volatility_gate: dict | None = None,
+    direction_concentration_gate: dict | None = None,
 ) -> dict:
     """tech: strategy.compute_signal() 的回傳值（可能是 None）。
     sentiment: 一個帶 "sentiment" 欄位的 dict——實際上是 news_client.get_market_and_instrument_sentiment()
@@ -47,6 +48,13 @@ def fuse(
     volatility_gate: outcome_tracker.compute_volatility_gate() 的回傳值（可能是 None，
     代表不啟用）——這檔商品的 24h 振幅過於劇烈時攔截成警告，優先序在 htf_trend 判斷
     之後（先看方向對不對，再看波動是不是在合理範圍）。
+    direction_concentration_gate: outcome_tracker.compute_direction_concentration_gate()
+    的回傳值（可能是 None，代表不啟用；預設關閉，見該函式說明）——同一個方向（多或空）
+    的未結算訊號數已經達到自訂上限時攔截「這個方向」的新訊號。呼叫端要先看這筆訊號的
+    方向（tech["signal"]），從「多方關卡」「空方關卡」兩個算好的結果裡挑對應那一個
+    傳進來——這裡不自己判斷方向，因為在還沒看到 signal 是 long 還是 short 之前，這個
+    參數本身就無法決定要套用哪一個方向的關卡。優先序跟 exposure_gate 放在一起（都是
+    portfolio-level、不是這筆訊號自己品質的問題），在 exposure_gate 之後。
     回傳 {"action": str, "color": str, "reason": str}。"""
     if circuit_breaker and circuit_breaker.get("active"):
         return {
@@ -77,6 +85,13 @@ def fuse(
             "action": "⚠️ 曝險已達上限，暫緩新訊號 (EXPOSURE CAP)",
             "color": COLOR_YELLOW,
             "reason": exposure_gate.get("reason") or "目前同時開著的部位數已達自訂曝險上限，新訊號暫不建議加碼。",
+        }
+
+    if direction_concentration_gate and direction_concentration_gate.get("active"):
+        return {
+            "action": "⚠️ 同方向曝險過於集中，暫緩新訊號 (DIRECTION CAP)",
+            "color": COLOR_YELLOW,
+            "reason": direction_concentration_gate.get("reason") or "目前同方向的未結算訊號數已達自訂上限，新訊號暫不建議同方向加碼。",
         }
 
     if fee_info and fee_info.get("net_rr") is not None and fee_info["net_rr"] < min_net_rr:
@@ -250,6 +265,27 @@ if __name__ == "__main__":
           fuse(long_tech, {"sentiment": "BULLISH"}, exposure_gate={"active": False, "reason": None})["color"], COLOR_GREEN)
     check("exposure_gate=None -> no effect (backward compatible)",
           fuse(long_tech, {"sentiment": "BULLISH"}, exposure_gate=None)["color"], COLOR_GREEN)
+
+    # 同方向曝險關卡（可選）：達到上限時攔截「這個方向」的新訊號——呼叫端負責挑對應方向
+    # 那一份 gate 傳進來，fuse() 本身不自己判斷方向。
+    direction_active = {"active": True, "reason": "目前已經有 3 筆同方向的未結算訊號，達到自訂上限 3 筆"}
+    direction_result = fuse(long_tech, {"sentiment": "BULLISH"}, direction_concentration_gate=direction_active)
+    check("direction concentration gate active -> DIRECTION CAP overrides signal quality", "DIRECTION CAP" in direction_result["action"], True)
+    check("direction concentration gate active -> yellow", direction_result["color"], COLOR_YELLOW)
+    check("direction concentration gate reason passed through", "同方向的未結算訊號" in direction_result["reason"], True)
+
+    direction_no_tech = fuse(None, {"sentiment": "NEUTRAL"}, direction_concentration_gate=direction_active)
+    check("direction concentration gate does NOT override when tech has no signal (nothing to gate)", direction_no_tech["action"], "觀望中")
+
+    check("direction concentration gate active but exposure gate also active -> exposure gate wins (higher priority)",
+          "EXPOSURE CAP" in fuse(long_tech, {"sentiment": "BULLISH"}, exposure_gate=exposure_active, direction_concentration_gate=direction_active)["action"], True)
+    check("direction concentration gate active but circuit breaker also active -> circuit breaker wins (highest priority)",
+          "DAILY LIMIT" in fuse(long_tech, {"sentiment": "BULLISH"}, circuit_breaker=breaker_active, direction_concentration_gate=direction_active)["action"], True)
+
+    check("direction_concentration_gate inactive dict -> no effect (backward compatible)",
+          fuse(long_tech, {"sentiment": "BULLISH"}, direction_concentration_gate={"active": False, "reason": None})["color"], COLOR_GREEN)
+    check("direction_concentration_gate=None -> no effect (backward compatible)",
+          fuse(long_tech, {"sentiment": "BULLISH"}, direction_concentration_gate=None)["color"], COLOR_GREEN)
 
     # 波動風控關卡：振幅過大時攔截成警告，優先序在 htf_trend 之後、mood 判斷之前
     volatility_active = {"active": True, "reason": "24h 振幅達 45.0%（超過門檻 20.0%），波動過於劇烈"}

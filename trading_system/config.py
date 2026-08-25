@@ -33,6 +33,15 @@ TP2_RR = float(os.getenv("TP2_RR", "2.0"))
 # 過濾量能稀薄的雜訊假突破。設 0 代表完全不啟用（維持舊行為）。
 VOLUME_CONFIRM_MULTIPLE = float(os.getenv("VOLUME_CONFIRM_MULTIPLE", "1.1"))
 
+# ---- 停損模式（可選，見 strategy.compute_signal 的 stop_loss_mode 說明） ----
+# "box_mid"（預設，向後相容）：停損固定設在盤整盒子中線，波動大小完全不影響停損寬度。
+# "atr"：停損距離改用 ATR × ATR_MULTIPLE 決定，波動大時自動放寬、波動小時自動收緊——
+# 換成波動導向的停損，跟盒子寬度脫鉤。改這個之前建議先用「🔬 掃描最佳參數」／
+# 詳情頁的「進階：調整回測參數」面板實測比較兩種模式的歷史表現，不要憑感覺切換。
+STOP_LOSS_MODE = os.getenv("STOP_LOSS_MODE", "box_mid")
+ATR_PERIOD = int(os.getenv("ATR_PERIOD", "14"))
+ATR_MULTIPLE = float(os.getenv("ATR_MULTIPLE", "1.5"))
+
 # ---- 多時間週期共振（見 strategy.compute_trend_bias / brain.fuse 的 htf_trend） ----
 # 5 分鐘線技術面突破時，另外抓一次更高週期的K線，確認大方向沒有明顯反向——逆著大趨勢
 # 做的短線突破特別容易被雜訊洗出場。零額外AI成本，只是多一次免費的OKX K線查詢。
@@ -46,6 +55,13 @@ HTF_CANDLE_LIMIT = int(os.getenv("HTF_CANDLE_LIMIT", "50"))
 # 任一項設成 0（次數）或 0 以上（R，門檻本身應該是負數）代表關閉那一項門檻。
 MAX_DAILY_LOSS_COUNT = int(os.getenv("MAX_DAILY_LOSS_COUNT", "3"))
 MAX_DAILY_LOSS_R = float(os.getenv("MAX_DAILY_LOSS_R", "-5.0"))
+
+# ---- 同方向曝險關卡（可選，預設關閉，見 outcome_tracker.compute_direction_concentration_gate） ----
+# 同一個方向（多或空）的未結算訊號數達到這個數字時，這個方向的新訊號一律標示「同方向
+# 曝險過於集中」攔截——跟每日虧損斷路器互補，這個看的是「現在同方向疊了幾趟同質曝險」，
+# 不是「今天已經虧了多少」。預設 0 代表關閉（原本 compute_portfolio_exposure 的「同方向
+# 集中度提醒」只是文字警告，不會誤攔截任何人；想要真的攔截才需要自己設這個值）。
+MAX_SAME_DIRECTION_OPEN = int(os.getenv("MAX_SAME_DIRECTION_OPEN", "0"))
 
 # ---- 曝險上限關卡（見 outcome_tracker.compute_exposure_gate） ----
 # 現在同時開著的未結算訊號數達到這個數字時，新訊號一律攔截成「曝險已達上限」，不管

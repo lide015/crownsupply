@@ -41,6 +41,9 @@ def run_backtest(
     tp1_rr: float = 1.5,
     tp2_rr: float = 2.0,
     volume_confirm_multiple: float = 0.0,
+    stop_loss_mode: str = "box_mid",
+    atr_period: int = 14,
+    atr_multiple: float = 1.5,
 ) -> dict:
     """candles：升冪（舊到新）、已收盤的 [{ts,o,h,l,c,vol}, ...]，跟 strategy.compute_signal
     要求的格式一致（okx_client.fetch_confirmed_candles 的輸出可以直接餵進來）。
@@ -48,6 +51,12 @@ def run_backtest(
     volume_confirm_multiple：跟 strategy.compute_signal 的同名參數一樣意思——套用同一套
     量能突破確認規則來重播歷史，這樣「回測」跟「線上即時分析」用的是同一套判斷邏輯，
     不是回測一套、線上又是另一套。0（預設）代表不啟用。
+
+    stop_loss_mode／atr_period／atr_multiple：一樣是跟 strategy.compute_signal 同名同義
+    的參數（見該函式說明）——想知道「如果改用 ATR 動態停損，這套策略在這批歷史資料上
+    表現會不會更好」，不用改 config.py、重啟伺服器才能驗證，直接帶不同的 stop_loss_mode
+    重跑一次回測就能對照兩種模式的實際歷史勝率/獲利因子差異。預設 "box_mid" 維持原本
+    行為，向後相容。
 
     ⚠️ 這裡**沒有**套用多時間週期共振（htf_trend）跟每日虧損斷路器（circuit_breaker）
     這兩個線上分析才有的把關——htf_trend 需要同步重播「第二條」更高週期的K線序列，
@@ -68,7 +77,10 @@ def run_backtest(
 
     while i < n:
         window = candles[: i + 1]
-        tech = strategy.compute_signal(window, ema_period, box_lookback, tp1_rr, tp2_rr, volume_confirm_multiple)
+        tech = strategy.compute_signal(
+            window, ema_period, box_lookback, tp1_rr, tp2_rr, volume_confirm_multiple,
+            stop_loss_mode, atr_period, atr_multiple,
+        )
 
         if tech is not None and tech["signal"] is not None:
             after = candles[i + 1:]
@@ -346,6 +358,19 @@ if __name__ == "__main__":
     ]
     result_strong_vol = run_backtest(strong_vol_breakout, ema_period=20, box_lookback=15, volume_confirm_multiple=1.2)
     check("strong-volume breakout still counted during backtest replay", result_strong_vol["total_trades"], 1)
+
+    # 7b) stop_loss_mode 有正確傳進 strategy.compute_signal：ATR 模式重播出來的停損
+    # 應該跟 box_mid 模式不同（見 strategy.compute_signal 的 stop_loss_mode 說明），
+    # 讓使用者可以直接對照兩種模式在同一批歷史資料上的實際表現差異，不用改設定重啟。
+    result_atr_mode = run_backtest(
+        breakout_win, ema_period=20, box_lookback=15, tp1_rr=1.5, tp2_rr=2.0,
+        stop_loss_mode="atr", atr_period=14, atr_multiple=1.5,
+    )
+    check("stop_loss_mode=atr backtest still produces a trade", result_atr_mode["total_trades"], 1)
+    check("stop_loss_mode=atr backtest uses an ATR-based stop_loss (differs from box_mid's 100.0)",
+          result_atr_mode["trades"][0]["stop_loss"], 101.571428565)
+    check("stop_loss_mode=atr backtest: stop_loss differs from the default box_mid backtest",
+          result_atr_mode["trades"][0]["stop_loss"] != result_win["trades"][0]["stop_loss"], True)
 
     # 8) run_sweep：組合數 = box_lookback 選項 × tp_rr 選項 × volume_confirm 選項
     sweep_empty = run_sweep(

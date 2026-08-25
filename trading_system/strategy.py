@@ -15,6 +15,25 @@ def compute_ema_series(candles: list[dict], period: int = 20) -> list[float] | N
     return [round(float(v), 6) for v in df["c"].ewm(span=period, adjust=False).mean()]
 
 
+def compute_atr(candles: list[dict], period: int = 14) -> float | None:
+    """平均真實區間（Average True Range，Wilder's 平滑法，跟 market_pulse.compute_rsi
+    同一套遞迴平滑公式）——用「真實區間」(True Range) 取代單純的「高低價差」，把跳空
+    也算進波動幅度裡：TR = max(當根高低差, |當根高點-前一根收盤|, |當根低點-前一根收盤|)。
+
+    資料不足（至少需要 period+1 根，第一個 TR 要用到「前一根」收盤價）回傳 None——沒有
+    足夠資料硬算出來的數字會失真，不如老實回報「算不出來」，跟 compute_rsi 同樣的慣例。"""
+    if len(candles) < period + 1:
+        return None
+    trs = []
+    for i in range(1, len(candles)):
+        high, low, prev_close = candles[i]["h"], candles[i]["l"], candles[i - 1]["c"]
+        trs.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+    atr = sum(trs[:period]) / period
+    for tr in trs[period:]:
+        atr = (atr * (period - 1) + tr) / period
+    return round(atr, 8)
+
+
 def compute_signal(
     candles: list[dict],
     ema_period: int = 20,
@@ -22,12 +41,26 @@ def compute_signal(
     tp1_rr: float = 1.5,
     tp2_rr: float = 2.0,
     volume_confirm_multiple: float = 0.0,
+    stop_loss_mode: str = "box_mid",
+    atr_period: int = 14,
+    atr_multiple: float = 1.5,
 ) -> dict | None:
     """candles: 升冪（舊到新）的 [{o,h,l,c}, ...]，全部是已收盤的 K 線。
 
     做多：收盤價站上盒子高點，且站上 20 EMA。
     做空：收盤價跌破盒子低點，且跌破 20 EMA。
-    停損固定設在盒子中線（比「盒子邊緣」保守、比「前一根K線極值」寬鬆，兩者的折衷）。
+
+    停損有兩種可選模式（stop_loss_mode，預設 "box_mid" 維持原本行為，向後相容）：
+    - "box_mid"（預設）：固定設在盒子中線（比「盒子邊緣」保守、比「前一根K線極值」寬鬆，
+      兩者的折衷）——不管這檔商品現在波動大小，同樣寬度的盒子給同樣寬度的停損。
+    - "atr"：停損距離改用 ATR（見 compute_atr）× atr_multiple 決定，波動大時停損自動
+      放寬（避免被正常波動洗出場）、波動小時停損自動收緊（避免虧損風險過度暴露）——
+      跟盒子寬度完全脫鉤，是「這檔商品最近真的有多躁動」決定停損遠近，不是「盤整區間
+      剛好多寬」決定。資料不足以算出 ATR 時（理論上不會發生，因為進到這個判斷分支已經
+      通過了 min_len 檢查，防禦性處理）優雅退回 box_mid，不會讓整個訊號判斷失敗。
+      ⚠️ 這個模式下 stop_loss 不保證還在 invalidation_price（盒子邊緣，見下方說明）
+      之外——ATR 距離是獨立算出來的，可能比box_mid模式更緊、也可能更寬，這是換成
+      波動導向停損的固有特性，不是計算錯誤。
     停利用風報比（reward:risk）算：risk = |進場價 - 停損價|，
     TP1 = 進場價 ± risk * tp1_rr（可先減碼）、TP2 = 進場價 ± risk * tp2_rr（留給趨勢延續）。
 
@@ -76,6 +109,13 @@ def compute_signal(
     raw_long_breakout = price > box_high and price > ema
     raw_short_breakout = price < box_low and price < ema
 
+    # ATR 只在真的用得到、而且真的有突破時才算——沒有訊號就沒有「停損要設多遠」的問題，
+    # 沒必要每次呼叫都白算一次 ATR。
+    atr_value = None
+    if stop_loss_mode == "atr" and (raw_long_breakout or raw_short_breakout) and volume_confirmed:
+        atr_value = compute_atr(candles, atr_period)
+    use_atr_stop = stop_loss_mode == "atr" and atr_value is not None and atr_value > 0
+
     signal = None
     stop_loss = None
     take_profit_1 = None
@@ -83,14 +123,14 @@ def compute_signal(
     invalidation_price = None
     if raw_long_breakout and volume_confirmed:
         signal = "long"
-        stop_loss = box_mid
+        stop_loss = price - atr_value * atr_multiple if use_atr_stop else box_mid
         risk = price - stop_loss
         take_profit_1 = price + risk * tp1_rr
         take_profit_2 = price + risk * tp2_rr
         invalidation_price = box_high
     elif raw_short_breakout and volume_confirmed:
         signal = "short"
-        stop_loss = box_mid
+        stop_loss = price + atr_value * atr_multiple if use_atr_stop else box_mid
         risk = stop_loss - price
         take_profit_1 = price - risk * tp1_rr
         take_profit_2 = price - risk * tp2_rr
@@ -108,6 +148,12 @@ def compute_signal(
         "invalidation_price": invalidation_price,
         "tp1_rr": tp1_rr,
         "tp2_rr": tp2_rr,
+        # stop_loss_mode 是呼叫端「要求」的模式；atr_value 有實際數字才代表真的用 ATR
+        # 算出停損（None 代表模式不是 "atr"、或沒有訊號、或防禦性 fallback 退回
+        # box_mid 了），前端可以用「atr_value is not None」判斷這筆訊號實際用的是哪一種，
+        # 不用另外猜 stop_loss_mode 有沒有生效。
+        "stop_loss_mode": stop_loss_mode,
+        "atr_value": atr_value,
         "volume_confirmed": volume_confirmed,
         "avg_vol": avg_vol,
         "current_vol": current_vol,
@@ -208,6 +254,43 @@ if __name__ == "__main__":
     # 7) volume_confirm_multiple=0（預設）-> 完全不啟用量能過濾，就算量能極低也照樣觸發
     sig_disabled = compute_signal(weak_breakout, ema_period=20, box_lookback=15, volume_confirm_multiple=0.0)
     check("volume_confirm_multiple=0 -> filter disabled, signal still fires", sig_disabled["signal"], "long")
+
+    # 7b) compute_atr -- 手算驗證：TR 恆定 2.0 時 ATR 也是 2.0，接著一根真實區間跳大到
+    # 6.0 的K線，Wilder 平滑後 ATR 往上調整但不是直接跳到 6.0（平滑，不是瞬間反應）
+    atr_flat_trs = [
+        {"h": 10, "l": 8, "c": 9}, {"h": 11, "l": 9, "c": 10},
+        {"h": 12, "l": 10, "c": 11}, {"h": 13, "l": 11, "c": 12},
+    ]
+    check("compute_atr: constant true range 2.0 across 3 periods -> ATR 2.0", compute_atr(atr_flat_trs, period=3), 2.0)
+    atr_with_spike = atr_flat_trs + [{"h": 10, "l": 6, "c": 8}]  # 這根 TR=max(4,|10-12|,|6-12|)=6
+    check("compute_atr: Wilder-smoothed after a volatility spike -> 3.33333333 (not a raw average)",
+          compute_atr(atr_with_spike, period=3), 3.33333333)
+    check("compute_atr: insufficient data (< period+1 candles) -> None", compute_atr(atr_flat_trs[:3], period=3), None)
+
+    # 7c) compute_signal stop_loss_mode="atr" -- 停損改用 ATR×倍數算，不是盒子中點
+    sig_atr = compute_signal(breakout_up, ema_period=20, box_lookback=15, tp1_rr=1.5, tp2_rr=2.0,
+                              stop_loss_mode="atr", atr_period=14, atr_multiple=1.5)
+    check("stop_loss_mode=atr: atr_value populated when mode is atr and signal fires", sig_atr["atr_value"], 2.28571429)
+    check("stop_loss_mode=atr: stop_loss uses ATR×multiple, not box_mid", sig_atr["stop_loss"], 101.571428565)
+    check("stop_loss_mode=atr: stop_loss differs from what box_mid mode would give (100.0)", sig_atr["stop_loss"] != 100.0, True)
+    check("stop_loss_mode=atr: invalidation_price still uses box structure regardless of stop mode", sig_atr["invalidation_price"], 101.0)
+    check("stop_loss_mode=atr: risk/reward still derived from the ATR-based stop_loss",
+          round(sig_atr["take_profit_1"], 6), round(sig_atr["price"] + (sig_atr["price"] - sig_atr["stop_loss"]) * 1.5, 6))
+    check("stop_loss_mode=atr: stop_loss_mode field echoes back the requested mode", sig_atr["stop_loss_mode"], "atr")
+
+    # 7d) compute_signal stop_loss_mode="box_mid"（預設）-- 完全不受新參數影響，向後相容
+    sig_default_mode = compute_signal(breakout_up, ema_period=20, box_lookback=15, tp1_rr=1.5, tp2_rr=2.0)
+    check("default stop_loss_mode is box_mid (backward compatible)", sig_default_mode["stop_loss"], 100.0)
+    check("default stop_loss_mode: atr_value is None (never computed, no cost incurred)", sig_default_mode["atr_value"], None)
+
+    # 7e) compute_signal stop_loss_mode="atr" 但資料不夠算出 ATR（box_lookback 過關但
+    # atr_period 過大）-- 優雅退回 box_mid，不會讓整筆訊號判斷失敗
+    sig_atr_fallback = compute_signal(breakout_up, ema_period=20, box_lookback=15, stop_loss_mode="atr", atr_period=25)
+    check("stop_loss_mode=atr with insufficient ATR data -> falls back to box_mid", sig_atr_fallback["stop_loss"], 100.0)
+    check("stop_loss_mode=atr with insufficient ATR data -> atr_value stays None (honest, not a fabricated fallback number)",
+          sig_atr_fallback["atr_value"], None)
+    check("stop_loss_mode=atr with insufficient ATR data -> signal still fires (fallback doesn't block the trade)",
+          sig_atr_fallback["signal"], "long")
 
     # 8) compute_trend_bias：站上 EMA -> up；跌破 -> down；資料不足 -> None
     up_candles = [{"c": 100.0} for _ in range(19)] + [{"c": 110.0}]

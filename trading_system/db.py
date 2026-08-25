@@ -38,7 +38,14 @@ CREATE TABLE IF NOT EXISTS signal_history (
   -- （預設）。這是使用者自己的紀錄用途，本系統仍然不會替使用者真的下單——見
   -- app.py 的 POST /api/v1/signal-decision 說明。
   user_decision TEXT,
-  user_decision_at INTEGER
+  user_decision_at INTEGER,
+  -- 這筆訊號觸發當下 pattern_recognition.py 偵測到的型態標籤（見該模組說明，純資訊
+  -- 揭露，不參與 brain.fuse() 的訊號融合）。存 JSON 陣列字串（例如
+  -- '["break_previous_high","ma_convergence_divergence"]'），只存 key 不存 label
+  -- （label 是固定對照表），db.py 邊界負責 dumps/loads——跟 alerts 表的 channels
+  -- 欄位同一套慣例。事後統計「這個標籤實際準不準」見
+  -- outcome_tracker.compute_pattern_hit_rates。
+  detected_patterns TEXT
 );
 CREATE INDEX IF NOT EXISTS signal_history_inst_idx ON signal_history(inst_id);
 CREATE INDEX IF NOT EXISTS signal_history_resolution_idx ON signal_history(resolution);
@@ -101,6 +108,8 @@ def _migrate_missing_columns(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE signal_history ADD COLUMN user_decision TEXT")
     if "user_decision_at" not in existing_cols:
         conn.execute("ALTER TABLE signal_history ADD COLUMN user_decision_at INTEGER")
+    if "detected_patterns" not in existing_cols:
+        conn.execute("ALTER TABLE signal_history ADD COLUMN detected_patterns TEXT")
 
 
 def init_db():
@@ -113,20 +122,36 @@ def init_db():
         conn.close()
 
 
+def _signal_row_to_dict(row: sqlite3.Row) -> dict:
+    """統一的 signal_history 表列 -> dict 轉換，detected_patterns 欄位從 JSON 字串還原成
+    list（呼叫端一律拿到 Python list，不用自己處理 JSON；NULL／解析失敗都當成空
+    list，不讓舊資料庫遷移前的 NULL 值害呼叫端多一層防呆），跟 _alert_row_to_dict
+    同一套慣例，全部 `SELECT *` 讀 signal_history 的地方共用，避免各自重複寫一次
+    還原邏輯。"""
+    d = dict(row)
+    try:
+        d["detected_patterns"] = json.loads(d["detected_patterns"]) if d["detected_patterns"] else []
+    except (TypeError, ValueError):
+        d["detected_patterns"] = []
+    return d
+
+
 def insert_signal(row: dict) -> int:
     """row 需含 signal_history 除了 id/resolution/resolved_at/resolution_price/failure_reason
-    以外的所有欄位（那幾個有預設值或允許 NULL）。回傳新插入的 row id。"""
+    以外的所有欄位（那幾個有預設值或允許 NULL）；detected_patterns 選填（不帶就存空
+    list），是 pattern key 字串的 list，這裡負責 dumps 成 JSON 字串存進去。回傳新插入的
+    row id。"""
     conn = get_connection()
     try:
         cur = conn.execute(
             """INSERT INTO signal_history
                (inst_id, name, asset_class, signal_type, created_at, entry_price,
                 stop_loss, take_profit_1, take_profit_2, ema, box_high, box_low,
-                ai_sentiment, action_label, color)
+                ai_sentiment, action_label, color, detected_patterns)
                VALUES (:inst_id, :name, :asset_class, :signal_type, :created_at, :entry_price,
                        :stop_loss, :take_profit_1, :take_profit_2, :ema, :box_high, :box_low,
-                       :ai_sentiment, :action_label, :color)""",
-            row,
+                       :ai_sentiment, :action_label, :color, :detected_patterns)""",
+            {**row, "detected_patterns": json.dumps(row.get("detected_patterns") or [])},
         )
         conn.commit()
         return cur.lastrowid
@@ -144,7 +169,7 @@ def get_open_signal_for(inst_id: str, signal_type: str):
             "AND resolution = 'open' ORDER BY created_at DESC LIMIT 1",
             (inst_id, signal_type),
         ).fetchone()
-        return dict(row) if row else None
+        return _signal_row_to_dict(row) if row else None
     finally:
         conn.close()
 
@@ -153,7 +178,7 @@ def get_open_signals() -> list[dict]:
     conn = get_connection()
     try:
         rows = conn.execute("SELECT * FROM signal_history WHERE resolution = 'open'").fetchall()
-        return [dict(r) for r in rows]
+        return [_signal_row_to_dict(r) for r in rows]
     finally:
         conn.close()
 
@@ -178,7 +203,7 @@ def get_signal_by_id(signal_id: int) -> dict | None:
     conn = get_connection()
     try:
         row = conn.execute("SELECT * FROM signal_history WHERE id = ?", (signal_id,)).fetchone()
-        return dict(row) if row else None
+        return _signal_row_to_dict(row) if row else None
     finally:
         conn.close()
 
@@ -213,7 +238,7 @@ def get_recent_resolved(limit: int = 20) -> list[dict]:
             "ORDER BY resolved_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [_signal_row_to_dict(r) for r in rows]
     finally:
         conn.close()
 
@@ -243,6 +268,22 @@ def get_resolved_trades_for_kelly() -> list[dict]:
         conn.close()
 
 
+def get_resolved_for_hit_rate_stats() -> list[dict]:
+    """給 outcome_tracker.compute_pattern_hit_rates／compute_decision_hit_rates 用：
+    所有已結算訊號的 resolution/detected_patterns/user_decision，不限筆數（樣本越多
+    統計越準，跟 get_all_resolved_for_stats 的「不限筆數」邏輯一致）。detected_patterns
+    已經從 JSON 字串還原成 list（見 _signal_row_to_dict）。"""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT resolution, detected_patterns, user_decision "
+            "FROM signal_history WHERE resolution != 'open'"
+        ).fetchall()
+        return [_signal_row_to_dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 def get_signal_history_for(inst_id: str, limit: int = 10) -> list[dict]:
     """給「單一商品詳情頁」的事件時間軸用：這檔商品過去觸發過的訊號（不管有沒有結算），
     由新到舊排序。這是目前系統唯一持續累積的「這檔商品發生過什麼事」紀錄——沒有真正
@@ -253,7 +294,7 @@ def get_signal_history_for(inst_id: str, limit: int = 10) -> list[dict]:
             "SELECT * FROM signal_history WHERE inst_id = ? ORDER BY created_at DESC LIMIT ?",
             (inst_id, limit),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [_signal_row_to_dict(r) for r in rows]
     finally:
         conn.close()
 
@@ -487,6 +528,7 @@ if __name__ == "__main__":
             "stop_loss": 95.0, "take_profit_1": 110.0, "take_profit_2": 120.0,
             "ema": 98.0, "box_high": 101.0, "box_low": 99.0,
             "ai_sentiment": "BULLISH", "action_label": "強烈做多", "color": "green",
+            "detected_patterns": ["break_previous_high", "ma_convergence_divergence"],
         })
         insert_signal({
             "inst_id": "BTC-USDT-SWAP", "name": "BTC-USDT", "asset_class": "crypto",
@@ -506,6 +548,13 @@ if __name__ == "__main__":
         history = get_signal_history_for("BTC-USDT-SWAP")
         check("get_signal_history_for only returns matching inst_id", len(history), 2)
         check("get_signal_history_for orders newest first", history[0]["created_at"], 2000)
+        # detected_patterns 存進去、讀出來要原封不動還原成 list（不是 JSON 字串）——
+        # history 是新到舊排序，history[1] 才是第一筆（created_at=1000）帶型態標籤的那筆。
+        check("detected_patterns round-trips as a list (not a JSON string)",
+              history[1]["detected_patterns"], ["break_previous_high", "ma_convergence_divergence"])
+        # 沒帶 detected_patterns 的訊號（第二筆插入的，created_at=2000）預設是空 list，
+        # 不是 None——呼叫端不用額外判斷 None 再自己 fallback。
+        check("detected_patterns defaults to empty list when not provided", history[0]["detected_patterns"], [])
 
         history_other = get_signal_history_for("ETH-USDT-SWAP")
         check("get_signal_history_for isolates other instruments", len(history_other), 1)
@@ -526,6 +575,7 @@ if __name__ == "__main__":
             "stop_loss": 95.0, "take_profit_1": 110.0, "take_profit_2": 120.0,
             "ema": 98.0, "box_high": 101.0, "box_low": 99.0,
             "ai_sentiment": "BULLISH", "action_label": "強烈做多", "color": "green",
+            "detected_patterns": ["gap_breakout"],
         })
         resolve_signal(win_id, "hit_tp1", 3100, 110.0, None)
         loss_id = insert_signal({
@@ -534,13 +584,27 @@ if __name__ == "__main__":
             "stop_loss": 95.0, "take_profit_1": 110.0, "take_profit_2": 120.0,
             "ema": 98.0, "box_high": 101.0, "box_low": 99.0,
             "ai_sentiment": "BULLISH", "action_label": "強烈做多", "color": "green",
+            "detected_patterns": ["gap_breakout"],
         })
         resolve_signal(loss_id, "hit_sl", 4100, 95.0, None)
+        set_signal_decision(win_id, "approved", 3050)
 
         kelly_rows = get_resolved_trades_for_kelly()
         check("get_resolved_trades_for_kelly returns only resolved signals", len(kelly_rows), 2)
         check("get_resolved_trades_for_kelly rows carry the fields Kelly math needs",
               set(kelly_rows[0].keys()), {"entry_price", "stop_loss", "resolution", "resolution_price"})
+
+        # get_resolved_for_hit_rate_stats：型態/核准決策命中率分析用的資料來源
+        hit_rate_rows = get_resolved_for_hit_rate_stats()
+        check("get_resolved_for_hit_rate_stats returns only resolved signals", len(hit_rate_rows), 2)
+        check("get_resolved_for_hit_rate_stats rows carry the fields hit-rate stats need",
+              set(hit_rate_rows[0].keys()), {"resolution", "detected_patterns", "user_decision"})
+        check("get_resolved_for_hit_rate_stats: detected_patterns round-trips as a list",
+              all(r["detected_patterns"] == ["gap_breakout"] for r in hit_rate_rows), True)
+        check("get_resolved_for_hit_rate_stats: user_decision reflects set_signal_decision",
+              any(r["user_decision"] == "approved" for r in hit_rate_rows), True)
+        check("get_resolved_for_hit_rate_stats: signal without a decision has user_decision=None",
+              any(r["user_decision"] is None for r in hit_rate_rows), True)
 
         # get_all_previous_oi / set_oi_snapshots_bulk：熱力圖「持倉」模式的全市場批次版本
         check("get_all_previous_oi empty before any snapshot", get_all_previous_oi(), {})
@@ -718,6 +782,11 @@ if __name__ == "__main__":
             migrated_row = get_signal_by_id(1)
             check("migration: pre-existing row survives schema upgrade", migrated_row["inst_id"], "OLD-USDT-SWAP")
             check("migration: new column defaults to None on old rows", migrated_row["user_decision"], None)
+            # detected_patterns 是跟 user_decision 同一輪遷移新加的欄位——舊資料庫升級後
+            # 這一列本來就沒有型態標籤資料，_signal_row_to_dict 要把 NULL 優雅還原成空
+            # list，不是讓呼叫端收到 None 再自己判斷、或是 json.loads(None) 直接炸掉。
+            check("migration: detected_patterns defaults to empty list on old rows (not None, not a crash)",
+                  migrated_row["detected_patterns"], [])
             # 遷移後這個功能要能正常運作，不是只有欄位存在但寫不進去。
             set_signal_decision(1, "rejected", 200)
             check("migration: set_signal_decision works after migrating an old DB", get_signal_by_id(1)["user_decision"], "rejected")

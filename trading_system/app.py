@@ -73,6 +73,9 @@ class BacktestRequest(BaseModel):
     tp1_rr: float | None = None
     tp2_rr: float | None = None
     volume_confirm_multiple: float | None = None
+    stop_loss_mode: str | None = None
+    atr_period: int | None = None
+    atr_multiple: float | None = None
 
 
 class BacktestAllRequest(BaseModel):
@@ -196,6 +199,8 @@ def _dashboard_payload() -> dict:
         "signals": STATE.signals,
         "last_error": STATE.last_error,
         "win_rate_stats": STATE.win_rate_stats,
+        "pattern_hit_rates": STATE.pattern_hit_rates,
+        "decision_hit_rates": STATE.decision_hit_rates,
         "recent_resolved": STATE.recent_resolved,
         "kelly_suggestion": STATE.kelly_suggestion,
         "tuning_note": STATE.tuning_note,
@@ -205,6 +210,7 @@ def _dashboard_payload() -> dict:
         "circuit_breaker": STATE.circuit_breaker,
         "portfolio_exposure": STATE.portfolio_exposure,
         "exposure_gate": STATE.exposure_gate,
+        "direction_concentration_gates": STATE.direction_concentration_gates,
         "scheduler": scheduler.status(),
         "disclaimer": "僅供訊號監控參考，非投資建議；本系統不執行任何自動化下單，也不會自動在背景分析。",
     }
@@ -225,6 +231,9 @@ async def frontend_config():
             "tp1_rr": config.TP1_RR,
             "tp2_rr": config.TP2_RR,
             "volume_confirm_multiple": config.VOLUME_CONFIRM_MULTIPLE,
+            "stop_loss_mode": config.STOP_LOSS_MODE,
+            "atr_period": config.ATR_PERIOD,
+            "atr_multiple": config.ATR_MULTIPLE,
         },
         # 🔔 警報表單只顯示使用者實際能用的通知管道（沒設定金鑰的管道選了也送不到，
         # 不該讓使用者以為選了就有效），不是機密值，純布林旗標。
@@ -238,6 +247,7 @@ async def frontend_config():
         # compute_volatility_gate），前端這裡純粹是把數字顯示出來，不重複判斷邏輯。
         "max_open_positions": config.MAX_OPEN_POSITIONS,
         "max_amplitude_pct": config.MAX_AMPLITUDE_PCT,
+        "max_same_direction_open": config.MAX_SAME_DIRECTION_OPEN,
     }
 
 
@@ -449,11 +459,14 @@ async def analyze_instrument(req: AnalyzeInstrumentRequest):
     circuit_breaker = outcome_tracker.compute_daily_circuit_breaker(
         db.get_resolved_today(now_ms), config.MAX_DAILY_LOSS_COUNT, config.MAX_DAILY_LOSS_R
     )
-    exposure_gate = outcome_tracker.compute_exposure_gate(
-        outcome_tracker.compute_portfolio_exposure(db.get_open_signals())["total_open"], config.MAX_OPEN_POSITIONS
-    )
+    portfolio_exposure = outcome_tracker.compute_portfolio_exposure(db.get_open_signals())
+    exposure_gate = outcome_tracker.compute_exposure_gate(portfolio_exposure["total_open"], config.MAX_OPEN_POSITIONS)
+    direction_concentration_gates = {
+        "long": outcome_tracker.compute_direction_concentration_gate(portfolio_exposure["long_count"], config.MAX_SAME_DIRECTION_OPEN),
+        "short": outcome_tracker.compute_direction_concentration_gate(portfolio_exposure["short_count"], config.MAX_SAME_DIRECTION_OPEN),
+    }
     signal, _candles, _is_new = await background.analyze_one_instrument(
-        _http_client, item, sentiment, now_ms, circuit_breaker, exposure_gate
+        _http_client, item, sentiment, now_ms, circuit_breaker, exposure_gate, direction_concentration_gates,
     )
     if signal is None:
         return JSONResponse(
@@ -472,8 +485,10 @@ async def run_backtest_endpoint(req: BacktestRequest):
     免費的 OKX 歷史 K 線查詢——用量可控，讓使用者不用等 outcome_tracker 累積出足夠的
     「即時」樣本，就能先看到這套規則在過去一段歷史上表現如何。
 
-    ema_period/box_lookback/tp1_rr/tp2_rr/volume_confirm_multiple 都可以在請求裡覆蓋
-    掉 config.py 的預設值（互動式參數回測實驗室用）——不帶就照常用線上分析同一組參數。"""
+    ema_period/box_lookback/tp1_rr/tp2_rr/volume_confirm_multiple/stop_loss_mode/atr_period/
+    atr_multiple 都可以在請求裡覆蓋掉 config.py 的預設值（互動式參數回測實驗室用）——
+    不帶就照常用線上分析同一組參數。stop_loss_mode 讓使用者可以直接用真實歷史資料對照
+    「box_mid」跟「atr」兩種停損模式的實際表現差異，不用改 .env、重啟伺服器才能驗證。"""
     assert _http_client is not None
     bar = req.bar or config.CANDLE_BAR
     limit = min(req.limit or config.BACKTEST_CANDLE_LIMIT, config.BACKTEST_CANDLE_LIMIT)
@@ -482,6 +497,9 @@ async def run_backtest_endpoint(req: BacktestRequest):
     tp1_rr = req.tp1_rr or config.TP1_RR
     tp2_rr = req.tp2_rr or config.TP2_RR
     volume_confirm_multiple = req.volume_confirm_multiple if req.volume_confirm_multiple is not None else config.VOLUME_CONFIRM_MULTIPLE
+    stop_loss_mode = req.stop_loss_mode or config.STOP_LOSS_MODE
+    atr_period = req.atr_period or config.ATR_PERIOD
+    atr_multiple = req.atr_multiple or config.ATR_MULTIPLE
 
     try:
         candles = await okx_client.fetch_confirmed_candles(_http_client, req.inst_id, bar=bar, limit=limit)
@@ -495,12 +513,16 @@ async def run_backtest_endpoint(req: BacktestRequest):
             status_code=422,
         )
 
-    result = backtest.run_backtest(candles, ema_period, box_lookback, tp1_rr, tp2_rr, volume_confirm_multiple)
+    result = backtest.run_backtest(
+        candles, ema_period, box_lookback, tp1_rr, tp2_rr, volume_confirm_multiple,
+        stop_loss_mode, atr_period, atr_multiple,
+    )
     return {
         "ok": True, "inst_id": req.inst_id, "bar": bar, "candle_count": len(candles),
         "params": {
             "ema_period": ema_period, "box_lookback": box_lookback,
             "tp1_rr": tp1_rr, "tp2_rr": tp2_rr, "volume_confirm_multiple": volume_confirm_multiple,
+            "stop_loss_mode": stop_loss_mode, "atr_period": atr_period, "atr_multiple": atr_multiple,
         },
         **result,
     }

@@ -1,6 +1,6 @@
 """型態辨識：從已收盤 K 線（純 OHLC，跟 strategy.py 同一種輸入格式）偵測幾種常見的
 技術分析圖形型態（突破前高、跳空缺口、均線黏合發散、W底雙重底、三角收斂、回踩黃金
-分割位），零額外 AI/API 成本，純數學計算。
+分割位）＋兩種動能背離（RSI 頂背離／底背離），零額外 AI/API 成本，純數學計算。
 
 ⚠️ 誠實範圍說明：這套偵測邏輯的靈感來源是坊間流傳的「25種主升浪啟動形態」型態圖鑑
 （Telegram 頻道教學圖卡，非嚴謹學術文獻，圖卡本身也註明「僅供參考，不做為任何投資
@@ -19,6 +19,12 @@
   只有每根的總成交量、沒有價位分布明細，資料精細度不足以可靠判斷，不實作。
 - 「旗形整理突破／楔形末端突破」跟三角收斂本質上是同一種「趨勢線收斂突破」的變體，
   避免疊床架屋的重複偵測器。
+
+另外補了 2 種跟「形狀」無關、屬於「動能背離」類別的偵測（RSI 頂背離／底背離）：market_pulse.py
+原本只算「當前這一個」RSI 數值給市場情緒儀表板用，這裡另外做了一條完整的 RSI 序列
+（`_rsi_series`），用來比較「前一個轉折點」跟「後一個轉折點」當時各自的 RSI——價格創
+新高但 RSI 反而更低（頂背離）、或價格創新低但 RSI 反而更高（底背離），是常見的動能
+轉弱早期警訊，跟前面 6 種「形狀類」型態是完全不同的判讀角度，值得補上。
 
 **這套偵測結果純粹是資訊揭露，不參與 brain.fuse() 的訊號融合**，不影響任何既有的
 進場/停損/停利判斷——見 background.py 呼叫端說明。跟 oi_tracker.py／funding_rate.py
@@ -281,6 +287,117 @@ def detect_fib_pullback_hold(
     }
 
 
+def _rsi_from_avg(avg_gain: float, avg_loss: float) -> float:
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100.0 - (100.0 / (1.0 + rs)), 2)
+
+
+def _rsi_series(closes: list[float], period: int = 14) -> list:
+    """跟 market_pulse.compute_rsi 同一套 Wilder's RSI 算法，但回傳整條序列（每個索引
+    對應 closes 同一個位置的 RSI，資料不足的位置是 None）——背離偵測要比較「前一個
+    轉折點」跟「後一個轉折點」當時各自的 RSI，不能只看單一個「現在」的數字。"""
+    n = len(closes)
+    series = [None] * n
+    if n < period + 1:
+        return series
+    gains, losses = [], []
+    for i in range(1, n):
+        change = closes[i] - closes[i - 1]
+        gains.append(max(change, 0.0))
+        losses.append(max(-change, 0.0))
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    series[period] = _rsi_from_avg(avg_gain, avg_loss)
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        series[i + 1] = _rsi_from_avg(avg_gain, avg_loss)
+    return series
+
+
+def _find_local_maxima(candles: list[dict], order: int = 3) -> list[tuple]:
+    """跟 _find_local_minima 對稱，找局部高點（波峰）：該根K線的高點比左右各 order 根
+    的高點都高。"""
+    highs = [c["h"] for c in candles]
+    maxima = []
+    for i in range(order, len(highs) - order):
+        left = highs[i - order:i]
+        right = highs[i + 1:i + order + 1]
+        if highs[i] > max(left) and highs[i] > max(right):
+            maxima.append((i, highs[i]))
+    return maxima
+
+
+def _rsi_divergence(
+    candles: list[dict], bearish: bool, rsi_period: int = 14, lookback: int = 45, extrema_order: int = 3,
+) -> dict | None:
+    """RSI 背離共用核心邏輯：bearish=True 找頂背離（回看窗裡最近兩個局部高點，價格
+    後一個高於前一個，但 RSI 反而後一個低於前一個，代表上漲動能沒跟上創新高）；
+    bearish=False 找底背離（最近兩個局部低點，價格後一個低於前一個，但 RSI 反而後一個
+    高於前一個，代表下跌動能沒跟上創新低）。
+
+    找局部極值一律用「回看窗」（不含當前這根），要求極值左右各有 extrema_order 根
+    K線確認轉折——確保比較的是「已經走完、確立的轉折點」，不是還沒定案的最新高低點。
+    兩種情況都額外要求「當前這根」延續轉弱/轉強的方向（頂背離要收在第二個高點之下、
+    底背離要收在第二個低點之上）——背離出現的當下如果馬上又創了更極端的價格，代表
+    背離已經被行情推翻，不該再算數。"""
+    min_len = lookback + rsi_period + 1
+    if len(candles) < min_len:
+        return None
+    window = candles[-(lookback + 1):-1]
+    current = candles[-1]
+    closes_full = [c["c"] for c in candles]
+    rsi_full = _rsi_series(closes_full, rsi_period)
+    offset = len(candles) - 1 - len(window)
+
+    extrema = _find_local_maxima(window, extrema_order) if bearish else _find_local_minima(window, extrema_order)
+    if len(extrema) < 2:
+        return {"detected": False}
+
+    extrema_sorted = sorted(extrema, key=lambda e: e[0])
+    (idx1, price1), (idx2, price2) = extrema_sorted[-2], extrema_sorted[-1]
+    rsi1 = rsi_full[offset + idx1]
+    rsi2 = rsi_full[offset + idx2]
+    if rsi1 is None or rsi2 is None:
+        return {"detected": False}
+
+    if bearish:
+        price_diverged = price2 > price1
+        rsi_diverged = rsi2 < rsi1
+        confirmed = current["c"] < price2
+    else:
+        price_diverged = price2 < price1
+        rsi_diverged = rsi2 > rsi1
+        confirmed = current["c"] > price2
+
+    detected = bool(price_diverged and rsi_diverged and confirmed)
+    return {
+        "detected": detected,
+        "price_1": round(price1, 8), "price_2": round(price2, 8),
+        "rsi_1": rsi1, "rsi_2": rsi2,
+    }
+
+
+def detect_rsi_bearish_divergence(candles: list[dict], rsi_period: int = 14, lookback: int = 45, extrema_order: int = 3) -> dict | None:
+    """RSI 頂背離：價格創新高，但 RSI 沒有跟著創新高，是常見的上漲動能轉弱早期警訊。
+    見 _rsi_divergence 說明。"""
+    result = _rsi_divergence(candles, bearish=True, rsi_period=rsi_period, lookback=lookback, extrema_order=extrema_order)
+    if result is None:
+        return None
+    return {"pattern": "rsi_bearish_divergence", **result}
+
+
+def detect_rsi_bullish_divergence(candles: list[dict], rsi_period: int = 14, lookback: int = 45, extrema_order: int = 3) -> dict | None:
+    """RSI 底背離：價格創新低，但 RSI 沒有跟著創新低，是常見的下跌動能轉弱早期警訊。
+    見 _rsi_divergence 說明。"""
+    result = _rsi_divergence(candles, bearish=False, rsi_period=rsi_period, lookback=lookback, extrema_order=extrema_order)
+    if result is None:
+        return None
+    return {"pattern": "rsi_bullish_divergence", **result}
+
+
 PATTERN_DETECTORS = (
     ("break_previous_high", "突破前高", detect_break_previous_high),
     ("gap_breakout", "跳空缺口突破", detect_gap_breakout),
@@ -288,14 +405,17 @@ PATTERN_DETECTORS = (
     ("double_bottom", "W底雙重底", detect_double_bottom),
     ("triangle_convergence", "三角收斂突破", detect_triangle_convergence),
     ("fib_pullback_hold", "回踩黃金分割位", detect_fib_pullback_hold),
+    ("rsi_bearish_divergence", "RSI 頂背離", detect_rsi_bearish_divergence),
+    ("rsi_bullish_divergence", "RSI 底背離", detect_rsi_bullish_divergence),
 )
 
 
 def detect_patterns(candles: list[dict]) -> list[dict]:
-    """跑過全部 6 種型態偵測器，回傳「當前這根K線」偵測到的型態清單（[]、一種、或
-    同時好幾種都有可能）。純資訊揭露，不參與 brain.fuse() 的訊號融合，不影響任何
-    既有的進場/停損/停利判斷——見模組說明。任何一個偵測器丟例外（理論上不會，但
-    防禦性處理）或資料不足回傳 None，直接跳過那一種，不影響其他偵測器。"""
+    """跑過全部 8 種型態偵測器（見 PATTERN_DETECTORS），回傳「當前這根K線」偵測到的
+    型態清單（[]、一種、或同時好幾種都有可能）。純資訊揭露，不參與 brain.fuse() 的
+    訊號融合，不影響任何既有的進場/停損/停利判斷——見模組說明。任何一個偵測器丟例外
+    （理論上不會，但防禦性處理）或資料不足回傳 None，直接跳過那一種，不影響其他
+    偵測器。"""
     results = []
     for key, label, fn in PATTERN_DETECTORS:
         try:
@@ -449,6 +569,63 @@ if __name__ == "__main__":
 
     r12 = detect_fib_pullback_hold(flat(61), swing_lookback=60)
     check("fib_pullback: flat history, no swing -> not detected", r12["detected"], False)
+
+    # ---------- detect_rsi_bearish_divergence / detect_rsi_bullish_divergence ----------
+    check("rsi_bearish_div: insufficient data -> None", detect_rsi_bearish_divergence(flat(10), lookback=45), None)
+    check("rsi_bullish_div: insufficient data -> None", detect_rsi_bullish_divergence(flat(10), lookback=45), None)
+
+    def mk(prices):
+        return [{"o": p, "h": p + 0.3, "l": p - 0.3, "c": p, "vol": 1000.0} for p in prices]
+
+    # 頂背離情境：warmup -> 強力急拉到波峰1（動能足、RSI衝高）-> 拉回 -> 較弱、較顛簸的
+    # 長拉升到波峰2（價格創新高，但動能疲弱、RSI 反而比波峰1低）-> 波峰2後回落幾根確認
+    # 轉折 -> 當前這根延續走弱（收在波峰2之下）。
+    bear_warmup = [100.0 - i * 0.05 for i in range(20)]
+    bear_rally1 = [bear_warmup[-1] + i * 1.5 for i in range(1, 11)]
+    bear_peak1 = bear_rally1[-1]
+    bear_pullback = [bear_peak1 - i * 1.0 for i in range(1, 8)]
+    bear_rally2, p = [], bear_pullback[-1]
+    for i in range(30):
+        p += (-0.4 if i % 3 == 2 else 0.9)
+        bear_rally2.append(p)
+    bear_peak2 = max(bear_rally2)
+    bear_rally2_trimmed = bear_rally2[:bear_rally2.index(bear_peak2) + 1]
+    bear_decline_after = [bear_peak2 - i * 0.8 for i in range(1, 5)]
+    bear_current = [bear_decline_after[-1] - 0.5]
+    bear_candles = mk(bear_warmup + bear_rally1 + bear_pullback + bear_rally2_trimmed + bear_decline_after + bear_current)
+
+    r13 = detect_rsi_bearish_divergence(bear_candles, lookback=45)
+    check("rsi_bearish_div: higher price high + lower RSI high + weakening now -> detected", r13["detected"], True)
+    check("rsi_bearish_div: price_2 is the higher of the two highs", r13["price_2"] > r13["price_1"], True)
+    check("rsi_bearish_div: rsi_2 is lower than rsi_1 (momentum didn't confirm the new high)", r13["rsi_2"] < r13["rsi_1"], True)
+
+    r14 = detect_rsi_bearish_divergence(flat(80), lookback=45)
+    check("rsi_bearish_div: flat history (no real peaks) -> not detected", r14["detected"], False)
+
+    # 底背離情境：warmup -> 急跌到波谷1 -> 反彈 -> 較弱、較顛簸的長跌到波谷2（價格創新低，
+    # 但下跌動能疲弱、RSI 反而比波谷1高）-> 波谷2後反彈幾根確認轉折 -> 當前這根延續轉強
+    # （收在波谷2之上）。
+    bull_warmup = [100.0 + i * 0.05 for i in range(20)]
+    bull_decline1 = [bull_warmup[-1] - i * 1.5 for i in range(1, 11)]
+    bull_trough1 = bull_decline1[-1]
+    bull_bounce = [bull_trough1 + i * 1.0 for i in range(1, 8)]
+    bull_decline2, p = [], bull_bounce[-1]
+    for i in range(30):
+        p += (0.4 if i % 3 == 2 else -0.9)
+        bull_decline2.append(p)
+    bull_trough2 = min(bull_decline2)
+    bull_decline2_trimmed = bull_decline2[:bull_decline2.index(bull_trough2) + 1]
+    bull_bounce_after = [bull_trough2 + i * 0.8 for i in range(1, 5)]
+    bull_current = [bull_bounce_after[-1] + 0.5]
+    bull_candles = mk(bull_warmup + bull_decline1 + bull_bounce + bull_decline2_trimmed + bull_bounce_after + bull_current)
+
+    r15 = detect_rsi_bullish_divergence(bull_candles, lookback=45)
+    check("rsi_bullish_div: lower price low + higher RSI low + strengthening now -> detected", r15["detected"], True)
+    check("rsi_bullish_div: price_2 is the lower of the two lows", r15["price_2"] < r15["price_1"], True)
+    check("rsi_bullish_div: rsi_2 is higher than rsi_1 (downward momentum didn't confirm the new low)", r15["rsi_2"] > r15["rsi_1"], True)
+
+    r16 = detect_rsi_bullish_divergence(flat(80), lookback=45)
+    check("rsi_bullish_div: flat history (no real troughs) -> not detected", r16["detected"], False)
 
     # ---------- detect_patterns（聚合器） ----------
     check("detect_patterns: flat history detects nothing", detect_patterns(flat(70)), [])

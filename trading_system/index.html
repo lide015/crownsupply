@@ -328,6 +328,7 @@
       </div>
       <div id="portfolio-concentration-warning" class="hidden text-xs text-yellow-300 bg-yellow-950/30 border border-yellow-800/50 rounded-lg px-3 py-2"></div>
       <div id="portfolio-exposure-cap-warning" class="hidden text-xs text-orange-300 bg-orange-950/30 border border-orange-800/50 rounded-lg px-3 py-2"></div>
+      <div id="portfolio-direction-gate-warning" class="hidden text-xs text-orange-300 bg-orange-950/30 border border-orange-800/50 rounded-lg px-3 py-2 space-y-1"></div>
     </div>
 
     <section class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg space-y-3">
@@ -344,6 +345,22 @@
         不呼叫 AI）。累積夠多已驗證訊號後，勝率偏低會自動調高篩選門檻——上面有調整會顯示原因。
       </p>
       <div id="resolved-list" class="hidden space-y-2"></div>
+
+      <details class="bg-gray-950 border border-gray-800 rounded-lg">
+        <summary class="cursor-pointer select-none px-3 py-2 text-xs text-gray-400 font-semibold">📚 型態／核准決策事後命中率分析</summary>
+        <div class="px-3 pb-3 space-y-3">
+          <p class="text-[11px] text-gray-600 leading-relaxed">
+            型態標籤（見「🔍 偵測到型態」）目前純粹是資訊揭露、不影響任何進場判斷——這裡回頭統計
+            「這個標籤出現時，後續實際勝率是多少」，把單純的資訊揭露變成有實據可以參考的訊息。
+            樣本數太少（少於 5 筆）的標籤會標「僅供參考」，不是統計壞了。
+          </p>
+          <div id="pattern-hit-rates" class="space-y-1.5"></div>
+          <div class="border-t border-gray-800 pt-3">
+            <div class="text-[11px] text-gray-500 font-semibold mb-2">核准決策事後命中率——你自己核准/觀察/拒絕的訊號，後續實際勝率分別是多少</div>
+            <div id="decision-hit-rates" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section class="space-y-3">
@@ -699,8 +716,20 @@
           <label class="block text-gray-500">量能確認倍數
             <input id="bt-param-vol" type="number" min="0" step="0.1" class="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-200 font-mono" />
           </label>
+          <label class="block text-gray-500">停損模式
+            <select id="bt-param-stop-mode" class="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-200">
+              <option value="box_mid">盒子中點（預設）</option>
+              <option value="atr">ATR 動態</option>
+            </select>
+          </label>
+          <label class="block text-gray-500">ATR 週期
+            <input id="bt-param-atr-period" type="number" min="2" step="1" class="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-200 font-mono" />
+          </label>
+          <label class="block text-gray-500">ATR 倍數
+            <input id="bt-param-atr-multiple" type="number" min="0.1" step="0.1" class="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-200 font-mono" />
+          </label>
         </div>
-        <p class="px-3 pb-3 text-[10px] text-gray-600 leading-relaxed">量能確認倍數設 0 代表不啟用量能過濾。調整後按下面「執行歷史回測」會用這組參數重新跑，方便直接比較不同參數在這檔商品上的歷史表現。</p>
+        <p class="px-3 pb-3 text-[10px] text-gray-600 leading-relaxed">量能確認倍數設 0 代表不啟用量能過濾。停損模式選「ATR 動態」時，停損距離改用 ATR×倍數決定（波動大自動放寬、波動小自動收緊），跟盒子寬度脫鉤——ATR 週期/倍數只在選了這個模式時才有作用。調整後按下面「執行歷史回測」會用這組參數重新跑，方便直接比較不同參數在這檔商品上的歷史表現。</p>
       </details>
 
       <button id="inst-modal-analyze-btn"
@@ -919,7 +948,7 @@ function renderCircuitBreakerBanner(cb) {
 /* 📦 持倉組合風險總覽——現在同時開著幾筆未結算訊號，跟每日虧損斷路器（看「今天已發生」）
    是互補的兩個時間視角，這個看「現在正在承受」。集中度警訊刻意講清楚不是嚴謹的統計
    相關係數，只是同方向曝險的方向性提醒（見 outcome_tracker.compute_portfolio_exposure）。*/
-function renderPortfolioExposure(exposure, exposureGate) {
+function renderPortfolioExposure(exposure, exposureGate, directionGates) {
   const wrap = document.getElementById("portfolio-exposure-wrap");
   if (!exposure || exposure.total_open === 0) {
     wrap.classList.add("hidden");
@@ -949,6 +978,19 @@ function renderPortfolioExposure(exposure, exposureGate) {
   } else {
     capWarnEl.classList.add("hidden");
   }
+  // 🚧 同方向曝險關卡（可選，預設關閉，見 outcome_tracker.compute_direction_concentration_gate）：
+  // long/short 各自獨立，理論上兩邊都可能同時觸發（雖然實務上少見），都顯示出來，不會
+  // 只挑一邊、讓使用者誤以為另一邊沒事。
+  const dirWarnEl = document.getElementById("portfolio-direction-gate-warning");
+  const activeDirMsgs = ["long", "short"]
+    .filter((dir) => directionGates && directionGates[dir] && directionGates[dir].active)
+    .map((dir) => `🚧 ${directionGates[dir].reason}`);
+  if (activeDirMsgs.length > 0) {
+    dirWarnEl.innerHTML = activeDirMsgs.map((msg) => `<div>${msg}</div>`).join("");
+    dirWarnEl.classList.remove("hidden");
+  } else {
+    dirWarnEl.classList.add("hidden");
+  }
 }
 
 function renderWinRate(stats) {
@@ -963,6 +1005,56 @@ function renderWinRate(stats) {
   badge.className = healthy
     ? "px-3 py-1 text-xs font-bold rounded-full bg-green-950 text-green-400 border border-green-800"
     : "px-3 py-1 text-xs font-bold rounded-full bg-red-950 text-red-400 border border-red-800";
+}
+
+/* 📚 型態命中率統計——見 outcome_tracker.compute_pattern_hit_rates 說明，純資訊揭露的
+   型態標籤回頭對照歷史勝率，不是偷偷過濾樣本數太少的標籤，用 reliable 欄位明講。 */
+function renderPatternHitRates(rows) {
+  const wrap = document.getElementById("pattern-hit-rates");
+  if (!rows || rows.length === 0) {
+    wrap.innerHTML = `<div class="text-xs text-gray-600">目前還沒有累積到任何帶型態標籤的已結算訊號。</div>`;
+    return;
+  }
+  wrap.innerHTML = rows.map((r) => {
+    const winRateCls = r.win_rate_pct == null ? "text-gray-500" : (r.win_rate_pct >= 50 ? "text-green-400" : "text-red-400");
+    const reliableBadge = r.reliable
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded border border-teal-800 text-teal-400 whitespace-nowrap">樣本足夠</span>`
+      : `<span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-500 whitespace-nowrap">樣本太少，僅供參考</span>`;
+    return `<div class="flex items-center justify-between gap-2 text-xs bg-gray-900 rounded-lg px-3 py-2 border border-gray-800">
+      <span class="text-gray-300">${r.label}</span>
+      <span class="flex items-center gap-2">
+        <span class="text-gray-500 font-mono">${r.wins}勝${r.losses}敗</span>
+        <span class="${winRateCls} font-mono font-bold">${r.win_rate_pct != null ? r.win_rate_pct + "%" : "—"}</span>
+        ${reliableBadge}
+      </span>
+    </div>`;
+  }).join("");
+}
+
+const DECISION_META = {
+  approved: { label: "✅ 已核准" },
+  watching: { label: "👀 觀察中" },
+  rejected: { label: "🚫 已拒絕" },
+  no_decision: { label: "— 未表態" },
+};
+
+/* 核准決策事後命中率——見 outcome_tracker.compute_decision_hit_rates 說明，四組固定都
+   顯示（就算某組完全沒樣本），不會讓使用者誤以為那組資料消失或統計出錯。 */
+function renderDecisionHitRates(stats) {
+  const wrap = document.getElementById("decision-hit-rates");
+  if (!stats) {
+    wrap.innerHTML = "";
+    return;
+  }
+  wrap.innerHTML = Object.keys(DECISION_META).map((key) => {
+    const s = stats[key] || { total: 0, wins: 0, losses: 0, win_rate_pct: null, reliable: false };
+    const winRateCls = s.win_rate_pct == null ? "text-gray-500" : (s.win_rate_pct >= 50 ? "text-green-400" : "text-red-400");
+    return `<div class="bg-gray-900 rounded-lg px-3 py-2 border border-gray-800 text-center">
+      <div class="text-[11px] text-gray-400">${DECISION_META[key].label}</div>
+      <div class="${winRateCls} font-mono font-bold text-sm">${s.win_rate_pct != null ? s.win_rate_pct + "%" : "—"}</div>
+      <div class="text-[10px] text-gray-600">${s.total} 筆${s.total > 0 && !s.reliable ? "・樣本偏少" : ""}</div>
+    </div>`;
+  }).join("");
 }
 
 const RESOLUTION_META = {
@@ -1434,8 +1526,10 @@ function renderDashboard(data) {
 
   renderTuningBanner(data.tuning_note);
   renderCircuitBreakerBanner(data.circuit_breaker);
-  renderPortfolioExposure(data.portfolio_exposure, data.exposure_gate);
+  renderPortfolioExposure(data.portfolio_exposure, data.exposure_gate, data.direction_concentration_gates);
   renderWinRate(data.win_rate_stats);
+  renderPatternHitRates(data.pattern_hit_rates);
+  renderDecisionHitRates(data.decision_hit_rates);
   renderResolvedList(data.recent_resolved);
   renderKellySuggestion(data.kelly_suggestion);
   renderMarketPulse(data.market_pulse);
@@ -2532,6 +2626,9 @@ function renderInstrumentModal(data) {
   document.getElementById("bt-param-tp1").value = backtestDefaults.tp1_rr;
   document.getElementById("bt-param-tp2").value = backtestDefaults.tp2_rr;
   document.getElementById("bt-param-vol").value = backtestDefaults.volume_confirm_multiple;
+  document.getElementById("bt-param-stop-mode").value = backtestDefaults.stop_loss_mode || "box_mid";
+  document.getElementById("bt-param-atr-period").value = backtestDefaults.atr_period;
+  document.getElementById("bt-param-atr-multiple").value = backtestDefaults.atr_multiple;
 
   // 📈 K線走勢圖：疊加線一律直接讀 signal 已經算好、畫面其他地方也在用的同一組數字
   // （停損/停利/進場價），不會另外算一套可能兜不起來的版本——「重點資訊要正確」的
@@ -2563,6 +2660,9 @@ function _readBacktestParamOverrides() {
     tp1_rr: readNum("bt-param-tp1"),
     tp2_rr: readNum("bt-param-tp2"),
     volume_confirm_multiple: readNum("bt-param-vol"),
+    stop_loss_mode: document.getElementById("bt-param-stop-mode").value || null,
+    atr_period: readNum("bt-param-atr-period"),
+    atr_multiple: readNum("bt-param-atr-multiple"),
   };
 }
 
@@ -2594,7 +2694,8 @@ async function runBacktestFromModal(instId) {
 
 function _backtestParamsLineHtml(params) {
   if (!params) return "";
-  return `<div class="text-gray-600">這次用的參數：EMA${params.ema_period}／盒子${params.box_lookback}根／TP1×${params.tp1_rr}／TP2×${params.tp2_rr}／量能確認${params.volume_confirm_multiple > 0 ? `×${params.volume_confirm_multiple}` : "未啟用"}</div>`;
+  const stopModeLabel = params.stop_loss_mode === "atr" ? `ATR動態(週期${params.atr_period}×${params.atr_multiple})` : "盒子中點";
+  return `<div class="text-gray-600">這次用的參數：EMA${params.ema_period}／盒子${params.box_lookback}根／TP1×${params.tp1_rr}／TP2×${params.tp2_rr}／量能確認${params.volume_confirm_multiple > 0 ? `×${params.volume_confirm_multiple}` : "未啟用"}／停損模式：${stopModeLabel}</div>`;
 }
 
 function renderBacktestResultHtml(data) {
@@ -3251,7 +3352,7 @@ async function loadLastResult() {
 /* 🔧 互動式參數回測實驗室的預設值——內建這組數字只是「連不上後端時的最後防線」，
    正常情況下一律以 /api/v1/config 回傳的 backend_defaults 為準，兩邊要對得起來
    不用另外維護一份可能兜不起來的數字。 */
-let backtestDefaults = { ema_period: 20, box_lookback: 15, tp1_rr: 1.5, tp2_rr: 2.0, volume_confirm_multiple: 1.1 };
+let backtestDefaults = { ema_period: 20, box_lookback: 15, tp1_rr: 1.5, tp2_rr: 2.0, volume_confirm_multiple: 1.1, stop_loss_mode: "box_mid", atr_period: 14, atr_multiple: 1.5 };
 // 走勢圖時間週期切換鈕的「訊號依據」標記用（見 renderChartTimeframePills）——連不上
 // 後端前先猜一個最常見的預設值，跟 config.py 的 CANDLE_BAR 預設一致，之後拿到真正的
 // 值會覆蓋掉。
@@ -3278,7 +3379,7 @@ async function loadBacktestDefaults() {
       // renderPortfolioExposure() 當時讀到的 maxOpenPositions 還是初始值 0（不顯示
       // 上限），這裡拿到真正的值之後補一次重繪，把「/ 上限 X」補上，不用等下一次
       // 15 秒報價輪詢或使用者手動重新整理才會出現。
-      if (lastDashboardData) renderPortfolioExposure(lastDashboardData.portfolio_exposure, lastDashboardData.exposure_gate);
+      if (lastDashboardData) renderPortfolioExposure(lastDashboardData.portfolio_exposure, lastDashboardData.exposure_gate, lastDashboardData.direction_concentration_gates);
     }
   } catch (err) {
     console.error("讀取回測預設參數失敗，沿用內建預設值：", err);
