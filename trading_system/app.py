@@ -80,6 +80,17 @@ class BacktestAllRequest(BaseModel):
     limit: int | None = None
 
 
+class BacktestSweepRequest(BaseModel):
+    inst_id: str
+    bar: str | None = None
+    limit: int | None = None
+    # ema_period 刻意不開放覆蓋——見 backtest.run_sweep 說明，這是策略品牌識別的核心參數，
+    # 不納入掃描範圍。其餘三組參數不帶就用 backtest.py 內建的預設掃描範圍。
+    box_lookback_options: list[int] | None = None
+    tp_rr_options: list[list[float]] | None = None  # [[tp1_rr, tp2_rr], ...]
+    volume_confirm_options: list[float] | None = None
+
+
 class SchedulerConfigRequest(BaseModel):
     # 兩個欄位都選填：只想開關就只帶 enabled，只想調間隔就只帶 interval_seconds，
     # 兩個都帶就一次改好。不帶的欄位維持原樣。
@@ -492,6 +503,70 @@ async def run_backtest_endpoint(req: BacktestRequest):
             "tp1_rr": tp1_rr, "tp2_rr": tp2_rr, "volume_confirm_multiple": volume_confirm_multiple,
         },
         **result,
+    }
+
+
+@app.post("/api/v1/backtest/sweep")
+async def run_backtest_sweep_endpoint(req: BacktestSweepRequest):
+    """🔬 參數掃描：同一批歷史K線，把 box_lookback／(tp1_rr,tp2_rr)／volume_confirm_multiple
+    的多種組合各跑一次歷史回測（見 backtest.run_sweep 說明），依品質分數排序全部回傳——
+    用真實歷史資料實測找出「這批資料上表現比較好」的參數，取代憑感覺猜測。不呼叫任何 AI，
+    K線只多抓一次（限制、快取邏輯跟 /api/v1/backtest 完全一致），掃描本身純粹是記憶體裡的
+    運算，不會額外打 OKX API。
+
+    額外回傳 baseline：用「現在系統實際在用」的 config.py 預設參數，對同一批K線跑一次
+    單組回測——讓使用者可以直接對照「掃描出來的最佳組合」相對於「現在的預設值」到底差多少，
+    不是只丟一個孤立的排行榜自己去猜。"""
+    assert _http_client is not None
+    bar = req.bar or config.CANDLE_BAR
+    limit = min(req.limit or config.BACKTEST_CANDLE_LIMIT, config.BACKTEST_CANDLE_LIMIT)
+    ema_period = config.EMA_PERIOD
+
+    box_lookback_options = tuple(req.box_lookback_options) if req.box_lookback_options else backtest.DEFAULT_SWEEP_BOX_LOOKBACKS
+    tp_rr_options = tuple(tuple(pair) for pair in req.tp_rr_options) if req.tp_rr_options else backtest.DEFAULT_SWEEP_TP_RR_PAIRS
+    volume_confirm_options = tuple(req.volume_confirm_options) if req.volume_confirm_options else backtest.DEFAULT_SWEEP_VOLUME_CONFIRM_MULTIPLES
+
+    # 防呆：使用者自訂範圍太大時，組合數可能爆炸（例如各帶 50 個選項就是 12.5 萬組）——
+    # 明確拒絕並說清楚上限是多少，不要讓一次請求把伺服器卡住半天，也不是默默截斷、讓使用者
+    # 誤以為掃描了完整範圍。
+    combo_count = len(box_lookback_options) * len(tp_rr_options) * len(volume_confirm_options)
+    max_combos = 500
+    if combo_count > max_combos:
+        return JSONResponse(
+            {"ok": False, "message": f"參數組合數 {combo_count} 超過上限 {max_combos}，請縮小 box_lookback_options／tp_rr_options／volume_confirm_options 的範圍再試一次。"},
+            status_code=422,
+        )
+
+    try:
+        candles = await okx_client.fetch_confirmed_candles(_http_client, req.inst_id, bar=bar, limit=limit)
+    except Exception as exc:  # noqa: BLE001 — 單一商品查不到不該讓整個端點掛掉
+        return JSONResponse({"ok": False, "message": f"抓不到 {req.inst_id} 的歷史 K 線：{exc}"}, status_code=502)
+
+    min_len = max(ema_period, max(box_lookback_options) + 1)
+    if len(candles) < min_len:
+        return JSONResponse(
+            {"ok": False, "message": f"這檔商品在 {bar} 週期只抓到 {len(candles)} 根已收盤K線，不夠跑掃描範圍裡最長的 box_lookback（至少要 {min_len} 根），換更長的K線週期或縮小掃描範圍再試一次。"},
+            status_code=422,
+        )
+
+    baseline = backtest.run_backtest(
+        candles, config.EMA_PERIOD, config.BOX_LOOKBACK, config.TP1_RR, config.TP2_RR, config.VOLUME_CONFIRM_MULTIPLE,
+    )
+    sweep = backtest.run_sweep(candles, ema_period, box_lookback_options, tp_rr_options, volume_confirm_options)
+
+    return {
+        "ok": True, "inst_id": req.inst_id, "bar": bar, "candle_count": len(candles),
+        "baseline": {
+            "params": {
+                "ema_period": config.EMA_PERIOD, "box_lookback": config.BOX_LOOKBACK,
+                "tp1_rr": config.TP1_RR, "tp2_rr": config.TP2_RR,
+                "volume_confirm_multiple": config.VOLUME_CONFIRM_MULTIPLE,
+            },
+            "total_trades": baseline["total_trades"], "win_rate_pct": baseline["win_rate_pct"],
+            "avg_r_multiple": baseline["avg_r_multiple"], "max_consecutive_losses": baseline["max_consecutive_losses"],
+            "profit_factor": baseline["profit_factor"],
+        },
+        **sweep,
     }
 
 

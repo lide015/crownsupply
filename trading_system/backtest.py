@@ -103,6 +103,86 @@ def run_backtest(
     return result
 
 
+DEFAULT_SWEEP_BOX_LOOKBACKS = (10, 15, 20, 25, 30)
+DEFAULT_SWEEP_TP_RR_PAIRS = ((1.0, 1.5), (1.5, 2.0), (1.5, 2.5), (2.0, 3.0), (2.0, 4.0))
+DEFAULT_SWEEP_VOLUME_CONFIRM_MULTIPLES = (0.0, 1.1, 1.5, 2.0)
+# 樣本數低於這個門檻，不管數字多漂亮都不可靠——3 筆全贏跟 30 筆 70% 勝率，前者的
+# 「100% 勝率」統計上幾乎沒有意義，只是運氣好而已。見 run_sweep 說明。
+SWEEP_MIN_RELIABLE_TRADES = 5
+
+
+def _sweep_sort_key(item: dict) -> tuple:
+    """排序準則：先看 reliable（True 排在 False 前面），同樣可靠等級裡用 profit_factor
+    由高到低排（None 代表「這組參數在這批資料上沒有任何虧損交易」——不是資料不足，是真的
+    沒輸過，用 +inf 排到比任何有限 profit_factor 都前面；total_trades=0 那種真正沒資料的
+    None 用 -inf，但這種情況 reliable 已經是 False，排序上已經墊底，這裡的 -inf 只是讓
+    「同樣不可靠」的組合裡也有一個明確、不會跟「全勝」混淆的次序），最後用 avg_r_multiple
+    當第二關鍵字打平。"""
+    reliable_rank = 1 if item["reliable"] else 0
+    pf = item["profit_factor"]
+    if pf is None:
+        pf_rank = float("inf") if item["total_trades"] > 0 else float("-inf")
+    else:
+        pf_rank = pf
+    avg_r_rank = item["avg_r_multiple"] if item["avg_r_multiple"] is not None else float("-inf")
+    return (reliable_rank, pf_rank, avg_r_rank)
+
+
+def run_sweep(
+    candles: list[dict],
+    ema_period: int = 20,
+    box_lookback_options: tuple = DEFAULT_SWEEP_BOX_LOOKBACKS,
+    tp_rr_options: tuple = DEFAULT_SWEEP_TP_RR_PAIRS,
+    volume_confirm_options: tuple = DEFAULT_SWEEP_VOLUME_CONFIRM_MULTIPLES,
+) -> dict:
+    """參數掃描：同一批歷史K線，把 box_lookback × (tp1_rr, tp2_rr) × volume_confirm_multiple
+    的每一種組合各跑一次 run_backtest()，依「品質分數」由高到低排序回傳全部組合——不是憑
+    經驗猜一組參數，而是拿同一批真實歷史資料，對很多組參數做同一套零look-ahead-bias的回放，
+    用實際模擬出來的數字挑出「這批資料上表現比較好」的參數，取代憑感覺猜測。
+
+    ⚠️ 三個必須讓使用者看到的誠實限制：
+    1. 這是「過去這批資料上表現最好」，不是「未來一定最好」——參數是拿同一批歷史資料挑出來
+       的，本質上有過度擬合(overfitting)這批歷史的風險，不保證換一批未來的走勢還一樣有效，
+       這也是為什麼這裡刻意提供「掃描全部組合」而不是只回傳單一個「最佳解」——使用者自己
+       看得到第二名、第三名的參數跟冠軍差多少，一個孤立的最高分數字容易誤導成「這就是
+       唯一正解」。
+    2. total_trades 太少（< SWEEP_MIN_RELIABLE_TRADES）的組合，不管 profit_factor/勝率
+       數字多漂亮都不可靠，用 reliable 欄位明確標示，不是偷偷過濾掉、也不是假裝每組結果
+       都一樣可信。
+    3. ema_period 刻意不納入掃描範圍，固定用呼叫端傳入的值——這是整個系統「20 EMA + 盒子
+       突破」策略品牌識別的核心參數，拿掉它掃描等於在測試一個完全不同的策略，不是原本這套
+       規則的參數微調。
+
+    回傳 {"combos_tested": int, "results": [...依上述準則排序，全部組合都在，沒有做任何
+    截斷或省略...]}——每個 result 是
+    {"params": {"ema_period","box_lookback","tp1_rr","tp2_rr","volume_confirm_multiple"},
+    "total_trades","win_rate_pct","avg_r_multiple","max_consecutive_losses","profit_factor",
+    "reliable": bool}。"""
+    results = []
+    for box_lookback in box_lookback_options:
+        for tp1_rr, tp2_rr in tp_rr_options:
+            for volume_confirm_multiple in volume_confirm_options:
+                summary = run_backtest(candles, ema_period, box_lookback, tp1_rr, tp2_rr, volume_confirm_multiple)
+                results.append({
+                    "params": {
+                        "ema_period": ema_period,
+                        "box_lookback": box_lookback,
+                        "tp1_rr": tp1_rr,
+                        "tp2_rr": tp2_rr,
+                        "volume_confirm_multiple": volume_confirm_multiple,
+                    },
+                    "total_trades": summary["total_trades"],
+                    "win_rate_pct": summary["win_rate_pct"],
+                    "avg_r_multiple": summary["avg_r_multiple"],
+                    "max_consecutive_losses": summary["max_consecutive_losses"],
+                    "profit_factor": summary["profit_factor"],
+                    "reliable": summary["total_trades"] >= SWEEP_MIN_RELIABLE_TRADES,
+                })
+
+    results.sort(key=_sweep_sort_key, reverse=True)
+    return {"combos_tested": len(results), "results": results}
+
+
 def _compute_buy_hold_pct(candles: list[dict]) -> float | None:
     """同一段回測期間，如果單純買進持有到底（不做任何交易），價格報酬率是多少——純粹
     給使用者一個對照組參考：如果策略的表現還不如單純抱著不動，那這套規則的價值就存疑。
@@ -266,6 +346,48 @@ if __name__ == "__main__":
     ]
     result_strong_vol = run_backtest(strong_vol_breakout, ema_period=20, box_lookback=15, volume_confirm_multiple=1.2)
     check("strong-volume breakout still counted during backtest replay", result_strong_vol["total_trades"], 1)
+
+    # 8) run_sweep：組合數 = box_lookback 選項 × tp_rr 選項 × volume_confirm 選項
+    sweep_empty = run_sweep(
+        [{"o": 1, "h": 1, "l": 1, "c": 1, "ts": 0, "vol": 100}] * 5,
+        box_lookback_options=(10, 15), tp_rr_options=((1.5, 2.0),), volume_confirm_options=(0.0, 1.1),
+    )
+    check("sweep combos_tested = 2*1*2", sweep_empty["combos_tested"], 4)
+    check("sweep with insufficient data -> every combo 0 trades", all(r["total_trades"] == 0 for r in sweep_empty["results"]), True)
+    check("sweep with insufficient data -> every combo unreliable", all(r["reliable"] is False for r in sweep_empty["results"]), True)
+
+    # 9) 用一段會產生多筆交易的走勢（反覆突破-拉回-再突破），驗證排序邏輯跟 reliable 門檻
+    repeating = []
+    price = 100.0
+    for cycle in range(8):
+        base = price
+        repeating += [{"ts": len(repeating) + i, "o": base, "h": base + 1.0, "l": base - 1.0, "c": base, "vol": 1000.0} for i in range(16)]
+        breakout_price = base + 6.0
+        repeating.append({"ts": len(repeating), "o": base, "h": breakout_price + 1.0, "l": base, "c": breakout_price, "vol": 1000.0})
+        repeating.append({"ts": len(repeating), "o": breakout_price, "h": breakout_price + 11.0, "l": breakout_price - 1.0, "c": breakout_price + 10.0, "vol": 1000.0})
+        price = breakout_price + 10.0
+
+    sweep_result = run_sweep(
+        repeating, ema_period=10,
+        box_lookback_options=(10, 15), tp_rr_options=((1.5, 2.0), (2.0, 3.0)), volume_confirm_options=(0.0,),
+    )
+    check("sweep combos_tested = 2*2*1", sweep_result["combos_tested"], 4)
+    check("sweep results all have expected keys", set(sweep_result["results"][0].keys()),
+          {"params", "total_trades", "win_rate_pct", "avg_r_multiple", "max_consecutive_losses", "profit_factor", "reliable"})
+    # 排序驗證：reliable 的組合一定排在不可靠的組合前面（不會出現「先看到不可靠、後看到可靠」）
+    reliable_flags = [r["reliable"] for r in sweep_result["results"]]
+    first_false = reliable_flags.index(False) if False in reliable_flags else len(reliable_flags)
+    check("sweep results sorted: no True appears after the first False", all(f is False for f in reliable_flags[first_false:]), True)
+
+    # 10) _sweep_sort_key：「全勝、沒有虧損」(profit_factor=None 但 total_trades>0) 要排在
+    # 「有輸有贏但 profit_factor 有限值」前面，而不是被 None 誤判成最差
+    all_win_item = {"reliable": True, "profit_factor": None, "total_trades": 6, "avg_r_multiple": 1.8}
+    mixed_item = {"reliable": True, "profit_factor": 3.0, "total_trades": 6, "avg_r_multiple": 1.2}
+    no_data_item = {"reliable": False, "profit_factor": None, "total_trades": 0, "avg_r_multiple": None}
+    ranked = sorted([mixed_item, no_data_item, all_win_item], key=_sweep_sort_key, reverse=True)
+    check("all-win (profit_factor=None, has trades) ranks above finite profit_factor", ranked[0] is all_win_item, True)
+    check("mixed win/loss ranks above zero-trade combo", ranked[1] is mixed_item, True)
+    check("zero-trade unreliable combo ranks last", ranked[2] is no_data_item, True)
 
     print(f"\n{_passed}/{_total} tests passed")
     if _passed == _total:

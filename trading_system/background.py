@@ -572,10 +572,17 @@ async def _refresh_signals(client: httpx.AsyncClient, skip_ai_reason: str | None
     fear_greed = await market_pulse.fetch_fear_greed_index(client)
     STATE.market_pulse = {"rsi": rsi_stats, "altseason": altseason, "fear_greed": fear_greed}
 
-    # --- 推薦強度榜：只對有實際多空方向的訊號評分排名（見 ranking.py） ---
+    # --- 推薦強度榜：只對「真正可以動作」的訊號評分排名（見 ranking.py） ---
+    # 這裡刻意不是只看 signal_type 有沒有多空方向，還要求 brain.fuse() 最終融合出來的
+    # color 是 GREEN/RED（強烈做多/做空）——signal_type 只代表 strategy.py 在 5 分鐘線上
+    # 有偵測到原始突破，但這一檔可能被 brain.fuse() 後面的關卡（高週期趨勢逆向/新聞情緒
+    # 衝突/手續費吃光淨利/波動過於劇烈）降級成黃色「觀望」，這種已經被系統自己判定不該
+    # 進場的訊號，不該還出現在「推薦強度榜」上讓使用者誤以為是精選的好機會——榜單以外的
+    # 完整卡片列表(STATE.signals)仍然照舊完整顯示每一檔，不會因為這個過濾而看不到。
     scored = [
         {**s, **ranking.score_signal(s, config.MIN_VOL_USDT, effective_min_amplitude)}
-        for s in signals if s.get("signal_type") in ("long", "short")
+        for s in signals
+        if s.get("signal_type") in ("long", "short") and s.get("color") in (brain.COLOR_GREEN, brain.COLOR_RED)
     ]
     STATE.ranking = ranking.rank_signals(scored, top_n=config.RANKING_TOP_N)
 

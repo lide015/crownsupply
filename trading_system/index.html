@@ -676,6 +676,11 @@
         <div id="inst-modal-backtest" class="bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs space-y-2"></div>
       </div>
 
+      <div id="inst-modal-sweep-wrap" class="hidden">
+        <div class="text-amber-400 font-semibold mb-2 text-sm">🔬 參數掃描結果</div>
+        <div id="inst-modal-sweep" class="bg-gray-950 p-3 rounded-lg border border-gray-800 text-xs space-y-2"></div>
+      </div>
+
       <details class="bg-gray-950 border border-gray-800 rounded-lg">
         <summary class="cursor-pointer select-none px-3 py-2 text-xs text-gray-400 font-semibold">🔧 進階：調整回測參數（互動式實驗室）</summary>
         <div class="px-3 pb-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
@@ -704,10 +709,15 @@
       <button id="inst-modal-backtest-btn"
         class="w-full text-sm px-3 py-2 rounded-lg border border-teal-800 text-teal-400 hover:bg-teal-950/30
                transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed">📊 執行歷史回測（零 AI 成本）</button>
+      <button id="inst-modal-sweep-btn"
+        class="w-full text-sm px-3 py-2 rounded-lg border border-purple-800 text-purple-400 hover:bg-purple-950/30
+               transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed">🔬 掃描最佳參數（零 AI 成本）</button>
       <p class="text-[11px] text-gray-600 leading-relaxed">⚠️ 上面「基本資料」跟「事件時間軸」都是已經有的資料，不會額外呼叫 AI；
         「執行完整技術＋AI分析」才會真的多打一次 AI 判斷這檔的新聞情緒。「歷史回測」只多抓一次
         免費的 OKX 歷史K線，把現在這套策略規則套在過去的走勢上重播統計，不呼叫 AI、不用等；
-        任何商品都可以直接跑，不用先做過技術分析。</p>
+        任何商品都可以直接跑，不用先做過技術分析。「參數掃描」用同一批K線試很多組參數，
+        排出這批歷史資料上表現比較好的組合——但這是「過去這批資料上表現最好」，不是「未來
+        保證最好」，小樣本的結果也不代表可靠，詳見結果裡的說明。</p>
     </div>
   </div>
 </div>
@@ -2373,6 +2383,7 @@ async function openInstrumentModal(instId) {
   document.getElementById("inst-modal-badges").innerHTML = "";
   document.getElementById("inst-modal-price-line").innerHTML = "";
   document.getElementById("inst-modal-backtest-wrap").classList.add("hidden");
+  document.getElementById("inst-modal-sweep-wrap").classList.add("hidden");
   document.getElementById("inst-modal-chart-wrap").classList.add("hidden");
   stopInstrumentChartPolling();
 
@@ -2509,6 +2520,11 @@ function renderInstrumentModal(data) {
   backtestBtn.textContent = "📊 執行歷史回測（零 AI 成本）";
   backtestBtn.onclick = () => runBacktestFromModal(basic.instId);
 
+  const sweepBtn = document.getElementById("inst-modal-sweep-btn");
+  sweepBtn.disabled = false;
+  sweepBtn.textContent = "🔬 掃描最佳參數（零 AI 成本）";
+  sweepBtn.onclick = () => runSweepFromModal(basic.instId);
+
   // 🔧 互動式回測參數實驗室：每次開啟新商品的詳情頁都重新用目前的預設值填一次輸入框，
   // 讓使用者從「系統目前實際生效」的參數開始調，而不是每次都殘留上一檔商品試過的數字。
   document.getElementById("bt-param-ema").value = backtestDefaults.ema_period;
@@ -2607,6 +2623,74 @@ function renderBacktestResultHtml(data) {
     <div class="text-gray-600">回測範圍：過去 ${data.candle_count} 根 ${data.bar} K 線（OKX 單次查詢上限）。${buyHoldHtml}</div>
     ${_backtestParamsLineHtml(data.params)}
     <p class="text-yellow-500/70">⚠️ 歷史表現不保證未來結果，樣本數（${data.total_trades} 筆）越少參考價值越低，僅供策略評估參考，不是投資建議。</p>`;
+}
+
+/* ---------------------------------------------------------------- */
+/* 🔬 參數掃描（詳情頁按鈕觸發，POST /api/v1/backtest/sweep，零 AI 成本）  */
+/* ---------------------------------------------------------------- */
+async function runSweepFromModal(instId) {
+  const btn = document.getElementById("inst-modal-sweep-btn");
+  const wrap = document.getElementById("inst-modal-sweep-wrap");
+  const resultEl = document.getElementById("inst-modal-sweep");
+  btn.disabled = true;
+  btn.textContent = "⏳ 掃描中…";
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/backtest/sweep`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inst_id: instId }),
+    });
+    const body = await res.json();
+    if (!res.ok || !body.ok) throw new Error(body.message || "參數掃描失敗，請稍後再試。");
+    wrap.classList.remove("hidden");
+    resultEl.innerHTML = renderSweepResultHtml(body);
+  } catch (err) {
+    wrap.classList.remove("hidden");
+    resultEl.innerHTML = `<div class="text-red-400">${err.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🔬 掃描最佳參數（零 AI 成本）";
+  }
+}
+
+function _sweepParamsLabel(p) {
+  return `盒子${p.box_lookback}根／TP1×${p.tp1_rr}／TP2×${p.tp2_rr}／量能${p.volume_confirm_multiple > 0 ? `×${p.volume_confirm_multiple}` : "未啟用"}`;
+}
+
+function _sweepRowHtml(r, opts) {
+  const opt = opts || {};
+  const winRateCls = r.win_rate_pct == null ? "text-gray-500" : (r.win_rate_pct >= 50 ? "text-green-400" : "text-red-400");
+  const reliableBadge = opt.isBaseline
+    ? `<span class="text-[10px] px-1.5 py-0.5 rounded border border-blue-800 text-blue-400">目前使用中</span>`
+    : (r.reliable
+        ? `<span class="text-[10px] px-1.5 py-0.5 rounded border border-teal-800 text-teal-400">樣本足夠</span>`
+        : `<span class="text-[10px] px-1.5 py-0.5 rounded border border-gray-700 text-gray-500">樣本太少，僅供參考</span>`);
+  return `<div class="bg-gray-900 rounded-lg border ${opt.isBaseline ? "border-blue-900" : "border-gray-800"} p-2 space-y-1">
+    <div class="flex items-center justify-between gap-2">
+      <span class="text-gray-300">${opt.rank ? `#${opt.rank}　` : ""}${_sweepParamsLabel(r.params)}</span>
+      ${reliableBadge}
+    </div>
+    <div class="grid grid-cols-4 gap-1 font-mono text-[11px]">
+      <div class="text-gray-500">交易 <span class="text-white block">${r.total_trades}</span></div>
+      <div class="text-gray-500">勝率 <span class="${winRateCls} block">${r.win_rate_pct != null ? r.win_rate_pct + "%" : "—"}</span></div>
+      <div class="text-gray-500">平均R <span class="text-white block">${r.avg_r_multiple != null ? r.avg_r_multiple : "—"}</span></div>
+      <div class="text-gray-500">獲利因子 <span class="text-white block">${r.profit_factor != null ? r.profit_factor : "—"}</span></div>
+    </div>
+  </div>`;
+}
+
+function renderSweepResultHtml(data) {
+  const SHOW_TOP_N = 8;
+  const top = data.results.slice(0, SHOW_TOP_N);
+  const baselineHtml = _sweepRowHtml(data.baseline, { isBaseline: true });
+  const rowsHtml = top.map((r, i) => _sweepRowHtml(r, { rank: i + 1 })).join("");
+  const remaining = data.combos_tested - top.length;
+  return `
+    <div class="text-gray-600">對照組——現在系統實際在用的參數：</div>
+    ${baselineHtml}
+    <div class="text-gray-600 pt-1">共測試 ${data.combos_tested} 組參數組合，依可靠度＋獲利因子排序，顯示前 ${top.length} 名${remaining > 0 ? `（其餘 ${remaining} 組排序較後面，未顯示）` : ""}：</div>
+    ${rowsHtml}
+    <p class="text-yellow-500/70">⚠️ 這是「過去這批 ${data.candle_count} 根 ${data.bar} K線上表現比較好」的參數組合，不是「未來一定最好」的保證——拿同一批歷史資料挑參數本來就有過度擬合的風險。樣本數（交易次數）太少的組合，就算獲利因子/勝率數字漂亮也不可靠，已經用「樣本太少」標示出來，不建議直接採用。</p>`;
 }
 
 /* 權益曲線（累積R倍數）——跟蠟燭圖走勢圖是各自獨立的小畫布，不共用 drawCandlestickChart
